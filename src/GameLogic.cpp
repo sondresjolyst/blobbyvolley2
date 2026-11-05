@@ -153,6 +153,7 @@ void IGameLogic::setState(GameLogicState gls)
 	mTouches[LEFT_PLAYER] = gls.hitCount[LEFT_PLAYER];
 	mTouches[RIGHT_PLAYER] = gls.hitCount[RIGHT_PLAYER];
 	setServingPlayer(gls.servingPlayer);
+	mWinningPlayer = gls.winningPlayer;
 	mSquish[LEFT_PLAYER] = gls.squish[LEFT_PLAYER];
 	mSquish[RIGHT_PLAYER] = gls.squish[RIGHT_PLAYER];
 	mSquishWall = gls.squishWall;
