@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Setup Windows
         if: matrix.platform.shell == 'msys2 {0}'
-        uses: msys2/setup-msys2@v2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: ${{ matrix.platform.msystem }}
           install: >-
@@ -50,7 +50,7 @@ jobs:
             sdl2 \
             physfs \
             boost
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       # Check that blobby builds
       - name: Configure CMake and Build
         run: |
