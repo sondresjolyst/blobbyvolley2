@@ -11,18 +11,15 @@
 #define TEST_EXECUTION_PATH "./test/"
 
 // helper
-static void init_Physfs()
+struct PhysfsFixture
 {
-	static bool initialised = false;
-	if(!initialised) 
+	PhysfsFixture() : mFS( TEST_EXECUTION_PATH )
 	{
-		std::cout << "initialising physfs to " << TEST_EXECUTION_PATH << "\n";
-		static FileSystem fs( TEST_EXECUTION_PATH );
-		fs.setWriteDir(".");
-		fs.addToSearchPath(".", true);
-		initialised = true;
+		mFS.setWriteDir(".");
+		mFS.addToSearchPath(".", true);
 	}
-}
+	FileSystem mFS;
+};
 
 // Tests of common FileSystem functions
 // test init
@@ -115,7 +112,7 @@ BOOST_AUTO_TEST_CASE( default_constructor )
 
 BOOST_AUTO_TEST_CASE( open_read_constructor )
 {
-	init_Physfs();
+	PhysfsFixture physfs;
 	
 	// create a temp file for the next check
 	try 
@@ -162,7 +159,7 @@ BOOST_AUTO_TEST_CASE( open_read_constructor )
 
 BOOST_AUTO_TEST_CASE( wrongly_closed_file_test )
 {	
-	init_Physfs() ;
+	PhysfsFixture physfs;
 
 	FileWrite create_test_file("test_open_close.tmp");
 	
@@ -202,7 +199,7 @@ BOOST_AUTO_TEST_CASE( wrongly_closed_file_test )
 
 BOOST_AUTO_TEST_CASE( exception_test )
 {	
-	init_Physfs() ;
+	PhysfsFixture physfs;
 
 	// create a temp helper file
 	{
@@ -263,7 +260,7 @@ BOOST_AUTO_TEST_CASE( default_constructor )
 
 BOOST_AUTO_TEST_CASE( open_write_constructor )
 {
-	init_Physfs() ;
+	PhysfsFixture physfs;
 	
 	FileWrite write_file("test_open_write_constructor.tmp");
 	
@@ -293,7 +290,7 @@ BOOST_AUTO_TEST_CASE( open_write_constructor )
 
 BOOST_AUTO_TEST_CASE( open_close_test )
 {
-	init_Physfs();
+	PhysfsFixture physfs;
 			
 	FileWrite test_file("test_open_close.tmp");
 	BOOST_REQUIRE( test_file.is_open() == true );
@@ -323,7 +320,7 @@ BOOST_AUTO_TEST_SUITE( FileWriteReadCycle )
 
 BOOST_AUTO_TEST_CASE( raw_data_test )
 {
-	init_Physfs();
+	PhysfsFixture physfs;
 	
 	char data[] = { 's', 'p', 'a', 'm', ' ', 't', 'e', 's', 't' };
 			
@@ -348,7 +345,7 @@ BOOST_AUTO_TEST_CASE( raw_data_test )
 
 BOOST_AUTO_TEST_CASE( string_test )
 {
-	init_Physfs();
+	PhysfsFixture physfs;
 	
 	std::string teststr = "hello world!";
 
@@ -381,7 +378,7 @@ BOOST_AUTO_TEST_CASE( string_test )
 
 BOOST_AUTO_TEST_CASE( int_test )
 {
-	init_Physfs();
+	PhysfsFixture physfs;
 
 
 	BOOST_TEST_CHECKPOINT( "int_test: writing test file" );

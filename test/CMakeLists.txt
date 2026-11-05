@@ -25,6 +25,8 @@ set(SRC
 	../src/base64.cpp         ../src/base64.h
 )
 
+# BOOST_TEST_DYN_LINK below needs the shared library
+set(Boost_USE_STATIC_LIBS OFF)
 find_package(Boost REQUIRED COMPONENTS unit_test_framework)
 find_package(PhysFS REQUIRED)
 find_package(SDL2 REQUIRED)
@@ -32,6 +34,11 @@ find_package(SDL2 REQUIRED)
 if ("${SDL2_LIBRARIES}" STREQUAL "")
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif ("${SDL2_LIBRARIES}" STREQUAL "")
+
+# Boost.Test provides main, so do not link SDL2main
+if (WIN32)
+	set(SDL2_LIBRARIES "SDL2::SDL2")
+endif (WIN32)
 
 add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp ${SRC})
 
