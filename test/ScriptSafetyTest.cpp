@@ -6,6 +6,7 @@
 #include "FileSystem.h"
 #include "FileWrite.h"
 #include "GameLogic.h"
+#include "GameLogicState.h"
 
 extern "C"
 {
@@ -84,6 +85,34 @@ BOOST_FIXTURE_TEST_CASE( rules_cannot_score_for_invalid_player, ScriptFixture )
 	BOOST_CHECK_EQUAL( logic->getScore(RIGHT_PLAYER), 0 );
 	BOOST_CHECK_EQUAL( logic->getTouches(LEFT_PLAYER), 0 );
 	BOOST_CHECK_EQUAL( logic->getTouches(RIGHT_PLAYER), 0 );
+}
+
+BOOST_FIXTURE_TEST_CASE( failing_win_check_does_not_end_the_game, ScriptFixture )
+{
+	writeRules("function IsWinning(l, r)\nerror(\"broken rule\")\nend\nscore(0, 1)\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+
+	BOOST_CHECK_EQUAL( logic->getScore(LEFT_PLAYER), 1 );
+	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), NO_PLAYER );
+}
+
+BOOST_FIXTURE_TEST_CASE( set_state_restores_winning_player, ScriptFixture )
+{
+	writeRules("score(0, 2)\n");
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 2);
+	BOOST_REQUIRE_EQUAL( logic->getWinningPlayer(), LEFT_PLAYER );
+
+	GameLogicState state = logic->getState();
+	state.leftScore = 0;
+	state.winningPlayer = NO_PLAYER;
+	logic->setState(state);
+	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), NO_PLAYER );
+
+	state.rightScore = 2;
+	state.winningPlayer = RIGHT_PLAYER;
+	logic->setState(state);
+	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), RIGHT_PLAYER );
 }
 
 BOOST_AUTO_TEST_SUITE_END()

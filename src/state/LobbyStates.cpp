@@ -290,6 +290,7 @@ LobbyMainSubstate::LobbyMainSubstate(std::shared_ptr<RakClient> client,
 
 }
 
+#undef GEN_ID
 #define GEN_ID imgui.getNextId()
 void LobbyMainSubstate::step(IMGUI& imgui, const ServerStatusData& status)
 {

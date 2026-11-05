@@ -108,7 +108,7 @@ void NetworkGameState::init()
 	{
 		try
 		{
-			FileRead rulesFile(TEMP_RULES_NAME);
+			FileRead rulesFile("rules/"+TEMP_RULES_NAME);
 			ourChecksum = rulesFile.calcChecksum(0);
 			rulesFile.close();
 		}
@@ -118,9 +118,14 @@ void NetworkGameState::init()
 		}
 	}
 
+	// the cached rules match the server, so use them instead of downloading them again
+	bool haveRules = mRulesChecksum != 0 && mRulesChecksum == ourChecksum;
+	if (haveRules)
+		mMatch->setRules(TEMP_RULES_NAME);
+
 	RakNet::BitStream stream2;
 	stream2.Write((unsigned char)ID_RULES);
-	stream2.Write(bool(mRulesChecksum != 0 && mRulesChecksum != ourChecksum));
+	stream2.Write(bool(mRulesChecksum != 0 && !haveRules));
 	mClient->Send(&stream2, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
 }
 

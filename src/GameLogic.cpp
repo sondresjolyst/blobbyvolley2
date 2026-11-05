@@ -153,6 +153,7 @@ void IGameLogic::setState(GameLogicState gls)
 	mTouches[LEFT_PLAYER] = gls.hitCount[LEFT_PLAYER];
 	mTouches[RIGHT_PLAYER] = gls.hitCount[RIGHT_PLAYER];
 	setServingPlayer(gls.servingPlayer);
+	mWinningPlayer = gls.winningPlayer;
 	mSquish[LEFT_PLAYER] = gls.squish[LEFT_PLAYER];
 	mSquish[RIGHT_PLAYER] = gls.squish[RIGHT_PLAYER];
 	mSquishWall = gls.squishWall;
@@ -511,6 +512,8 @@ PlayerSide LuaGameLogic::checkWin() const
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
+		lua_pop(mState, 1);
+		return NO_PLAYER;
 	}
 
 	bool won = lua_toboolean(mState, -1);

@@ -1,6 +1,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <cstdint>
+#include <ctime>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -286,6 +287,21 @@ BOOST_FIXTURE_TEST_CASE( game_speed_zero_is_rejected, ReplayFixture )
 {
 	const std::string xml = saveValidReplay();
 	BOOST_CHECK_THROW(loadEdited(replaceAttribute(xml, "\"game_speed\"", "0")), std::exception);
+}
+
+BOOST_FIXTURE_TEST_CASE( date_after_2038_loads, ReplayFixture )
+{
+	// 2100-01-01 does not fit in a 32 bit signed integer
+	const std::string xml = saveValidReplay();
+	writeText(EDITED_FILE, replaceAttribute(xml, "\"game_date\"", "4102444800"));
+	std::unique_ptr<IReplayLoader> loader(IReplayLoader::createReplayLoader(std::string(EDITED_FILE)));
+	BOOST_CHECK_EQUAL(loader->getDate(), static_cast<std::time_t>(4102444800LL));
+}
+
+BOOST_FIXTURE_TEST_CASE( negative_date_is_rejected, ReplayFixture )
+{
+	const std::string xml = saveValidReplay();
+	BOOST_CHECK_THROW(loadEdited(replaceAttribute(xml, "\"game_date\"", "-1")), std::exception);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

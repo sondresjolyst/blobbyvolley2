@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cassert>
 #include <vector>
 #include <ctime>
+#include <limits>
 #include <memory>
 #include <iostream> // debugging
 
@@ -80,6 +81,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightPlayerName;
 
 			assert(0);
+			return std::string();
 		}
 
 		Color getBlobColor(PlayerSide player) const override
@@ -90,6 +92,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightColor;
 
 			assert(0);
+			return Color();
 		}
 
 
@@ -101,6 +104,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightFinalScore;
 
 			assert(0);
+			return 0;
 		}
 
 		int getSpeed() const override
@@ -251,7 +255,12 @@ class ReplayLoader_V2X: public IReplayLoader
 				else if( name == "game_duration" )
 					mGameDuration = std::stoi(value);
 				else if( name == "game_date" )
-					mGameDate = std::stoi(value);
+				{
+					long long date = std::stoll(value);
+					if(date < 0 || date > (std::numeric_limits<std::time_t>::max)())
+						throw(std::runtime_error("game_date out of range"));
+					mGameDate = static_cast<std::time_t>(date);
+				}
 				else if( name == "score_left" )
 					mLeftFinalScore = std::stoi(value);
 				else if( name == "score_right" )
@@ -323,7 +332,7 @@ class ReplayLoader_V2X: public IReplayLoader
 		unsigned int mLeftFinalScore;
 		unsigned int mRightFinalScore;
 		unsigned int mGameSpeed;
-		unsigned int mGameDate;
+		std::time_t mGameDate;
 		int mGameLength;
 		unsigned int mGameDuration;
 		Color mLeftColor;
