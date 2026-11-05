@@ -220,7 +220,7 @@ int FileRead::readLuaScript(const std::string& filename, lua_State* mState)
 {
 	ReaderInfo info;
 	info.file.open(makeLuaFilename(filename));
-	return lua_load(mState, chunkReader, &info, filename.c_str(), nullptr);
+	return lua_load(mState, chunkReader, &info, filename.c_str(), "t");
 }
 
 std::string FileRead::makeLuaFilename(std::string filename)

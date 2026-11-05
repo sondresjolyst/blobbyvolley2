@@ -659,12 +659,12 @@ void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 
 		// Left blob shadow
 		position = blobShadowRect(blobShadowPosition(gameState.getBlobPosition(LEFT_PLAYER)));
-		int animationState = int(gameState.getBlobState(LEFT_PLAYER)) % 5;
+		int animationState = animationFrame(gameState.getBlobState(LEFT_PLAYER), 5);
 		SDL_RenderCopy(mRenderer, mLeftBlobShadow[animationState].mSDLsf, nullptr, &position);
 
 		// Right blob shadow
 		position = blobShadowRect(blobShadowPosition(gameState.getBlobPosition(RIGHT_PLAYER)));
-		animationState = int(gameState.getBlobState(RIGHT_PLAYER)) % 5;
+		animationState = animationFrame(gameState.getBlobState(RIGHT_PLAYER), 5);
 		SDL_RenderCopy(mRenderer, mRightBlobShadow[animationState].mSDLsf, nullptr, &position);
 	}
 
@@ -680,12 +680,12 @@ void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 
 	// Drawing the Ball
 	position = ballRect(gameState.getBallPosition());
-	int animationState = int(gameState.getBallRotation() / M_PI / 2 * 16) % 16;
+	int animationState = animationFrame(gameState.getBallRotation() / M_PI / 2 * 16, 16);
 	SDL_RenderCopy(mRenderer, mBall[animationState], nullptr, &position);
 
 	// update blob colors
-	int leftFrame = int(gameState.getBlobState(LEFT_PLAYER)) % 5;
-	int rightFrame = int(gameState.getBlobState(RIGHT_PLAYER)) % 5;
+	int leftFrame = animationFrame(gameState.getBlobState(LEFT_PLAYER), 5);
+	int rightFrame = animationFrame(gameState.getBlobState(RIGHT_PLAYER), 5);
 	colorizeBlobs(LEFT_PLAYER, leftFrame);
 	colorizeBlobs(RIGHT_PLAYER, rightFrame);
 

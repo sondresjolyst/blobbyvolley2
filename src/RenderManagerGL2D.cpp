@@ -582,12 +582,12 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 
 		pos = blobShadowPosition(gameState.getBlobPosition(LEFT_PLAYER));
 		glColor4ub(mLeftBlobColor.r, mLeftBlobColor.g, mLeftBlobColor.b, 128);
-		glBindTexture(mBlobShadow[int(gameState.getBlobState(LEFT_PLAYER))  % 5]);
+		glBindTexture(mBlobShadow[animationFrame(gameState.getBlobState(LEFT_PLAYER), 5)]);
 		drawQuad(pos.x, pos.y, 128.0, 32.0);
 
 		pos = blobShadowPosition(gameState.getBlobPosition(RIGHT_PLAYER));
 		glColor4ub(mRightBlobColor.r, mRightBlobColor.g, mRightBlobColor.b, 128);
-		glBindTexture(mBlobShadow[int(gameState.getBlobState(RIGHT_PLAYER))  % 5]);
+		glBindTexture(mBlobShadow[animationFrame(gameState.getBlobState(RIGHT_PLAYER), 5)]);
 		drawQuad(pos.x, pos.y, 128.0, 32.0);
 
 		// Ball shadow
@@ -606,7 +606,7 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 	// The Ball
 
 	glColor4f(1.0, 1.0, 1.0, 1.0);
-	glBindTexture(mBall[int(gameState.getBallRotation() / M_PI / 2 * 16) % 16]);
+	glBindTexture(mBall[animationFrame(gameState.getBallRotation() / M_PI / 2 * 16, 16)]);
 /*
 	float opacity = 0.0;
 	for (std::list<Vector2>::iterator iter = mLastBallStates.begin();
@@ -631,12 +631,12 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 
 	// blob normal
 	// left blob
-	glBindTexture(mBlob[int(gameState.getBlobState(LEFT_PLAYER))  % 5]);
+	glBindTexture(mBlob[animationFrame(gameState.getBlobState(LEFT_PLAYER), 5)]);
 	glColor3ub(mLeftBlobColor.r, mLeftBlobColor.g, mLeftBlobColor.b);
 	drawQuad(gameState.getBlobPosition(LEFT_PLAYER).x,gameState.getBlobPosition(LEFT_PLAYER).y, 128.0, 128.0);
 
 	// right blob
-	glBindTexture(mBlob[int(gameState.getBlobState(RIGHT_PLAYER))  % 5]);
+	glBindTexture(mBlob[animationFrame(gameState.getBlobState(RIGHT_PLAYER), 5)]);
 	glColor3ub(mRightBlobColor.r, mRightBlobColor.g, mRightBlobColor.b);
 	drawQuad(gameState.getBlobPosition(RIGHT_PLAYER).x, gameState.getBlobPosition(RIGHT_PLAYER).y, 128.0, 128.0);
 
@@ -644,11 +644,11 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 	glEnable(GL_BLEND);
 	glColor4f(1.0, 1.0, 1.0, 1.0);
 	// left blob
-	glBindTexture(mBlobSpecular[int(gameState.getBlobState(LEFT_PLAYER))  % 5]);
+	glBindTexture(mBlobSpecular[animationFrame(gameState.getBlobState(LEFT_PLAYER), 5)]);
 	drawQuad(gameState.getBlobPosition(LEFT_PLAYER).x,gameState.getBlobPosition(LEFT_PLAYER).y, 128.0, 128.0);
 
 	// right blob
-	glBindTexture(mBlobSpecular[int(gameState.getBlobState(RIGHT_PLAYER))  % 5]);
+	glBindTexture(mBlobSpecular[animationFrame(gameState.getBlobState(RIGHT_PLAYER), 5)]);
 	drawQuad(gameState.getBlobPosition(RIGHT_PLAYER).x, gameState.getBlobPosition(RIGHT_PLAYER).y, 128.0, 128.0);
 
 	glDisable(GL_BLEND);
