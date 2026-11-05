@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <mutex>
 #include <thread>
@@ -101,7 +102,7 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 
 		const std::unique_ptr<ReplayRecorder> mRecorder;
 
-		bool mGameValid;
+		std::atomic<bool> mGameValid;
 
 		bool mRulesSent[MAX_PLAYERS];
 		std::vector<char> mRulesString;
