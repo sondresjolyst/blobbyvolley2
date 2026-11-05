@@ -223,8 +223,9 @@ class ReplayLoader_V2X: public IReplayLoader
 				const char* minor = varElem->Attribute("minor");
 				if(!minor || !major)
 					throw(std::runtime_error(""));
-				if(std::stoi(major) != REPLAY_FILE_VERSION_MAJOR)
-					throw VersionMismatchException(filename, std::stoi(major), std::stoi(minor));
+				const int majorVersion = std::stoi(major);
+				if(majorVersion != REPLAY_FILE_VERSION_MAJOR)
+					throw VersionMismatchException(filename, static_cast<uint8_t>(majorVersion), static_cast<uint8_t>(std::stoi(minor)));
 				mReplayFormatVersion = std::stoi(minor);
 			}
 

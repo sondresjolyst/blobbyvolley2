@@ -263,14 +263,14 @@ BOOST_FIXTURE_TEST_CASE( misaligned_input_data_is_rejected, ReplayFixture )
 
 BOOST_FIXTURE_TEST_CASE( unsupported_major_version_is_rejected, ReplayFixture )
 {
-	std::string xml = saveValidReplay();
+	const std::string xml = saveValidReplay();
 	const std::size_t major = xml.find("major=\"2\"");
 	BOOST_REQUIRE(major != std::string::npos);
-	xml.replace(major, 9, "major=\"3\"");
-	BOOST_CHECK_THROW(loadEdited(xml), VersionMismatchException);
+	BOOST_CHECK_THROW(loadEdited(std::string(xml).replace(major, 9, "major=\"3\"")), VersionMismatchException);
+	BOOST_CHECK_THROW(loadEdited(std::string(xml).replace(major, 9, "major=\"258\"")), VersionMismatchException);
 }
 
-BOOST_FIXTURE_TEST_CASE( game_speed_zero, ReplayFixture )
+BOOST_FIXTURE_TEST_CASE( game_speed_zero_is_not_saved, ReplayFixture )
 {
 	ReplayRecorder recorder;
 	recordMatch(recorder);
@@ -279,7 +279,13 @@ BOOST_FIXTURE_TEST_CASE( game_speed_zero, ReplayFixture )
 	BOOST_CHECK_NO_THROW(recorder.save(file));
 	file.close();
 
-	BOOST_CHECK_THROW(loadEdited(readText(VALID_FILE)), std::exception);
+	BOOST_CHECK(readText(VALID_FILE).empty());
+}
+
+BOOST_FIXTURE_TEST_CASE( game_speed_zero_is_rejected, ReplayFixture )
+{
+	const std::string xml = saveValidReplay();
+	BOOST_CHECK_THROW(loadEdited(replaceAttribute(xml, "\"game_speed\"", "0")), std::exception);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

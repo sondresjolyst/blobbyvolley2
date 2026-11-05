@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "SpeedController.h"
 #include "FileSystem.h"
 #include "replays/IReplayLoader.h"
+#include "replays/ReplayRecorder.h"
 
 
 /* implementation */
@@ -83,6 +84,11 @@ void ReplaySelectionState::step_impl()
 			switchState(rs);
 			return;
 		}
+		catch (const VersionMismatchException&)
+		{
+			delete rs;
+			mVersionError = true;
+		}
 		 catch (std::exception& exp)
 		{
 			delete rs;
@@ -106,6 +112,10 @@ void ReplaySelectionState::step_impl()
 			{
 				mReplayLoader.reset(IReplayLoader::createReplayLoader(std::string("replays/" + mReplayFiles[mSelectedReplay] + ".bvr")));
 				mShowReplayInfo = true;
+			}
+			catch (const VersionMismatchException&)
+			{
+				mVersionError = true;
 			}
 			catch (std::exception& e)
 			{
