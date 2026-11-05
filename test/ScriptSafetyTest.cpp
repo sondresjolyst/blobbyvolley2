@@ -17,6 +17,21 @@ namespace
 {
 	const std::string RULES_FILE = "script_safety_test.lua";
 
+	int appendChunk(lua_State*, const void* data, size_t size, void* target)
+	{
+		static_cast<std::string*>(target)->append(static_cast<const char*>(data), size);
+		return 0;
+	}
+
+	std::string compileChunk(lua_State* state, const char* source)
+	{
+		std::string chunk;
+		BOOST_REQUIRE_EQUAL( luaL_loadstring(state, source), LUA_OK );
+		lua_dump(state, appendChunk, &chunk, 0);
+		lua_settop(state, 0);
+		return chunk;
+	}
+
 	struct ScriptFixture
 	{
 		ScriptFixture() : mFS("./test")
@@ -53,7 +68,7 @@ BOOST_FIXTURE_TEST_CASE( scripts_load_as_text_only, ScriptFixture )
 	BOOST_CHECK_EQUAL( FileRead::readLuaScript("rules/" + RULES_FILE, state), LUA_OK );
 	lua_settop(state, 0);
 
-	writeRules(std::string(LUA_SIGNATURE) + "x");
+	writeRules(compileChunk(state, "x = 1"));
 	BOOST_CHECK_NE( FileRead::readLuaScript("rules/" + RULES_FILE, state), LUA_OK );
 
 	lua_close(state);
