@@ -467,7 +467,7 @@ void RenderManagerSDL::drawTextImpl(const std::string& text, Vector2 position, u
 
 	for (auto iter = text.cbegin(); iter != text.cend(); )
 	{
-		int index = getNextFontIndex(iter);
+		int index = getNextFontIndex(iter, text.cend());
 
 		if (flags & TF_OBFUSCATE)
 			index = FONT_INDEX_ASTERISK;

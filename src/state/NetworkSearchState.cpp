@@ -126,11 +126,11 @@ void NetworkSearchState::step_impl()
 					stream.IgnoreBytes(1);	//ID_BLOBBY_SERVER_PRESENT
 					ServerInfo info(stream,	(*iter)->PlayerIDToDottedIP(packet->playerId), packet->playerId.port);
 
-					printf("server %s at %s is a blobby server\n", info.name, info.hostname);
-
 					// check that the packet sizes match
 					if(packet->length == ServerInfo::BLOBBY_SERVER_PRESENT_PACKET_SIZE)
 					{
+						printf("server %s at %s is a blobby server\n", info.name, info.hostname);
+
 						if (std::find( mScannedServers.begin(),	mScannedServers.end(), info) == mScannedServers.end() )
 						{
 							mScannedServers.push_back(info);
@@ -440,12 +440,16 @@ void OnlineSearchState::doSearchServers()
 		std::stringstream serverListXml;
 		http.request("server.php", serverListXml);
 
-		// this trows an exception if the file could not be opened for writing
-		FileWrite file("onlineserver.xml");
+		// keep the old file if nothing was received
+		if(!serverListXml.str().empty())
+		{
+			// this trows an exception if the file could not be opened for writing
+			FileWrite file("onlineserver.xml");
 
-		file.write(serverListXml.str());
+			file.write(serverListXml.str());
 
-		file.close();
+			file.close();
+		}
 	} catch (std::exception& e) {
 		std::cout << "Can't get onlineserver.xml: " << e.what() << std::endl;
 	} catch (...) {

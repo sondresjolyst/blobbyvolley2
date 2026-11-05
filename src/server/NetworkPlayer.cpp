@@ -42,18 +42,18 @@ NetworkPlayer::NetworkPlayer(PlayerID id, const std::string& name, Color color, 
 
 NetworkPlayer::NetworkPlayer(PlayerID id, RakNet::BitStream& stream) : mID(id)
 {
-	int playerSide;
+	int playerSide = 0;
 	stream.Read(playerSide);
 
 	// Read the Playername
-	char charName[16];
+	char charName[16] = {0};
 	stream.Read(charName, sizeof(charName));
 
 	// ensures that charName is null terminated
 	charName[sizeof(charName)-1] = '\0';
 
 	// read colour data
-	int color;
+	int color = 0;
 	stream.Read(color);
 
 	mIdentity = PlayerIdentity(charName, (Color)color, false, (PlayerSide)playerSide);

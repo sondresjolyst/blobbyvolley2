@@ -142,7 +142,7 @@ void NetworkGameState::step_impl()
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
 				stream.IgnoreBytes(1);	//ID_GAME_UPDATE
-				unsigned timeBack;
+				unsigned timeBack = 0;
 				stream.Read(timeBack);
 				CURRENT_NETWORK_LAG = SDL_GetTicks() - timeBack;
 				DuelMatchState ms;
@@ -229,13 +229,13 @@ void NetworkGameState::step_impl()
 				break;
 			case ID_GAME_READY:
 			{
-				char charName[16];
+				char charName[16] = {0};
 				RakNet::BitStream stream(packet->data, packet->length, false);
 
 				stream.IgnoreBytes(1);	// ignore ID_GAME_READY
 
 				// read gamespeed
-				int speed;
+				int speed = 0;
 				stream.Read(speed);
 				SpeedController::getMainInstance()->setGameSpeed(speed);
 
@@ -246,7 +246,7 @@ void NetworkGameState::step_impl()
 				charName[sizeof(charName)-1] = '\0';
 
 				// read colors
-				int temp;
+				int temp = 0;
 				stream.Read(temp);
 				auto ncolor = Color(temp);
 
@@ -318,8 +318,9 @@ void NetworkGameState::step_impl()
 				RakNet::BitStream stream(packet->data, packet->length, false);
 				stream.IgnoreBytes(1);	// ID_CHAT_MESSAGE
 				// Insert Message in the log and focus the last element
-				char message[31];
-				stream.Read(message, sizeof(message));
+				char message[31] = {0};
+				if(!stream.Read(message, sizeof(message)))
+					break;
 				message[30] = '\0';
 
 				// Insert Message in the log and focus the last element
@@ -374,7 +375,6 @@ void NetworkGameState::step_impl()
 			}
 			default:
 				printf("Received unknown Packet %d\n", packet->data[0]);
-				std::cout<<packet->data<<"\n";
 				break;
 		}
 	}
