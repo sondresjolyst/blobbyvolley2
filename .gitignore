@@ -17,11 +17,19 @@ install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
 _deps
+CPackConfig.cmake
+CPackSourceConfig.cmake
+build.ninja
+.ninja_deps
+.ninja_log
 
 #project linux
 src/blobby
 src/blobby-server
 *.a
+
+#project windows
+*.exe
 
 #project vs2019
 /.vs

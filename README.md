@@ -5,10 +5,10 @@
  http://blobbyvolley.de
 
 ### System requirements
-Either Windows 2000 or later, Linux or MacOS
+Windows, Linux or MacOS
 
 ### Dedicated Server
-The "Dedicaded Server" runs with a Gamespeed of 100%, which means 75 FPS
+The "Dedicated Server" runs with a Gamespeed of 100%, which means 75 FPS
 
 The Port for the Server is 1234.
 
@@ -19,7 +19,7 @@ git clone https://github.com/danielknobe/blobbyvolley2.git
 ```
 
 ### Build under Linux
-Blobby Volley compiles with GCC 5 or newer, or Clang 10 or newer.
+Blobby Volley compiles with GCC 9 or newer, or Clang 12 or newer.
 Other compilers may work but are currently untested. The minimum supported
 CMake version is 3.11.
 
