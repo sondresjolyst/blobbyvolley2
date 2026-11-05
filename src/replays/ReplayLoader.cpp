@@ -81,6 +81,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightPlayerName;
 
 			assert(0);
+			return std::string();
 		}
 
 		Color getBlobColor(PlayerSide player) const override
@@ -91,6 +92,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightColor;
 
 			assert(0);
+			return Color();
 		}
 
 
@@ -102,6 +104,7 @@ class ReplayLoader_V2X: public IReplayLoader
 				return mRightFinalScore;
 
 			assert(0);
+			return 0;
 		}
 
 		int getSpeed() const override

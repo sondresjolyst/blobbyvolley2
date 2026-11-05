@@ -448,5 +448,6 @@ PlayerID NetworkGame::getPlayerID( PlayerSide side ) const
 	}
 
 	assert(0);
+	return UNASSIGNED_PLAYER_ID;
 }
 
