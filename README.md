@@ -1,4 +1,4 @@
-# Blobby Volley 2 ![build workflow](https://github.com/danielknobe/blobbyvolley2/actions/workflows/main.yaml/badge.svg)
+# Blobby Volley 2 ![build workflow](https://github.com/sondresjolyst/blobbyvolley2/actions/workflows/main.yaml/badge.svg)
 **The head-to-head multiplayer ball game**
 
 ### Website
@@ -15,7 +15,7 @@ The default port is 1234.
 ### Source Code
 Clone the git repository:
 ```bash
-git clone https://github.com/danielknobe/blobbyvolley2.git
+git clone https://github.com/sondresjolyst/blobbyvolley2.git
 ```
 
 ### Build under Linux
