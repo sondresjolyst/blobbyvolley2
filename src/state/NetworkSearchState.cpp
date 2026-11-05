@@ -126,11 +126,11 @@ void NetworkSearchState::step_impl()
 					stream.IgnoreBytes(1);	//ID_BLOBBY_SERVER_PRESENT
 					ServerInfo info(stream,	(*iter)->PlayerIDToDottedIP(packet->playerId), packet->playerId.port);
 
-					printf("server %s at %s is a blobby server\n", info.name, info.hostname);
-
 					// check that the packet sizes match
 					if(packet->length == ServerInfo::BLOBBY_SERVER_PRESENT_PACKET_SIZE)
 					{
+						printf("server %s at %s is a blobby server\n", info.name, info.hostname);
+
 						if (std::find( mScannedServers.begin(),	mScannedServers.end(), info) == mScannedServers.end() )
 						{
 							mScannedServers.push_back(info);

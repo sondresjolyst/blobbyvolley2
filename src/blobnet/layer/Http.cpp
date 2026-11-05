@@ -39,6 +39,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #endif
 
 
+namespace
+{
+	// limits for the size of a response, far above the size of a real server list
+	const int MAX_HEADER_SIZE = 16 * 1024;
+	const int MAX_BODY_SIZE = 1024 * 1024;
+	// time in milliseconds to wait for data from the host
+	const int RECEIVE_TIMEOUT_MS = 10000;
+}
+
 namespace BlobNet
 {
 
@@ -65,6 +74,16 @@ void Http::request(const std::string& path, std::stringstream& response)
 	}
 
 	try {
+		// Do not wait forever for data from the host
+#if (defined _WIN32)
+		DWORD timeout = RECEIVE_TIMEOUT_MS;
+#else
+		timeval timeout;
+		timeout.tv_sec = RECEIVE_TIMEOUT_MS / 1000;
+		timeout.tv_usec = (RECEIVE_TIMEOUT_MS % 1000) * 1000;
+#endif
+		setsockopt(inOutSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+
 		// Connect to the host
 		char ipAddress[16];
 		if (mSocketLayer.nameToIpStrings(mHostname.c_str(), ipAddress, sizeof(ipAddress), 1) == 0)
@@ -97,14 +116,21 @@ void Http::request(const std::string& path, std::stringstream& response)
 		throw e;
 	}
 
-	// Read the header of the response and extract content size
-	std::stringstream header;
+	try {
+		// Read the header of the response and extract content size
+		std::stringstream header;
 
-	readHeader(inOutSocket, header);
-	int contentSize = getContentSize(header);
+		readHeader(inOutSocket, header);
+		int contentSize = getContentSize(header);
 
-	// Read the body
-	readBody(inOutSocket, response, contentSize);
+		// Read the body
+		readBody(inOutSocket, response, contentSize);
+	}
+	catch (...)
+	{
+		closeSocket(inOutSocket);
+		throw;
+	}
 
 	closeSocket(inOutSocket);
 }
@@ -114,10 +140,17 @@ void Http::readHeader(int inOutSocket, std::stringstream& response)
 	// Parser variables
 	State state = something;
 	bool done = false;
+	int counter = 0;
 
 	// Read header
 	for(char c; (!done) && (recv(inOutSocket, &c, 1, 0) > 0); response << c)
 	{
+		counter += 1;
+		if(counter > MAX_HEADER_SIZE)
+		{
+			throw Exception::HttpException("Response header is too large.");
+		}
+
 		switch(c)
 		{
 		case '\r':
@@ -163,9 +196,20 @@ void Http::readBody(int inOutSocket, std::stringstream& response, int contentSiz
 	// Parser variables
 	int counter = 0;
 
-	// Read body
-	for(char c; recv(inOutSocket, &c, 1, 0) > 0; response << c)
+	// Nothing to read for an empty body
+	if(contentSize <= 0)
 	{
+		return;
+	}
+	if(contentSize > MAX_BODY_SIZE)
+	{
+		throw Exception::HttpException("Response body is too large.");
+	}
+
+	// Read body
+	for(char c; recv(inOutSocket, &c, 1, 0) > 0; )
+	{
+		response << c;
 		counter += 1;
 		if(counter == contentSize)
 		{
@@ -194,7 +238,14 @@ int Http::getContentSize(std::stringstream& response)
 			break;
 		case contentlength:
 			state = headerDone;
-			return std::stoi(token);
+			try
+			{
+				return std::stoi(token);
+			}
+			catch (const std::exception&)
+			{
+				throw Exception::HttpException("Can't get contentsize of http response.");
+			}
 		default:
 			break;
 		}

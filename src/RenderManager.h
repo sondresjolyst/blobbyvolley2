@@ -172,7 +172,7 @@ class RenderManager : public ObjectCounter<RenderManager>
 		RenderManager();
 		// Returns -1 on EOF
 		// Returns index for ? on unknown char
-		int getNextFontIndex(std::string::const_iterator& iter);
+		int getNextFontIndex(std::string::const_iterator& iter, std::string::const_iterator end);
 		SDL_Surface* highlightSurface(SDL_Surface* surface, int luminance);
 		SDL_Surface* loadSurface(const std::string& filename);
 		SDL_Surface* createEmptySurface(unsigned int width, unsigned int height);

@@ -57,7 +57,7 @@ PlayerInputAbs::PlayerInputAbs() : mFlags( F_RELATIVE ), mTarget(-1)
 
 }
 
-PlayerInputAbs::PlayerInputAbs(RakNet::BitStream& stream)
+PlayerInputAbs::PlayerInputAbs(RakNet::BitStream& stream) : mFlags(0), mTarget(0)
 {
 	stream.Read( mFlags );
 	stream.Read( mTarget );

@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <iosfwd>
 #include <vector>
 #include <type_traits>
+#include <limits>
 
 #include <memory>
 
@@ -106,6 +107,13 @@ class GenericIO
 		///			guaranteed to match for different source/target
 		///			types.
 		virtual void seek(unsigned int pos) const = 0;
+
+		/// the maximum number of elements a container or string that is read next can have.
+		/// Every element needs at least one bit, so sources with a known size report their unread bits.
+		/// Unlimited by default.
+		virtual unsigned int maxElementCount() const { return std::numeric_limits<unsigned int>::max(); }
+		/// discards the remaining data of the source. Does nothing by default.
+		virtual void skipToEnd() { }
 
 		// generic implementation
 
@@ -211,9 +219,15 @@ namespace detail
 		{
 			static_assert(is_container_type<T>::has_resize, "no resize function in container");
 			static_assert(std::is_same<T, std::vector<bool>>::value == false, "std::vector<bool>::iterator is implementation-defined. Don't use it");
-			unsigned int size;
+			unsigned int size = 0;
 
 			in.uint32( size );
+			if( size > in.maxElementCount() )
+			{
+				list.clear();
+				in.skipToEnd();
+				return;
+			}
 			list.resize( size );
 
 			for(typename T::iterator i = list.begin(); i != list.end(); ++i)
@@ -225,16 +239,21 @@ namespace detail
 		// deserialize containers with insert function
 		static void serialize_imp(GenericIn& in, T& list, void* no_resize=nullptr)
 		{
-			unsigned int size;
+			unsigned int size = 0;
 
 			in.uint32( size );
 			list.clear();
+			if( size > in.maxElementCount() )
+			{
+				in.skipToEnd();
+				return;
+			}
 
 			static_assert(!is_container_type<T>::has_resize, "trying to use insert serialization for container with resize support");
 
 
 			typename T::value_type temp;
-			for(int i = 0; i < size; ++i)
+			for(unsigned int i = 0; i < size; ++i)
 			{
 				in.generic<decltype(temp)>( temp );
 				list.insert(temp);

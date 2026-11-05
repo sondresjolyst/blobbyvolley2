@@ -32,6 +32,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 /* implementation */
 ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
 {
+	activegames = 0;
+	waitingplayers = 0;
+	memset(hostname, 0, sizeof(hostname));
+	memset(name, 0, sizeof(name));
+	memset(description, 0, sizeof(description));
+
 	strncpy(hostname, ip, sizeof(hostname));
 	hostname[sizeof(hostname) - 1] = 0;
 
@@ -41,6 +47,10 @@ ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
 	stream.Read(name, sizeof(name));
 	stream.Read(waitingplayers);
 	stream.Read(description, sizeof(description));
+
+	// ensure the strings are null terminated
+	name[sizeof(name) - 1] = 0;
+	description[sizeof(description) - 1] = 0;
 }
 
 ServerInfo::ServerInfo(const IUserConfigReader& config)

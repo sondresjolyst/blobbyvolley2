@@ -105,7 +105,7 @@ SDL_Surface* RenderManager::createEmptySurface(unsigned int width, unsigned int 
 	return newSurface;
 }
 
-int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
+int RenderManager::getNextFontIndex(std::string::const_iterator& iter, std::string::const_iterator end)
 {
 	int index = INVALID_FONT_INDEX;
 	char testChar = *iter;
@@ -148,6 +148,8 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 		index = 54;
 	else if (testChar == std::string("¿")[0]) // UTF-8 escape (c2xx)
 	{
+		if (iter == end)
+			return index;
 		testChar = *iter;
 		++iter;
 		if (testChar == std::string("¿")[1])
@@ -155,14 +157,20 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 	}
 	else if (testChar == std::string("👁")[0]) // UTF-8 escape (f0xxxxxx)
 	{
+		if (iter == end)
+			return index;
 		testChar = *iter;
 		++iter;
 		if (testChar == std::string("👁")[1]) // UTF-8 escape (xx9fxxxx)
 		{
+			if (iter == end)
+				return index;
 			testChar = *iter;
 			++iter;
 			if (testChar == std::string("👁")[2]) // UTF-8 escape (xxxx91xx)
 			{
+				if (iter == end)
+					return index;
 				testChar = *iter;
 				++iter;
 				if (testChar == std::string("👁")[3]) // UTF-8 escape (xxxxxx81)
@@ -172,6 +180,8 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 			}
 			else if (testChar == std::string("🔒")[2]) // UTF-8 escape (xxxx94xx)
 			{
+				if (iter == end)
+					return index;
 				testChar = *iter;
 				++iter;
 				if (testChar == std::string("🔒")[3]) // UTF-8 escape (xxxxxx92)
@@ -183,6 +193,8 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 	}
 	else if (testChar == std::string("ß")[0]) // UTF-8 escape (c3xx)
 	{
+		if (iter == end)
+			return index;
 		testChar = *iter;
 		++iter;
 		if (testChar == std::string("ß")[1])
@@ -228,6 +240,8 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 	}
 	else if (testChar == std::string("Ć")[0]) // UTF-8 escape (c4xx)
 	{
+		if (iter == end)
+			return index;
 		testChar = *iter;
 		++iter;
 		if ((testChar >= std::string("Ć")[1]) && (testChar <= std::string("č")[1]))
@@ -237,6 +251,8 @@ int RenderManager::getNextFontIndex(std::string::const_iterator& iter)
 	}
 	else if (testChar == std::string("Ś")[0]) // UTF-8 escape (c5xx)
 	{
+		if (iter == end)
+			return index;
 		testChar = *iter;
 		++iter;
 		if ((testChar >= std::string("Ŕ")[1]) && (testChar <= std::string("ř")[1]))

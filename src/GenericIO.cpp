@@ -252,16 +252,36 @@ class NetworkIn : public GenericIn
 		void string( std::string& string) override
 		{
 			/// \todo this might be bad performance wise
-			unsigned int ts;
+			unsigned int ts = 0;
 			uint32(ts);
+
+			if( ts > maxElementCount() / 8 )
+			{
+				string.clear();
+				skipToEnd();
+				return;
+			}
 
 			string.resize(ts);
 			for(unsigned int i = 0; i < ts; ++i)
 			{
-				unsigned char nc;
+				unsigned char nc = 0;
 				byte(nc);
 				string[i] = nc;
 			}
+		}
+
+		unsigned int maxElementCount() const override
+		{
+			int unread = mStream->GetNumberOfUnreadBits();
+			return unread > 0 ? unread : 0;
+		}
+
+		void skipToEnd() override
+		{
+			int unread = mStream->GetNumberOfUnreadBits();
+			if( unread > 0 )
+				mStream->IgnoreBits(unread);
 		}
 
 
@@ -423,7 +443,7 @@ namespace detail
 
 	GENERATE_STD_SERIALIZER_IN(Color)
 	{
-		unsigned int target;
+		unsigned int target = 0;
 		io.uint32(target);
 		value = Color(target);
 	}
@@ -435,7 +455,7 @@ namespace detail
 
 	GENERATE_STD_SERIALIZER_IN(PlayerInput)
 	{
-		unsigned int target;
+		unsigned int target = 0;
 		io.uint32(target);
 		value.setAll(target);
 	}
@@ -447,7 +467,7 @@ namespace detail
 
 	GENERATE_STD_SERIALIZER_IN(PlayerSide)
 	{
-		unsigned int target;
+		unsigned int target = 0;
 		io.uint32(target);
 		value = (PlayerSide)target;
 	}
@@ -461,7 +481,7 @@ namespace detail
 	GENERATE_STD_SERIALIZER_IN(PlayerID)
 	{
 		io.uint32(value.binaryAddress);
-		unsigned int port;
+		unsigned int port = 0;
 		io.uint32(port);
 		value.port = port;
 	}

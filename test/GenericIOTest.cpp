@@ -16,6 +16,7 @@
 #include <vector>
 #include <list>
 #include <deque>
+#include <set>
 
 #define TEST_EXECUTION_PATH "./test"
 
@@ -148,6 +149,99 @@ BOOST_FIXTURE_TEST_CASE( generic_io_special_types, FSFixture )
 	generic_io_types_test_special_f( ins, outs);
 };
 
+
+BOOST_AUTO_TEST_CASE( generic_io_network_oversized_vector )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	// announces more elements than the stream can contain
+	out->uint32(1000);
+	out->uint32(5);
+	out->uint32(6);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<unsigned int> v(3, 7);
+	in->generic<std::vector<unsigned int>>(v);
+	BOOST_CHECK(v.empty());
+	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_huge_vector_length )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(0xFFFFFFF0u);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<unsigned int> v;
+	BOOST_CHECK_NO_THROW(in->generic<std::vector<unsigned int>>(v));
+	BOOST_CHECK(v.empty());
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_oversized_set )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(100000);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::set<unsigned int> s;
+	s.insert(4);
+	in->generic<std::set<unsigned int>>(s);
+	BOOST_CHECK(s.empty());
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_oversized_string )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(5000);
+	out->uint32(1);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::string str = "abc";
+	in->generic<std::string>(str);
+	BOOST_CHECK(str.empty());
+	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_short_read_is_zero )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	Color c(1, 2, 3);
+	in->generic<Color>(c);
+	BOOST_CHECK(c == Color(0));
+	PlayerSide side = RIGHT_PLAYER;
+	in->generic<PlayerSide>(side);
+	BOOST_CHECK_EQUAL(side, (PlayerSide)0);
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_valid_containers )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	std::deque<bool> bits;
+	for(int i = 0; i < 37; ++i)
+		bits.push_back(i % 3 == 0);
+	std::vector<unsigned int> ints = {1, 2, 3};
+	std::string text = "blobby";
+	out->generic<std::deque<bool>>(bits);
+	out->generic<std::vector<unsigned int>>(ints);
+	out->generic<std::string>(text);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::deque<bool> bitsIn;
+	std::vector<unsigned int> intsIn;
+	std::string textIn;
+	in->generic<std::deque<bool>>(bitsIn);
+	in->generic<std::vector<unsigned int>>(intsIn);
+	in->generic<std::string>(textIn);
+	BOOST_CHECK(bits == bitsIn);
+	BOOST_CHECK(ints == intsIn);
+	BOOST_CHECK_EQUAL(text, textIn);
+	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
+}
 
 BOOST_AUTO_TEST_SUITE_END()
 
