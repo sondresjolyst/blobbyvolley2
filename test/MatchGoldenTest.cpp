@@ -16,6 +16,8 @@
 // Plays whole matches with fixed inputs and compares a hash of every game state with a
 // stored value. A failure means game behaviour changed: physics, rules or match logic.
 // If the change is intended, update the expected value and explain it in the commit.
+// The stored values are for x86-64. Other CPUs may fuse floating point operations, which gives
+// slightly different results, so they only check that a match is repeatable.
 
 namespace
 {
@@ -111,6 +113,7 @@ namespace
 		FileSystem mFS;
 	};
 
+#if defined(__x86_64__) || defined(_M_X64)
 	struct GoldenMatch
 	{
 		const char* rules;
@@ -129,6 +132,7 @@ namespace
 		{ "tennis.lua", "steps=9710 events=304 score=12-15 winner=1 hash=90ade1c75322860e" },
 		{ "the_double.lua", "steps=9386 events=290 score=15-13 winner=0 hash=e8c95409566dbcd0" },
 	};
+#endif
 }
 
 BOOST_AUTO_TEST_SUITE( MatchGoldenTest )
@@ -138,6 +142,7 @@ BOOST_FIXTURE_TEST_CASE( same_inputs_give_same_match, DataFixture )
 	BOOST_CHECK_EQUAL( playMatch("default.lua"), playMatch("default.lua") );
 }
 
+#if defined(__x86_64__) || defined(_M_X64)
 BOOST_FIXTURE_TEST_CASE( matches_equal_stored_results, DataFixture )
 {
 	for(const auto& golden : GOLDEN_MATCHES)
@@ -148,5 +153,6 @@ BOOST_FIXTURE_TEST_CASE( matches_equal_stored_results, DataFixture )
 		}
 	}
 }
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()
