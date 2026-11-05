@@ -5,10 +5,22 @@ on:
   push:
     branches:
       - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
   pull_request:
     branches:
       - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Build:
     runs-on: ubuntu-22.04
