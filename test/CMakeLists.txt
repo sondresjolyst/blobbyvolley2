@@ -52,3 +52,7 @@ add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGol
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"")
 target_link_libraries(blobbytest ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY} ${PHYSFS_LIBRARY} ${SDL2_LIBRARIES} lua raknet tinyxml2)
+
+if (MSVC)
+	target_compile_options(blobbytest PRIVATE /utf-8)
+endif ()
