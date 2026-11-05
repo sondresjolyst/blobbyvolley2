@@ -102,4 +102,26 @@ BOOST_AUTO_TEST_CASE( encode_decode_multiline_data_multiple_of_newline_with_extr
 	BOOST_CHECK( decode(encode(text, 8)) == text );
 }
 
+BOOST_AUTO_TEST_CASE( decode_empty )
+{
+	BOOST_CHECK( decode("").empty() );
+	BOOST_CHECK( decode("\n").empty() );
+}
+
+BOOST_AUTO_TEST_CASE( decode_misaligned_groups )
+{
+	BOOST_CHECK_THROW(decode("MTI z   "), std::runtime_error);
+	BOOST_CHECK_THROW(decode("MTIzMTI\nz   "), std::runtime_error);
+	BOOST_CHECK_THROW(decode("MTIz\nMT Iz"), std::runtime_error);
+	BOOST_CHECK_THROW(decode("AAA A"), std::runtime_error);
+	BOOST_CHECK_THROW(decode("A AAA"), std::runtime_error);
+}
+
+BOOST_AUTO_TEST_CASE( decode_whitespace_between_groups )
+{
+	std::vector<uint8_t> text = { '1', '2', '3', '1', '2', '3' };
+	BOOST_CHECK( decode("MTIz\nMTIz\n") == text );
+	BOOST_CHECK( decode(" MTIz MTIz") == text );
+}
+
 BOOST_AUTO_TEST_SUITE_END()

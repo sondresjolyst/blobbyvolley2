@@ -31,7 +31,7 @@ template<class T>
 std::string encode(const std::vector<T>& data_vec, int newlines = -1)
 {
 	static_assert( std::is_pod<T>::value, "T has to be a POD type");
-	auto start = &*data_vec.begin();
+	auto start = data_vec.data();
 	auto begin = reinterpret_cast<const char*>(start);
 	auto end   = reinterpret_cast<const char*>(start + data_vec.size());
 	return encode( begin, end, newlines );
