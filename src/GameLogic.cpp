@@ -511,6 +511,8 @@ PlayerSide LuaGameLogic::checkWin() const
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
+		lua_pop(mState, 1);
+		return NO_PLAYER;
 	}
 
 	bool won = lua_toboolean(mState, -1);

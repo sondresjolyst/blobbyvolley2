@@ -86,4 +86,14 @@ BOOST_FIXTURE_TEST_CASE( rules_cannot_score_for_invalid_player, ScriptFixture )
 	BOOST_CHECK_EQUAL( logic->getTouches(RIGHT_PLAYER), 0 );
 }
 
+BOOST_FIXTURE_TEST_CASE( failing_win_check_does_not_end_the_game, ScriptFixture )
+{
+	writeRules("function IsWinning(l, r)\nerror(\"broken rule\")\nend\nscore(0, 1)\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+
+	BOOST_CHECK_EQUAL( logic->getScore(LEFT_PLAYER), 1 );
+	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), NO_PLAYER );
+}
+
 BOOST_AUTO_TEST_SUITE_END()
