@@ -77,8 +77,6 @@ jobs:
 
       # On all systems, run the unit tests
       - name: Run unit tests
-        # TODO make it compile on windows too.
-        if: matrix.platform.shell != 'msys2 {0}'
         # configure again to build with test this time.
         run: |
           cmake . -DBUILD_TESTS=ON
