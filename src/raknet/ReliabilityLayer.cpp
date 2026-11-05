@@ -395,20 +395,23 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 						// Generate the split
 						// Verify some parameters to make sure we don't get junk data
 #ifdef _DEBUG
-						assert( internalPacket->splitPacketIndex < internalPacket->splitPacketCount );
 						assert( internalPacket->dataBitLength < MAXIMUM_MTU_SIZE * 8 );
 #endif
+						if ( internalPacket->splitPacketIndex >= internalPacket->splitPacketCount )
+						{
+							// Invalid packet
+							delete [] internalPacket->data;
+							internalPacketPool.ReleasePointer( internalPacket );
+							goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
+						}
+
 						//reliabilityLayerMutexes[splitPacketList_MUTEX].Lock();
 						for ( unsigned cnt = 0; cnt < splitPacketList.size(); cnt++ )
 						{
 							// Make sure this is not a duplicate insertion.
 							// If this hits then most likely splitPacketId overflowed into existing waiting split packets (i.e. more than rangeof(splitPacketId) waiting)
-							if ( splitPacketList[ cnt ]->splitPacketIndex == internalPacket->splitPacketIndex && splitPacketList[ cnt ]->splitPacketId == splitPacketId )
+							if ( splitPacketList[ cnt ]->splitPacketIndex == internalPacket->splitPacketIndex && splitPacketList[ cnt ]->splitPacketId == internalPacket->splitPacketId )
 							{
-								#ifdef _DEBUG
-								assert(0);
-								#endif
-
 								// Invalid packet
 #ifdef _DEBUG
 								printf( "Error: Split packet duplicate insertion (1)\n" );
@@ -447,7 +450,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 #ifdef _DEBUG
 						else
 						{
-							assert( splitPacketList.size() == (unsigned int) splitPacketListSize );
+							assert( splitPacketList.size() <= (unsigned int) splitPacketListSize );
 						}
 
 #endif
@@ -483,9 +486,15 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 
 				// Verify some parameters to make sure we don't get junk data
 #ifdef _DEBUG
-				assert( internalPacket->splitPacketIndex < internalPacket->splitPacketCount );
 				assert( internalPacket->dataBitLength < MAXIMUM_MTU_SIZE * 8 );
 #endif
+				if ( internalPacket->splitPacketIndex >= internalPacket->splitPacketCount )
+				{
+					// Invalid packet
+					delete [] internalPacket->data;
+					internalPacketPool.ReleasePointer( internalPacket );
+					goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
+				}
 
 				// Check for a rebuilt packet
 				if ( internalPacket->reliability != RELIABLE_ORDERED )
@@ -497,9 +506,6 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 				{
 					if ( splitPacketList[ cnt ]->splitPacketIndex == internalPacket->splitPacketIndex && splitPacketList[ cnt ]->splitPacketId == internalPacket->splitPacketId )
 					{
-#ifdef _DEBUG
-						assert(0);
-#endif
 						// Invalid packet
 #ifdef _DEBUG
 						printf( "Error: Split packet duplicate insertion (2)\n" );
@@ -522,7 +528,7 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 				if ( internalPacket == 0 )
 				{
 #ifdef _DEBUG
-					assert( splitPacketList.size() == (unsigned int) splitPacketListSize );
+					assert( splitPacketList.size() <= (unsigned int) splitPacketListSize );
 #endif
 					// Don't have all the parts yet
 					goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
@@ -1715,6 +1721,7 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 
 	// 10/08/05 - Disabled assert since this hits from offline packets
 	//assert( bitStreamSucceeded );
+#endif
 
 	if ( bitStreamSucceeded == false )
 	{
@@ -1722,8 +1729,6 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 		internalPacketPool.ReleasePointer( internalPacket );
 		return 0;
 	}
-
-#endif
 
 	// PRINTING UNRELIABLE STRINGS
 	// if (internalPacket->data && internalPacket->dataBitLength>5*8)
@@ -1874,161 +1879,142 @@ void ReliabilityLayer::InsertIntoSplitPacketList( InternalPacket * internalPacke
 //-------------------------------------------------------------------------------------------------------
 InternalPacket * ReliabilityLayer::BuildPacketFromSplitPacketList( unsigned int splitPacketId, unsigned int time )
 {
-	int i, j, size;
+	unsigned int i, j, size;
 	// How much data all blocks but the last hold
-	int maxDataSize;
-	int numParts;
-	int bitlength;
-	int *indexList;
-	int indexListIndex;
+	unsigned int maxDataSize = 0;
+	unsigned int numParts;
+	unsigned int splitPacketCount;
+	unsigned long long bitlength = 0;
+	int *indexList = 0;
+	bool valid;
+	InternalPacket * internalPacket = 0;
 
 	size = splitPacketList.size();
 
 	for ( i = 0; i < size; i++ )
 	{
 		if ( splitPacketList[ i ]->splitPacketId == splitPacketId )
-		{
-			// Is there enough elements in the list to have all the parts?
-
-			if ( splitPacketList[ i ]->splitPacketCount > splitPacketList.size() - i )
-			{
-				//   if (splitPacketList.size() % 100 == 0 || splitPacketList[i]->splitPacketCount-splitPacketList.size()<100)
-				//    printf("%i out of %i\n", splitPacketList.size(), splitPacketList[i]->splitPacketCount);
-				return 0;
-			}
-
-			//  printf("%i out of %i\n", splitPacketList.size(), splitPacketList[i]->splitPacketCount);
-			// Keep track of the indices of the elements through our first scan so we don't have to rescan to find them
-			indexListIndex = 0;
-
-			numParts = 1;
-
-			bitlength = splitPacketList[ i ]->dataBitLength;
-
-			indexList = ( int* ) alloca( sizeof( int ) * splitPacketList[ i ]->splitPacketCount );
-
-			indexList[ indexListIndex++ ] = i;
-
-			maxDataSize = BITS_TO_BYTES( splitPacketList[ i ]->dataBitLength );
-
-			// Are all the parts there?
-			for ( j = i + 1; j < size; j++ )
-			{
-				if ( splitPacketList[ j ]->splitPacketId == splitPacketId )
-				{
-					indexList[ indexListIndex++ ] = j;
-					numParts++;
-					bitlength += splitPacketList[ j ]->dataBitLength;
-
-					// Verify that we are dealing with the same splitPacketId
-#ifdef _DEBUG
-					assert(splitPacketList[ j ]->splitPacketCount==splitPacketList[ i ]->splitPacketCount);
-#endif
-
-					if ( ( int ) BITS_TO_BYTES( splitPacketList[ j ]->dataBitLength ) > maxDataSize )
-						maxDataSize = BITS_TO_BYTES( splitPacketList[ j ]->dataBitLength );
-				}
-			}
-
-			if ( (unsigned int)numParts == splitPacketList[ i ]->splitPacketCount )
-			{
-				int allocatedLength;
-				// All the parts are here
-				InternalPacket * internalPacket = CreateInternalPacketCopy( splitPacketList[ i ], 0, 0, time );
-				allocatedLength=BITS_TO_BYTES( bitlength );
-				internalPacket->data = new char[ allocatedLength ];
-#ifdef _DEBUG
-				internalPacket->splitPacketCount = splitPacketList[ i ]->splitPacketCount;
-#endif
-
-				// Add each part to internalPacket
-				j = 0;
-
-				while ( j < indexListIndex )
-				{
-					if ( splitPacketList[ indexList[ j ] ]->splitPacketCount-1 == splitPacketList[ indexList[ j ] ]->splitPacketIndex )
-					{
-						// Last split packet
-						// If this assert fails,
-						// then the total bit length calculated by adding the last block to the maximum block size * the number of blocks that are not the last block
-						// doesn't match the amount calculated from traversing the list
-#ifdef _DEBUG
-						assert( BITS_TO_BYTES( splitPacketList[ indexList[ j ] ]->dataBitLength ) + splitPacketList[ indexList[ j ] ]->splitPacketIndex * (unsigned)maxDataSize == ( (unsigned)bitlength - 1 ) / 8 + 1 );
-#endif
-
-						if (splitPacketList[ indexList[ j ] ]->splitPacketIndex * (unsigned int) maxDataSize + (unsigned int) BITS_TO_BYTES( splitPacketList[ indexList[ j ] ]->dataBitLength ) > (unsigned int) allocatedLength )
-						{
-							// Watch for buffer overruns
-#ifdef _DEBUG
-							assert(0);
-#endif
-							delete[] internalPacket->data;
-							internalPacketPool.ReleasePointer(internalPacket);
-							return 0;
-						}
-
-						memcpy( internalPacket->data + splitPacketList[ indexList[ j ] ]->splitPacketIndex * maxDataSize, splitPacketList[ indexList[ j ] ]->data, BITS_TO_BYTES( splitPacketList[ indexList[ j ] ]->dataBitLength ) );
-					}
-
-					else
-					{
-						if (splitPacketList[ indexList[ j ] ]->splitPacketIndex * (unsigned int) maxDataSize + (unsigned int) maxDataSize > (unsigned int) allocatedLength )
-						{
-							// Watch for buffer overruns
-#ifdef _DEBUG
-							assert(0);
-#endif
-							delete[] internalPacket->data;
-							internalPacketPool.ReleasePointer(internalPacket);
-							return 0;
-						}
-						// Not last split packet
-						memcpy( internalPacket->data + splitPacketList[ indexList[ j ] ]->splitPacketIndex * maxDataSize, splitPacketList[ indexList[ j ] ]->data, maxDataSize );
-					}
-
-					internalPacket->dataBitLength += splitPacketList[ indexList[ j ] ]->dataBitLength;
-					InternalPacket *temp;
-
-					temp = splitPacketList[ indexList[ j ] ];
-					delete [] temp->data;
-					internalPacketPool.ReleasePointer( temp );
-					splitPacketList[ indexList[ j ] ] = 0;
-
-#ifdef _DEBUG
-
-					numParts--;
-#endif
-
-					j++;
-					size--;
-				}
-
-#ifdef _DEBUG
-				assert( numParts == 0 ); // Make sure the correct # of elements was removed from the list
-#endif
-
-				j = 0;
-
-				while ( ( unsigned ) j < splitPacketList.size() )
-					if ( splitPacketList[ j ] == 0 )
-					{
-						// Since order doesn't matter, swap from the tail to the current element.
-						splitPacketList[ j ] = splitPacketList[ splitPacketList.size() - 1 ];
-						splitPacketList[ splitPacketList.size() - 1 ] = 0;
-						// Then just delete the tail (just changes a counter)
-						splitPacketList.del( splitPacketList.size() - 1 );
-					}
-
-					else
-						j++;
-
-				return internalPacket;
-			}
 			break;
+	}
+
+	if ( i == size )
+		return 0;
+
+	// Every part must have the same count, reliability and ordering channel and an index below the count
+	splitPacketCount = splitPacketList[ i ]->splitPacketCount;
+	numParts = 0;
+	valid = true;
+
+	for ( j = i; j < size; j++ )
+	{
+		if ( splitPacketList[ j ]->splitPacketId == splitPacketId )
+		{
+			numParts++;
+
+			if ( splitPacketList[ j ]->splitPacketCount != splitPacketCount ||
+				splitPacketList[ j ]->splitPacketIndex >= splitPacketCount ||
+				splitPacketList[ j ]->reliability != splitPacketList[ i ]->reliability ||
+				splitPacketList[ j ]->orderingChannel != splitPacketList[ i ]->orderingChannel )
+				valid = false;
 		}
 	}
 
-	return 0;
+	// Is there enough elements in the list to have all the parts?
+	if ( valid && numParts < splitPacketCount )
+		return 0;
+
+	if ( numParts != splitPacketCount )
+		valid = false;
+
+	if ( valid )
+	{
+		// Keep track of the indices of the elements by part index so we don't have to rescan to find them
+		indexList = ( int* ) alloca( sizeof( int ) * splitPacketCount );
+
+		for ( j = 0; j < splitPacketCount; j++ )
+			indexList[ j ] = -1;
+
+		maxDataSize = 0;
+
+		for ( j = i; j < size; j++ )
+		{
+			if ( splitPacketList[ j ]->splitPacketId == splitPacketId )
+			{
+				if ( indexList[ splitPacketList[ j ]->splitPacketIndex ] != -1 )
+				{
+					// Duplicate part index
+					valid = false;
+					break;
+				}
+
+				indexList[ splitPacketList[ j ]->splitPacketIndex ] = j;
+
+				if ( BITS_TO_BYTES( splitPacketList[ j ]->dataBitLength ) > maxDataSize )
+					maxDataSize = BITS_TO_BYTES( splitPacketList[ j ]->dataBitLength );
+			}
+		}
+	}
+
+	if ( valid )
+	{
+		// Every part but the last must hold exactly maxDataSize bytes, the last at most that
+		for ( j = 0; j + 1 < splitPacketCount; j++ )
+		{
+			if ( splitPacketList[ indexList[ j ] ]->dataBitLength != ( maxDataSize << 3 ) )
+				valid = false;
+		}
+
+		if ( BITS_TO_BYTES( splitPacketList[ indexList[ splitPacketCount - 1 ] ]->dataBitLength ) > maxDataSize )
+			valid = false;
+
+		bitlength = ( unsigned long long ) ( splitPacketCount - 1 ) * maxDataSize * 8 + splitPacketList[ indexList[ splitPacketCount - 1 ] ]->dataBitLength;
+
+		if ( bitlength > 0x7FFFFFFF )
+			valid = false;
+	}
+
+	if ( valid )
+	{
+		// All the parts are here
+		internalPacket = CreateInternalPacketCopy( splitPacketList[ i ], 0, 0, time );
+		internalPacket->data = new char[ ( size_t ) BITS_TO_BYTES( bitlength ) ];
+		internalPacket->dataBitLength = ( unsigned int ) bitlength;
+#ifdef _DEBUG
+		internalPacket->splitPacketCount = splitPacketCount;
+#endif
+
+		// Add each part to internalPacket
+		for ( j = 0; j < splitPacketCount; j++ )
+			memcpy( internalPacket->data + ( size_t ) j * maxDataSize, splitPacketList[ indexList[ j ] ]->data, BITS_TO_BYTES( splitPacketList[ indexList[ j ] ]->dataBitLength ) );
+	}
+
+	// Free every part with this splitPacketId, whether it was used or is invalid
+	for ( j = i; j < size; j++ )
+	{
+		if ( splitPacketList[ j ]->splitPacketId == splitPacketId )
+		{
+			delete [] splitPacketList[ j ]->data;
+			internalPacketPool.ReleasePointer( splitPacketList[ j ] );
+			splitPacketList[ j ] = 0;
+		}
+	}
+
+	j = 0;
+
+	while ( j < splitPacketList.size() )
+		if ( splitPacketList[ j ] == 0 )
+		{
+			// Since order doesn't matter, swap from the tail to the current element.
+			splitPacketList[ j ] = splitPacketList[ splitPacketList.size() - 1 ];
+			splitPacketList[ splitPacketList.size() - 1 ] = 0;
+			// Then just delete the tail (just changes a counter)
+			splitPacketList.del( splitPacketList.size() - 1 );
+		}
+
+		else
+			j++;
+
+	return internalPacket;
 }
 
 // Delete any unreliable split packets that have long since expired
