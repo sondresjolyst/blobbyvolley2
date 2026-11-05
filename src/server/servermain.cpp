@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "DedicatedServer.h"
 
 /* includes */
+#include <atomic>
 #include <cstdlib>
 #include <iostream>
 #include <cstdio>
@@ -73,11 +74,11 @@ void setup_physfs(char* argv0);
 std::string statistics();
 
 // server workload statistics
-int SWLS_PacketCount = 0;
-int SWLS_Connections = 0;
-int SWLS_Games		 = 0;
-int SWLS_GameSteps	 = 0;
-int SWLS_RunningTime = 0;
+std::atomic<int> SWLS_PacketCount{0};
+std::atomic<int> SWLS_Connections{0};
+std::atomic<int> SWLS_Games{0};
+std::atomic<int> SWLS_GameSteps{0};
+std::atomic<int> SWLS_RunningTime{0};
 
 const int UPDATE_FREQUENCY = 10;
 

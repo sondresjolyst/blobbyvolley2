@@ -24,6 +24,8 @@ set(SRC
 	../src/Color.cpp          ../src/Color.h
 	../src/base64.cpp         ../src/base64.h
 	../src/FontIndex.cpp      ../src/FontIndex.h
+	../src/server/MatchMaker.cpp    ../src/server/MatchMaker.h
+	../src/server/NetworkPlayer.cpp ../src/server/NetworkPlayer.h
 )
 
 # BOOST_TEST_DYN_LINK below needs the shared library
@@ -41,7 +43,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ${SRC})
 
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"")

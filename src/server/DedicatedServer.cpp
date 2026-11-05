@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "DedicatedServer.h"
 
+#include <atomic>
 #include <set>
 #include <algorithm>
 #include <iostream>
@@ -41,9 +42,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #endif
 #endif
 
-extern int SWLS_PacketCount;
-extern int SWLS_Connections;
-extern int SWLS_Games;
+extern std::atomic<int> SWLS_PacketCount;
+extern std::atomic<int> SWLS_Connections;
+extern std::atomic<int> SWLS_Games;
 
 #ifdef __ANDROID__
 extern "C"
@@ -145,11 +146,13 @@ void DedicatedServer::queuePackets()
  */
 void DedicatedServer::processPackets()
 {
-	while (!mPacketQueue.empty())
+	while (true)
 	{
 		packet_ptr packet;
 		{
 			std::lock_guard<std::mutex> lock(mPacketQueueMutex);
+			if (mPacketQueue.empty())
+				break;
 			packet = mPacketQueue.front();
 			mPacketQueue.pop_front();
 		}
@@ -375,6 +378,14 @@ void DedicatedServer::processBlobbyServerPresent( PlayerID source, RakNet::BitSt
 }
 
 void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& data) {
+	// a connection enters the server only once
+	if( mPlayerMap.find(source) != mPlayerMap.end() )
+	{
+		syslog(LOG_NOTICE, "Repeated entry (%d) from %s ignored.",
+			   ID_ENTER_SERVER, source.toString().c_str());
+		return;
+	}
+
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
 
 	// add to player map. protect with mutex

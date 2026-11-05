@@ -48,7 +48,7 @@ private:
 	//bool mVersionError;
 
 	Vector2 mLastMousePosition;
-	int mMouseShowTimer;
+	int mMouseShowTimer = 0;
 
 	// controls
 	int mPositionJump;

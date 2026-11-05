@@ -53,6 +53,13 @@ unsigned MatchMaker::openGame( PlayerID creator, int speed, int rules, int point
 	}
 	auto create_pl = plid->second;
 
+	if(speed < 0 || static_cast<std::size_t>(speed) >= mPossibleGameSpeeds.size() ||
+	   rules < 0 || static_cast<std::size_t>(rules) >= mPossibleGameRules.size())
+	{
+		std::cerr << "player " << creator << " tried to create a game with invalid speed " << speed << " or rules " << rules << "\n";
+		return -1;
+	}
+
 	OpenGame newgame{creator, create_pl->getName()+"'s game" , speed, rules, points, password, std::vector<PlayerID>(0)};
 
 	// if creator already has an open game, delete that

@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkGame.h"
 
 /* includes */
+#include <atomic>
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
@@ -42,7 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkPlayer.h"
 #include "InputSource.h"
 
-extern int SWLS_GameSteps;
+extern std::atomic<int> SWLS_GameSteps;
 
 /* implementation */
 
@@ -159,11 +160,13 @@ void NetworkGame::broadcastBitstream(const RakNet::BitStream& stream)
 
 void NetworkGame::processPackets()
 {
-	while (!mPacketQueue.empty())
+	while (true)
 	{
 		packet_ptr packet;
 		{
 			std::lock_guard<std::mutex> lock(mPacketQueueMutex);
+			if (mPacketQueue.empty())
+				break;
 			packet = mPacketQueue.front();
 			mPacketQueue.pop_front();
 		}

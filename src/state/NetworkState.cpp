@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 
 #include <utility>
@@ -579,8 +580,8 @@ void syslog(int pri, const char* format, ...)
 }
 
 // debug counters
-int SWLS_PacketCount;
-int SWLS_Connections;
-int SWLS_Games;
-int SWLS_GameSteps;
-int SWLS_ServerEntered;
+std::atomic<int> SWLS_PacketCount{0};
+std::atomic<int> SWLS_Connections{0};
+std::atomic<int> SWLS_Games{0};
+std::atomic<int> SWLS_GameSteps{0};
+std::atomic<int> SWLS_ServerEntered{0};

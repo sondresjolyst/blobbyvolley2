@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <algorithm>
+#include <atomic>
 
 #include <SDL.h>
 
@@ -68,7 +69,8 @@ void SpeedController::update()
 {
 	int rateTicks = std::max( static_cast<int>(PRECISION_FACTOR * 1000 / mGameFPS), 1);
 	
-	static int lastTicks = SDL_GetTicks();
+	// shared by all instances, which may run on different threads
+	static std::atomic<int> lastTicks(static_cast<int>(SDL_GetTicks()));
 
 	if (mCounter == mGameFPS)
 	{

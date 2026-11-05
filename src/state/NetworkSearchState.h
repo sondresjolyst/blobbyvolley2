@@ -57,6 +57,8 @@ protected:
 	std::unique_ptr<RakClient> mPingClient;
 	// set this to true to step pinging before we are finished
 	std::atomic<bool> mCancelPing;
+	// the search thread sets this, the main thread then clears mScannedServers
+	std::atomic<bool> mClearScannedServers{false};
 
 private:
 	virtual void doSearchServers() = 0;
@@ -64,7 +66,7 @@ private:
 	typedef std::list<RakClient*> ClientList;
 
 	ClientList mQueryClients;
-	RakClient* mDirectConnectClient;
+	RakClient* mDirectConnectClient = nullptr;
 
 	std::future<void> mPingJob;
 

@@ -95,6 +95,14 @@ void NetworkSearchState::step_impl()
 	// set to true to initiate server connection
 	bool doEnterServer = false;
 
+	// a new search has started, so the old list is cleared here on the main thread
+	if (mClearScannedServers.exchange(false))
+	{
+		mScannedServers.clear();
+		mSelectedServer = 0;
+		mDisplayInfo = false;
+	}
+
 	for (auto iter = mQueryClients.begin();
 		iter != mQueryClients.end(); ++iter)
 	{
@@ -314,7 +322,7 @@ void NetworkSearchState::step_impl()
 		imgui.doInactiveMode(true);
 	}
 
-	if (mDisplayInfo)
+	if (mDisplayInfo && mSelectedServer < mScannedServers.size())
 	{
 		imgui.doInactiveMode(false);
 		imgui.doOverlay(GEN_ID, Vector2(40.0, 80.0), Vector2(760.0, 440.0), Color(0,0,0), 1.0);
@@ -349,28 +357,38 @@ void NetworkSearchState::step_impl()
 	{
 		auto server_func = []()
 		{
-			// read config
-			/// \todo we need read-only access here!
-			UserConfig config;
-			config.loadFile("config.xml");
-			PlayerSide localSide = (PlayerSide)config.getInteger("network_side");
-
-			PlayerIdentity local_player = config.loadPlayerIdentity(localSide, true);
-			ServerInfo info(local_player.getName());
-			std::vector<std::string> rule_vec{config.getString("rules")};
-
-
-			DedicatedServer server(info, rule_vec, std::vector<float>{ SpeedController::getMainInstance()->getGameSpeed() }, 4, true);
-			SpeedController scontroller( 10 );
-			gKillHostThread = false;
-			while(!gKillHostThread)
+			try
 			{
-				// now run the server
-				server.allowNewPlayers(!server.hasActiveGame());
+				// read config
+				/// \todo we need read-only access here!
+				UserConfig config;
+				config.loadFile("config.xml");
+				PlayerSide localSide = (PlayerSide)config.getInteger("network_side");
 
-				server.processPackets();
-				server.updateGames();
-				scontroller.update();
+				PlayerIdentity local_player = config.loadPlayerIdentity(localSide, true);
+				ServerInfo info(local_player.getName());
+				std::vector<std::string> rule_vec{config.getString("rules")};
+
+
+				DedicatedServer server(info, rule_vec, std::vector<float>{ SpeedController::getMainInstance()->getGameSpeed() }, 4, true);
+				SpeedController scontroller( 10 );
+				while(!gKillHostThread)
+				{
+					// now run the server
+					server.allowNewPlayers(!server.hasActiveGame());
+
+					server.processPackets();
+					server.updateGames();
+					scontroller.update();
+				}
+			}
+			catch (const std::exception& e)
+			{
+				std::cerr << "Hosted server stopped: " << e.what() << std::endl;
+			}
+			catch (...)
+			{
+				std::cerr << "Hosted server stopped after an unknown error." << std::endl;
 			}
 		};
 
@@ -381,6 +399,9 @@ void NetworkSearchState::step_impl()
 		{
 			gHostedServerThread->join();
 		}
+
+		// clear the flag before the new thread starts, so a later stop request is kept
+		gKillHostThread = false;
 
 		// start server
 		gHostedServerThread = std::make_shared<std::thread>(server_func);
@@ -401,8 +422,8 @@ void NetworkSearchState::step_impl()
 					sizeof(mHostedServer->hostname));
 	}
 
-	if ((imgui.doButton(GEN_ID, Vector2(230, 530), TextManager::LBL_OK) && !mScannedServers.empty())
-			|| doEnterServer)
+	if (((imgui.doButton(GEN_ID, Vector2(230, 530), TextManager::LBL_OK) && !mScannedServers.empty())
+			|| doEnterServer) && mSelectedServer < mScannedServers.size())
 	{
 		ServerInfo server = mScannedServers[mSelectedServer];
 		switchState(new LobbyState(server, dynamic_cast<OnlineSearchState*>(this) == nullptr ? PreviousState::LAN : PreviousState::ONLINE));
@@ -481,7 +502,7 @@ void OnlineSearchState::doSearchServers()
 		     serverElem = serverElem->NextSiblingElement("server"))
 		{
 			std::string host;
-			int port;
+			int port = BLOBBY_PORT;
 			for (const auto* varElem = serverElem->FirstChildElement("var");
 			     varElem;
 			     varElem = varElem->NextSiblingElement("var"))
@@ -531,7 +552,7 @@ void OnlineSearchState::doSearchServers()
 	std::pair<std::string, int> pairs(server.c_str(), port);
 	serverList.push_back(pairs);
 
-	mScannedServers.clear();
+	mClearScannedServers = true;
 	mPingClient->Initialize( serverList.size() + 2, 0, 10 );
 
 	for( auto& server : serverList )
@@ -558,7 +579,7 @@ LANSearchState::LANSearchState()
 
 void LANSearchState::doSearchServers()
 {
-	mScannedServers.clear();
+	mClearScannedServers = true;
 	mPingClient->PingServer("255.255.255.255", BLOBBY_PORT, 0, true);
 }
 
