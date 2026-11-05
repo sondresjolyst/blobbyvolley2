@@ -648,6 +648,11 @@ LuaGameLogic* LuaGameLogic::getGameLogic(lua_State* state)
 	lua_getglobal(state, "__GAME_LOGIC_POINTER");
 	LuaGameLogic* gl = (LuaGameLogic*)lua_touserdata(state, -1);
 	lua_pop(state, 1);
+	if(!gl)
+	{
+		lua_pushstring(state, "game logic is not available");
+		lua_error(state);
+	}
 	return gl;
 }
 
@@ -668,6 +673,9 @@ int LuaGameLogic::luaMistake(lua_State* state)
 	lua_pop(state, 1);
 	LuaGameLogic* gl = getGameLogic(state);
 
+	if(!isPlayerSide(mistakeSide))
+		return 0;
+
 	gl->score(other_side(mistakeSide), amount);
 	gl->onError(mistakeSide, serveSide);
 	return 0;
@@ -680,6 +688,9 @@ int LuaGameLogic::luaScore(lua_State* state)
 	int player = lua_to_int( state, -1 );
 	lua_pop(state, 1);
 	LuaGameLogic* gl = getGameLogic(state);
+
+	if(!isPlayerSide((PlayerSide)player))
+		return 0;
 
 	gl->score((PlayerSide)player, amount);
 	return 0;

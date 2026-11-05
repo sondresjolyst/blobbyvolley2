@@ -44,10 +44,13 @@ void IScriptableComponent::openScript(const std::string& file)
 
 	if (error)
 	{
-		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
+		const char* message = lua_tostring(mState, -1);
+		if(!message)
+			message = "unknown error";
+		std::cerr << "Lua Error: " << message;
 		std::cerr << std::endl;
 		ScriptException except;
-		except.luaerror = lua_tostring(mState, -1);
+		except.luaerror = message;
 		BOOST_THROW_EXCEPTION(except);
 	}
 }
@@ -167,30 +170,36 @@ int get_ball_vel(lua_State* state)
 	return lua_pushvector(state, getMatchState(state).getBallVelocity(), VectorType::VELOCITY);
 }
 
+static PlayerSide lua_pop_player_side(lua_State* state)
+{
+	auto side = (PlayerSide) lua_to_int( state, -1 );
+	lua_pop(state, 1);
+	if(!isPlayerSide(side))
+	{
+		lua_pushstring(state, "invalid player specified");
+		lua_error(state);
+	}
+	return side;
+}
+
 int get_blob_pos(lua_State* state)
 {
 	const auto& s = getMatchState(state);
-	auto side = (PlayerSide) lua_to_int( state, -1 );
-	lua_pop(state, 1);
-	assert( side == LEFT_PLAYER || side == RIGHT_PLAYER );
+	PlayerSide side = lua_pop_player_side(state);
 	return lua_pushvector(state, s.getBlobPosition(side), VectorType::POSITION);
 }
 
 int get_blob_vel(lua_State* state)
 {
 	const auto& s = getMatchState(state);
-	PlayerSide side = (PlayerSide) lua_to_int( state, -1 );
-	lua_pop(state, 1);
-	assert( side == LEFT_PLAYER || side == RIGHT_PLAYER );
+	PlayerSide side = lua_pop_player_side(state);
 	return lua_pushvector(state, s.getBlobVelocity(side), VectorType::VELOCITY);
 }
 
 int get_score( lua_State* state )
 {
 	const auto& s = getMatchState(state);
-	PlayerSide side = (PlayerSide) lua_to_int( state, -1 );
-	lua_pop(state, 1);
-	assert( side == LEFT_PLAYER || side == RIGHT_PLAYER );
+	PlayerSide side = lua_pop_player_side(state);
 	lua_pushinteger(state, s.getScore(side));
 	return 1;
 }
@@ -198,9 +207,7 @@ int get_score( lua_State* state )
 int get_touches( lua_State* state )
 {
 	const auto& s = getMatchState(state);
-	PlayerSide side = (PlayerSide) lua_to_int( state, -1 );
-	lua_pop(state, 1);
-	assert( side == LEFT_PLAYER || side == RIGHT_PLAYER );
+	PlayerSide side = lua_pop_player_side(state);
 	lua_pushinteger(state, s.getHitcount(side));
 	return 1;
 }
@@ -231,7 +238,7 @@ int simulate_steps( lua_State* state )
 	/// \todo should we gather and return all events that happen to the ball on the way?
 	PhysicWorld* world = getWorld( state );
 	// get the initial ball settings
-	lua_checkstack(state, 5);
+	lua_settop(state, 5);
 	int steps = lua_tointeger( state, 1);
 	float x = lua_tonumber( state, 2);
 	float y = lua_tonumber( state, 3);
@@ -257,12 +264,13 @@ int simulate_until(lua_State* state)
 	/// \todo should we gather and return all events that happen to the ball on the way?
 	PhysicWorld* world = getWorld( state );
 	// get the initial ball settings
-	lua_checkstack(state, 6);
+	lua_settop(state, 6);
 	float x = lua_tonumber( state, 1);
 	float y = lua_tonumber( state, 2);
 	float vx = lua_tonumber( state, 3);
 	float vy = lua_tonumber( state, 4);
-	std::string axis = lua_tostring( state, 5 );
+	const char* axisName = lua_tostring( state, 5 );
+	std::string axis = axisName ? axisName : "";
 	const float coordinate = lua_tonumber( state, 6 );
 	lua_pop( state, 6 );
 

@@ -171,6 +171,7 @@ class IGameLogic: public ObjectCounter<IGameLogic>
 					return LEFT_PLAYER;
 				default:
 					assert(0);
+					return NO_PLAYER;
 			}
 		}
 

@@ -20,12 +20,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #pragma once
 
+#include <cmath>
 #include <map>
 #include <SDL.h>
 
 #include "Vector.h"
 #include "Color.h"
 #include "BlobbyDebug.h"
+
+/// converts an animation state into an index below frames, whatever value the state has
+inline int animationFrame(double state, int frames)
+{
+	if(!std::isfinite(state))
+		return 0;
+	const int frame = int(std::fmod(state, frames));
+	return frame < 0 ? frame + frames : frame;
+}
 
 
 class BloodManager;

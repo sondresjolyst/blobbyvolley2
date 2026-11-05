@@ -47,6 +47,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // global variable to save the lag
 int CURRENT_NETWORK_LAG = -1;
 
+static bool isValidMatchEvent(char event, PlayerSide side)
+{
+	if(event < MatchEvent::BALL_HIT_BLOB || event > MatchEvent::RESET_BALL)
+		return false;
+	if(event == MatchEvent::BALL_HIT_BLOB || event == MatchEvent::BALL_HIT_GROUND)
+		return isPlayerSide(side);
+	return side == NO_PLAYER || isPlayerSide(side);
+}
+
 
 /* implementation */
 NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win)
@@ -153,14 +162,26 @@ void NetworkGameState::step_impl()
 				//printf("Physic packet received. Time: %d\n", ival);
 				// read events
 				char event = 0;
-				for(stream.Read(event); event != 0; stream.Read(event))
+				while(stream.Read(event) && event != 0)
 				{
-					char side;
+					// the side is written as a byte, so NO_PLAYER arrives as 255
+					char sideByte = 0;
 					float intensity = -1;
-					stream.Read(side);
+					if(!stream.Read(sideByte))
+						break;
+					const PlayerSide side = (PlayerSide)static_cast<signed char>(sideByte);
 					if( event == MatchEvent::BALL_HIT_BLOB )
-						stream.Read(intensity);
-					MatchEvent me{ MatchEvent::EventType(event), (PlayerSide)side, intensity };
+					{
+						if(!stream.Read(intensity))
+							break;
+						// negated, so that a NaN also ends up as 0
+						if(!(intensity > 0))
+							intensity = 0;
+						intensity = std::min(intensity, 1.f);
+					}
+					if(!isValidMatchEvent(event, side))
+						continue;
+					MatchEvent me{ MatchEvent::EventType(event), side, intensity };
 					mMatch->trigger( me );
 				}
 				break;
@@ -169,7 +190,10 @@ void NetworkGameState::step_impl()
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
 				stream.IgnoreBytes(1);	//ID_WIN_NOTIFICATION
-				stream.Read((int&)mWinningPlayer);
+				int winner = NO_PLAYER;
+				if(!stream.Read(winner) || !isPlayerSide((PlayerSide)winner))
+					break;
+				mWinningPlayer = (PlayerSide)winner;
 
 				// last point must not be added anymore, because
 				// the score is also simulated local, so it is already
@@ -254,9 +278,9 @@ void NetworkGameState::step_impl()
 
 				stream.IgnoreBytes(1);	// ignore ID_RULES
 
-				int rulesLength;
+				int rulesLength = 0;
 				stream.Read(rulesLength);
-				if (rulesLength)
+				if (rulesLength > 0 && rulesLength <= stream.GetNumberOfUnreadBits() / 8)
 				{
 					std::vector<char> rulesString(rulesLength + 1, '\0');
 					stream.Read(rulesString.data(), rulesLength);

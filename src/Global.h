@@ -77,6 +77,11 @@ enum PlayerSide
 	// and can be used to declare arrays
 };
 
+inline bool isPlayerSide(PlayerSide side)
+{
+	return side == LEFT_PLAYER || side == RIGHT_PLAYER;
+}
+
 /// we need to define this constant to make it compile with strict c++98 mode
 #undef M_PI
 const double M_PI = 3.141592653589793238462643383279;
