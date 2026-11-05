@@ -1529,6 +1529,8 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 #endif
 
 	internalPacket->creationTime = time;
+	// the priority is not sent, but a split packet copies it when it is rebuilt
+	internalPacket->priority = HIGH_PRIORITY;
 
 	//bitStream->AlignReadToByteBoundary();
 
