@@ -4,6 +4,9 @@
 ### Website
  http://blobbyvolley.de
 
+### About this fork
+This repository is a fork of [danielknobe/blobbyvolley2](https://github.com/danielknobe/blobbyvolley2). Report problems with this fork here, not upstream.
+
 ### System requirements
 Windows, Linux or macOS
 
