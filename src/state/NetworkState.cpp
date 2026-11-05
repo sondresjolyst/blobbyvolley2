@@ -177,7 +177,8 @@ void NetworkGameState::step_impl()
 						// negated, so that a NaN also ends up as 0
 						if(!(intensity > 0))
 							intensity = 0;
-						intensity = std::min(intensity, 1.f);
+						else if(intensity > 1)
+							intensity = 1;
 					}
 					if(!isValidMatchEvent(event, side))
 						continue;
