@@ -412,10 +412,6 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 							// If this hits then most likely splitPacketId overflowed into existing waiting split packets (i.e. more than rangeof(splitPacketId) waiting)
 							if ( splitPacketList[ cnt ]->splitPacketIndex == internalPacket->splitPacketIndex && splitPacketList[ cnt ]->splitPacketId == internalPacket->splitPacketId )
 							{
-								#ifdef _DEBUG
-								assert(0);
-								#endif
-
 								// Invalid packet
 #ifdef _DEBUG
 								printf( "Error: Split packet duplicate insertion (1)\n" );
@@ -510,9 +506,6 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 				{
 					if ( splitPacketList[ cnt ]->splitPacketIndex == internalPacket->splitPacketIndex && splitPacketList[ cnt ]->splitPacketId == internalPacket->splitPacketId )
 					{
-#ifdef _DEBUG
-						assert(0);
-#endif
 						// Invalid packet
 #ifdef _DEBUG
 						printf( "Error: Split packet duplicate insertion (2)\n" );
@@ -1907,7 +1900,7 @@ InternalPacket * ReliabilityLayer::BuildPacketFromSplitPacketList( unsigned int 
 	if ( i == size )
 		return 0;
 
-	// Every part must have the same count and reliability and an index below the count
+	// Every part must have the same count, reliability and ordering channel and an index below the count
 	splitPacketCount = splitPacketList[ i ]->splitPacketCount;
 	numParts = 0;
 	valid = true;
