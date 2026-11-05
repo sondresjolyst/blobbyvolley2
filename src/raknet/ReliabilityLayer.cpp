@@ -42,6 +42,7 @@
 #endif
 
 #include <cstring>
+#include <vector>
 
 // Defined in rand.cpp
 extern void seedMT( unsigned int seed );
@@ -1887,7 +1888,7 @@ InternalPacket * ReliabilityLayer::BuildPacketFromSplitPacketList( unsigned int 
 	unsigned int numParts;
 	unsigned int splitPacketCount;
 	unsigned long long bitlength = 0;
-	int *indexList = 0;
+	std::vector<int> indexList;
 	bool valid;
 	InternalPacket * internalPacket = 0;
 
@@ -1931,10 +1932,8 @@ InternalPacket * ReliabilityLayer::BuildPacketFromSplitPacketList( unsigned int 
 	if ( valid )
 	{
 		// Keep track of the indices of the elements by part index so we don't have to rescan to find them
-		indexList = ( int* ) alloca( sizeof( int ) * splitPacketCount );
-
-		for ( j = 0; j < splitPacketCount; j++ )
-			indexList[ j ] = -1;
+		// The heap holds this list, since its size comes from the remote side
+		indexList.assign( splitPacketCount, -1 );
 
 		maxDataSize = 0;
 
