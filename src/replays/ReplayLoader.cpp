@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GenericIO.h"
 #include "base64.h"
 #include "ReplayDefs.h"
+#include "ReplayRecorder.h"
 #include "Color.h"
 
 /* implementation */
@@ -222,7 +223,8 @@ class ReplayLoader_V2X: public IReplayLoader
 				const char* minor = varElem->Attribute("minor");
 				if(!minor || !major)
 					throw(std::runtime_error(""));
-				assert(std::stoi(major) == 2);
+				if(std::stoi(major) != REPLAY_FILE_VERSION_MAJOR)
+					throw VersionMismatchException(filename, std::stoi(major), std::stoi(minor));
 				mReplayFormatVersion = std::stoi(minor);
 			}
 
@@ -263,6 +265,9 @@ class ReplayLoader_V2X: public IReplayLoader
 					mRightColor = Color(std::stoi(value));
 			}
 
+			if(mGameSpeed == 0)
+				throw(std::runtime_error("game_speed must not be 0"));
+
 			// load rules
 			varElem = userConfigElem->FirstChildElement("rules");
 			if(!varElem)
@@ -282,6 +287,8 @@ class ReplayLoader_V2X: public IReplayLoader
 				throw(std::runtime_error(""));
 
 			mBuffer = decode(content->Value());
+			if(mGameLength < 0 || static_cast<std::size_t>(mGameLength) > mBuffer.size())
+				throw(std::runtime_error("game_length does not match the input data"));
 
 			varElem = userConfigElem->FirstChildElement("states");
 			if(!varElem)
@@ -295,6 +302,12 @@ class ReplayLoader_V2X: public IReplayLoader
 			RakNet::BitStream temp( sp.data(), sp.size(), false );
 			auto convert = createGenericReader(&temp);
 			convert->generic<std::vector<ReplaySavePoint> > (mSavePoints);
+
+			for(const auto& savePoint : mSavePoints)
+			{
+				if(savePoint.step > static_cast<unsigned int>(mGameLength))
+					throw(std::runtime_error("save point step is outside of the replay"));
+			}
 		}
 
 

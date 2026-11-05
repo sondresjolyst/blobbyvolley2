@@ -95,7 +95,8 @@ void ReplayRecorder::save(FileWrite& file) const
 	// size_t = unsigned long != unsigned int != uint64_t; same for time_t
 	writeAttribute(printer, "game_speed", mGameSpeed);
 	writeAttribute<SIZET_TYPE>(printer, "game_length", mSaveData.size());
-	writeAttribute<SIZET_TYPE>(printer, "game_duration", mSaveData.size() / mGameSpeed);
+	// without a game speed the duration is unknown, so it is saved as 0
+	writeAttribute<SIZET_TYPE>(printer, "game_duration", mGameSpeed != 0 ? mSaveData.size() / mGameSpeed : 0);
 	writeAttribute<std::int64_t>(printer, "game_date", std::time(nullptr));
 
 	writeAttribute(printer, "score_left", mEndScore[LEFT_PLAYER]);
