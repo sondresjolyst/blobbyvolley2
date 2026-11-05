@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>sondresjolyst/si-renovate-config"
+  ],
+  "packageRules": [
+    {
+      "description": "Do not automerge until CI runs on this fork",
+      "matchPackageNames": ["*"],
+      "automerge": false
+    }
+  ]
+}
