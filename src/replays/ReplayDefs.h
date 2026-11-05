@@ -22,9 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 struct ReplaySavePoint;
 
-constexpr const char legacyHeader[4] = { 'B', 'V', '2', 'R' };	//!< header of replay file
-/// \todo add warning when trying to read old files
-
 constexpr const unsigned char REPLAY_FILE_VERSION_MAJOR = 2;
 constexpr const unsigned char REPLAY_FILE_VERSION_MINOR = 0;
 
