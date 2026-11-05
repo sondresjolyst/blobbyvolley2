@@ -3,6 +3,7 @@
   "extends": [
     "github>sondresjolyst/si-renovate-config"
   ],
+  "forkProcessing": "enabled",
   "packageRules": [
     {
       "description": "Do not automerge until CI runs on this fork",
