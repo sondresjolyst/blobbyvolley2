@@ -32,6 +32,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <utility>
 
 
+#if !(defined _WIN32)
+#include <sys/time.h>
+#endif
+
 #if (defined _WIN32)
 	#define closeSocket(s) closesocket(s)
 #else
@@ -196,8 +200,12 @@ void Http::readBody(int inOutSocket, std::stringstream& response, int contentSiz
 	// Parser variables
 	int counter = 0;
 
+	if(contentSize < 0)
+	{
+		throw Exception::HttpException("Invalid content size of http response.");
+	}
 	// Nothing to read for an empty body
-	if(contentSize <= 0)
+	if(contentSize == 0)
 	{
 		return;
 	}

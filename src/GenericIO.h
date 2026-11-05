@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <iosfwd>
 #include <vector>
 #include <type_traits>
-#include <limits>
+#include <climits>
 
 #include <memory>
 
@@ -108,10 +108,10 @@ class GenericIO
 		///			types.
 		virtual void seek(unsigned int pos) const = 0;
 
-		/// the maximum number of elements a container or string that is read next can have.
-		/// Every element needs at least one bit, so sources with a known size report their unread bits.
-		/// Unlimited by default.
-		virtual unsigned int maxElementCount() const { return std::numeric_limits<unsigned int>::max(); }
+		/// the maximum number of elements a container or string that is read next can have,
+		/// if every element needs at least \p bitsPerElement bits.
+		/// Sources with a known size report what fits into their unread data. Unlimited by default.
+		virtual unsigned int maxElementCount(unsigned int bitsPerElement) const { return UINT_MAX; }
 		/// discards the remaining data of the source. Does nothing by default.
 		virtual void skipToEnd() { }
 
@@ -202,6 +202,13 @@ namespace detail
 	//  iterate over all elements and read/write
 
 
+	// bool elements need one bit on the wire, everything else at least one byte
+	template<class T>
+	unsigned int minElementBits()
+	{
+		return std::is_same<T, bool>::value ? 1 : 8;
+	}
+
 	template<class T>
 	struct serialize_dispatch<T, std::false_type, true>
 	{
@@ -222,7 +229,7 @@ namespace detail
 			unsigned int size = 0;
 
 			in.uint32( size );
-			if( size > in.maxElementCount() )
+			if( size > in.maxElementCount( detail::minElementBits<typename T::value_type>() ) )
 			{
 				list.clear();
 				in.skipToEnd();
@@ -243,7 +250,7 @@ namespace detail
 
 			in.uint32( size );
 			list.clear();
-			if( size > in.maxElementCount() )
+			if( size > in.maxElementCount( detail::minElementBits<typename T::value_type>() ) )
 			{
 				in.skipToEnd();
 				return;

@@ -255,7 +255,7 @@ class NetworkIn : public GenericIn
 			unsigned int ts = 0;
 			uint32(ts);
 
-			if( ts > maxElementCount() / 8 )
+			if( ts > maxElementCount(8) )
 			{
 				string.clear();
 				skipToEnd();
@@ -271,10 +271,10 @@ class NetworkIn : public GenericIn
 			}
 		}
 
-		unsigned int maxElementCount() const override
+		unsigned int maxElementCount(unsigned int bitsPerElement) const override
 		{
 			int unread = mStream->GetNumberOfUnreadBits();
-			return unread > 0 ? unread : 0;
+			return unread > 0 ? unread / bitsPerElement : 0;
 		}
 
 		void skipToEnd() override

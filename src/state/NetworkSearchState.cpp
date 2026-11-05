@@ -440,12 +440,16 @@ void OnlineSearchState::doSearchServers()
 		std::stringstream serverListXml;
 		http.request("server.php", serverListXml);
 
-		// this trows an exception if the file could not be opened for writing
-		FileWrite file("onlineserver.xml");
+		// keep the old file if nothing was received
+		if(!serverListXml.str().empty())
+		{
+			// this trows an exception if the file could not be opened for writing
+			FileWrite file("onlineserver.xml");
 
-		file.write(serverListXml.str());
+			file.write(serverListXml.str());
 
-		file.close();
+			file.close();
+		}
 	} catch (std::exception& e) {
 		std::cout << "Can't get onlineserver.xml: " << e.what() << std::endl;
 	} catch (...) {

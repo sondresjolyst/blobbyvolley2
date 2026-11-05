@@ -191,7 +191,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 		case ID_INPUT_UPDATE:
 		{
 
-			unsigned time;
+			unsigned time = 0;
 			RakNet::BitStream stream(packet->data, packet->length, false);
 
 			// ignore ID_INPUT_UPDATE

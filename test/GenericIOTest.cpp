@@ -205,8 +205,23 @@ BOOST_AUTO_TEST_CASE( generic_io_network_oversized_string )
 	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
 }
 
+// fills the stack below the caller with a pattern, so that values which stay
+// uninitialised are not accidentally zero
+#if defined(__GNUC__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static void poison_stack()
+{
+	volatile unsigned char buffer[1024];
+	for(int i = 0; i < 1024; ++i)
+		buffer[i] = 0xAB;
+}
+
 BOOST_AUTO_TEST_CASE( generic_io_network_short_read_is_zero )
 {
+	poison_stack();
 	RakNet::BitStream stream;
 	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
 	Color c(1, 2, 3);
@@ -215,6 +230,46 @@ BOOST_AUTO_TEST_CASE( generic_io_network_short_read_is_zero )
 	PlayerSide side = RIGHT_PLAYER;
 	in->generic<PlayerSide>(side);
 	BOOST_CHECK_EQUAL(side, (PlayerSide)0);
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_element_size_bound )
+{
+	// 50 elements of 4 bytes announced, but only 25 bytes of data follow.
+	// The data would fit one bit per element, but not one byte per element.
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(50);
+	for(int i = 0; i < 25; ++i)
+		out->byte(1);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<unsigned int> v;
+	in->generic<std::vector<unsigned int>>(v);
+	BOOST_CHECK(v.empty());
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_valid_nested_and_bytes )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	std::vector<std::vector<unsigned int>> nested = {{1, 2}, {}, {3}};
+	std::vector<unsigned char> bytes = {9, 8, 7};
+	std::set<unsigned int> numbers = {5, 6, 7};
+	out->generic<std::vector<std::vector<unsigned int>>>(nested);
+	out->generic<std::vector<unsigned char>>(bytes);
+	out->generic<std::set<unsigned int>>(numbers);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<std::vector<unsigned int>> nestedIn;
+	std::vector<unsigned char> bytesIn;
+	std::set<unsigned int> numbersIn;
+	in->generic<std::vector<std::vector<unsigned int>>>(nestedIn);
+	in->generic<std::vector<unsigned char>>(bytesIn);
+	in->generic<std::set<unsigned int>>(numbersIn);
+	BOOST_CHECK(nested == nestedIn);
+	BOOST_CHECK(bytes == bytesIn);
+	BOOST_CHECK(numbers == numbersIn);
+	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
 }
 
 BOOST_AUTO_TEST_CASE( generic_io_network_valid_containers )
