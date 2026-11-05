@@ -83,6 +83,10 @@ void writeAttribute(tinyxml2::XMLPrinter& printer, const char* name, const T& va
 
 void ReplayRecorder::save(FileWrite& file) const
 {
+	// a replay without a game speed cannot be played back, so it is not saved
+	if(mGameSpeed == 0)
+		return;
+
 	tinyxml2::XMLPrinter printer;
 	printer.PushHeader(false, true);
 	printer.OpenElement("replay");

@@ -26,6 +26,10 @@ set(SRC
 	../src/FontIndex.cpp      ../src/FontIndex.h
 	../src/server/MatchMaker.cpp    ../src/server/MatchMaker.h
 	../src/server/NetworkPlayer.cpp ../src/server/NetworkPlayer.h
+	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
+	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
+	../src/replays/ReplayRecorder.cpp  ../src/replays/ReplayRecorder.h
+	../src/replays/ReplaySavePoint.cpp ../src/replays/ReplaySavePoint.h
 )
 
 # BOOST_TEST_DYN_LINK below needs the shared library
@@ -43,7 +47,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ${SRC})
 
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"")

@@ -257,6 +257,13 @@ std::vector<uint8_t> decode(const std::string& data )
 			continue;
 		}
 
+		// whitespace is only allowed between groups of four characters
+		if( std::distance(reader, data.cend()) < 4 ||
+		    std::isspace(reader[1]) || std::isspace(reader[2]) || std::isspace(reader[3]) )
+		{
+			throw std::runtime_error("base64 group is incomplete");
+		}
+
 		if( is_valid(reader[1]) ) 
 		{
 			*iter = decode_byte_one(&reader[0]);
