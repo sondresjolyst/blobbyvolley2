@@ -55,6 +55,13 @@ A code has 10 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Players may typ
 
 The server reads the file again within a few seconds after it changes. If the file is missing or is not valid XML, the server keeps the players it read last and logs an error. Write a new file under another name and rename it over the old one, so the server never reads half a file. The log shows only the first 3 characters of a code.
 
+#### Join links
+The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. A click on the link starts the game, connects to that server and sends the code as player name. The menus are skipped. Each click starts a new copy of the game, even when one is already running.
+
+The game checks the link strictly before it uses it. The host is a host name or an IPv4 address of at most 63 bytes, the port is 1 to 65535 and the code has 10 characters from the join code alphabet. The link must be the only argument and may hold only `server` and `code`. A bad link shows a message, and the game opens the main menu. The game never opens or runs anything else from a link.
+
+Windows only opens join links with the game after you register it. Run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
+
 ### Source Code
 Clone the git repository:
 ```bash
@@ -117,6 +124,7 @@ Open the workflow run on the Actions page of the fork, download the artifact and
 Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
 Start the game from its own folder, as Explorer and shortcuts do.
+To open join links from the tournament site with the game, run `register-join-links.cmd` once. See [Join links](#join-links).
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.

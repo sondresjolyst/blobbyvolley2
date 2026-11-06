@@ -60,7 +60,9 @@ class LobbySubstate
 class LobbyState : public State
 {
 	public:
-		LobbyState(ServerInfo info, PreviousState previous);
+		/// \param join_code when not empty, it is sent as player name instead of the name in the config.
+		///		This is how a join link enters a tournament server.
+		LobbyState(ServerInfo info, PreviousState previous, std::string join_code = std::string());
 		~LobbyState() override;
 
 		void step_impl() override;
@@ -72,6 +74,7 @@ class LobbyState : public State
 		PlayerIdentity mLocalPlayer;
 		ServerInfo mInfo;
 		PreviousState mPrevious;
+		std::string mJoinCode;
 
 		ConnectionState mLobbyState;
 		// why a tournament server refused us, an EntryRefusedReason

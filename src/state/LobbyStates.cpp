@@ -42,8 +42,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 LobbySubstate::~LobbySubstate() = default;
 
 
-LobbyState::LobbyState(ServerInfo info, PreviousState previous) :
-		mInfo(std::move(info)), mPrevious( previous ),
+LobbyState::LobbyState(ServerInfo info, PreviousState previous, std::string join_code) :
+		mInfo(std::move(info)), mPrevious( previous ), mJoinCode(std::move(join_code)),
 		mLobbyState(ConnectionState::CONNECTING)
 {
 }
@@ -53,7 +53,13 @@ void LobbyState::init()
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
-		throw( std::runtime_error(std::string("Could not connect to server ") + mInfo.hostname) );
+	{
+		// a join link names a server that may not be reachable, so show that instead of closing the game
+		if (!mJoinCode.empty())
+			mLobbyState = ConnectionState::CONNECTION_FAILED;
+		else
+			throw( std::runtime_error(std::string("Could not connect to server ") + mInfo.hostname) );
+	}
 
 	// send an ENTER_SERVER packet with name and side preference
 
@@ -71,6 +77,10 @@ void LobbyState::init()
 	{
 		mLocalPlayer = config.loadPlayerIdentity(RIGHT_PLAYER, true);
 	}
+
+	// the server swaps the join code for the nickname of the player
+	if (!mJoinCode.empty())
+		mLocalPlayer.setName(mJoinCode);
 }
 
 
