@@ -71,6 +71,12 @@ In Git Bash, with MSYS2 in its default folder, run this first:
 export PATH="$PATH:/c/msys64/ucrt64/bin"
 ```
 
+### Download for Windows
+Every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`.
+Open the workflow run on the Actions page of the fork, download the artifact and unzip it.
+Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
+The package has all the DLLs it needs, so MSYS2 does not have to be installed.
+
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.
 
