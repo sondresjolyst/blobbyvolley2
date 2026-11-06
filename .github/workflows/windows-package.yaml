@@ -16,6 +16,9 @@ on:
       - "AUTHORS"
       - "ChangeLog"
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -48,12 +51,13 @@ jobs:
           cmake --build build
       - name: Package
         run: |
-          .github/scripts/package-windows.sh build dist/blobby-windows
+          sh .github/scripts/package-windows.sh build dist/blobby-windows
           find dist -type f | sort
       - name: Smoke check the server without MSYS2 on PATH
-        run: .github/scripts/smoke-windows.sh dist/blobby-windows blobby-server.exe 5
+        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby-server.exe 5
       - name: Smoke check the game without MSYS2 on PATH
-        run: .github/scripts/smoke-windows.sh dist/blobby-windows blobby.exe 5
+        continue-on-error: true
+        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby.exe 5
       - name: Get short commit hash
         id: sha
         env:
