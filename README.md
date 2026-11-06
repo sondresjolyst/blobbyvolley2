@@ -22,9 +22,9 @@ docker run -d --name blobby-server -p 1234:1234/udp sondresjo/blobby-server
 ```
 The server log is shown with `docker logs blobby-server`.
 
-To use your own config, put a copy of `data/server.xml` in a folder, for example `C:lobby\custom.xml`, and mount the folder:
+To use your own config, create a folder named `config` and put a copy of `data/server.xml` in it as `custom.xml`. Then mount the folder and pass the file name with `-c`. The file name must match, because the server looks for it in the mounted folder. In a Windows command prompt:
 ```bash
-docker run -d --name blobby-server -p 1234:1234/udp -v C:lobby:/usr/local/share/blobby/server:ro sondresjo/blobby-server -c custom.xml
+docker run -d --name blobby-server -p 1234:1234/udp -v "%cd%\config:/usr/local/share/blobby/server:ro" sondresjo/blobby-server -c custom.xml
 ```
 Players on other machines may need a Windows firewall rule that allows inbound UDP on port 1234.
 

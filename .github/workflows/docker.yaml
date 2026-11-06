@@ -28,7 +28,7 @@ jobs:
   build:
     name: Build image
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -44,7 +44,7 @@ jobs:
   tag:
     name: Pick image tag
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: {}
     outputs:
       tag: ${{ steps.pick.outputs.tag }}
@@ -70,6 +70,7 @@ jobs:
     needs: tag
     permissions:
       contents: read
+      packages: read
     uses: equinor/ops-actions/.github/workflows/docker.yml@def1359ccd977da6f0720b22328ba6ac02b380ae # v9.43.2
     secrets:
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
