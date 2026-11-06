@@ -1,0 +1,71 @@
+name: Windows package
+
+on:
+  push:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+  pull_request:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  Package:
+    name: Windows (UCRT64)
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: ucrt64
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-physfs
+            mingw-w64-ucrt-x86_64-boost
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Build in Release mode
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Package
+        run: |
+          sh .github/scripts/package-windows.sh build dist/blobby-windows
+          find dist -type f | sort
+      - name: Smoke check the server without MSYS2 on PATH
+        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby-server.exe 5
+      - name: Smoke check the game without MSYS2 on PATH
+        continue-on-error: true
+        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby.exe 5
+      - name: Get short commit hash
+        id: sha
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "short=$(echo "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: blobby-windows-${{ steps.sha.outputs.short }}
+          path: dist
+          if-no-files-found: error

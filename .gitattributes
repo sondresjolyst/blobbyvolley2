@@ -1,1 +1,2 @@
 * text=auto
+.github/scripts/*.sh text eol=lf

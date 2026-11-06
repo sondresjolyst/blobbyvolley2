@@ -71,6 +71,13 @@ In Git Bash, with MSYS2 in its default folder, run this first:
 export PATH="$PATH:/c/msys64/ucrt64/bin"
 ```
 
+### Download for Windows
+Every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`.
+Open the workflow run on the Actions page of the fork, download the artifact and unzip it.
+Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
+The package has all the DLLs it needs, so MSYS2 does not have to be installed.
+Start the game from its own folder, as Explorer and shortcuts do.
+
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.
 
@@ -124,7 +131,7 @@ make && make install
 4. Copy the `blobby` folder to the `/switch/` directory on your SD card.
 
 ### Run the unit tests
-CI runs the unit tests on Linux and macOS. They do not compile on Windows yet.
+CI runs the unit tests on Linux, macOS and Windows.
 
 On Debian-based distros, also install `libboost-test-dev`. Then run:
 ```bash
