@@ -51,6 +51,9 @@ class RenderManagerSDL : public RenderManager
 		void drawParticle(const Vector2& pos, int player) override;
 		void drawGame(const DuelMatchState& gameState) override;
 
+	protected:
+		void replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces) override;
+
 	private:
 		struct DynamicColoredTexture
 		{
@@ -87,6 +90,10 @@ class RenderManagerSDL : public RenderManager
 
 		SDL_Texture* mOverlayTexture = nullptr;
 
+		// sponsor board
+		std::vector<SDL_Texture*> mSponsorLogos;
+		SDL_Texture* mSponsorMask = nullptr;
+
 		SDL_Renderer* mRenderer = nullptr;
 
 		bool mShowShadow;
@@ -103,5 +110,6 @@ class RenderManagerSDL : public RenderManager
 
 		void drawTextImpl(const std::string& text, Vector2 position, unsigned int flags);
 		void colorizeBlobs(int player, int frame);
+		void drawSponsorBoard();
 };
 

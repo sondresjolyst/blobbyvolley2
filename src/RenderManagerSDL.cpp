@@ -145,6 +145,21 @@ void RenderManagerSDL::init(int xResolution, int yResolution, bool fullscreen)
 	mMarker[1] = SDL_CreateTextureFromSurface(mRenderer, tmpSurface);
 	SDL_FreeSurface(tmpSurface);
 
+	// Create the LED grid that is laid over the sponsor board
+	tmpSurface = SDL_CreateRGBSurface(0, sponsors::BOARD_WIDTH, sponsors::PANEL_HEIGHT, 32,
+			0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+	SDL_LockSurface(tmpSurface);
+	for (int y = 0; y < tmpSurface->h; ++y)
+	{
+		Uint32* row = (Uint32*)((Uint8*)tmpSurface->pixels + y * tmpSurface->pitch);
+		for (int x = 0; x < tmpSurface->w; ++x)
+			row[x] = SDL_MapRGBA(tmpSurface->format, 0, 0, 0, sponsors::ledMaskAlpha(x, y));
+	}
+	SDL_UnlockSurface(tmpSurface);
+	mSponsorMask = SDL_CreateTextureFromSurface(mRenderer, tmpSurface);
+	SDL_SetTextureBlendMode(mSponsorMask, SDL_BLENDMODE_BLEND);
+	SDL_FreeSurface(tmpSurface);
+
 	// Load background
 	tmpSurface = loadSurface("backgrounds/strand2.bmp");
 	mBackground = SDL_CreateTextureFromSurface(mRenderer, tmpSurface);
@@ -331,6 +346,10 @@ RenderManagerSDL::~RenderManagerSDL()
 	SDL_DestroyTexture(mOverlayTexture);
 	SDL_DestroyTexture(mRenderTarget);
 
+	for(auto* logo : mSponsorLogos)
+		SDL_DestroyTexture(logo);
+	SDL_DestroyTexture(mSponsorMask);
+
 	for(auto& i : mMarker) {
 		SDL_DestroyTexture(i);
 	}
@@ -449,6 +468,60 @@ void RenderManagerSDL::colorizeBlobs(int player, int frame)
 	}
 }
 
+
+void RenderManagerSDL::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
+{
+	for(auto* logo : mSponsorLogos)
+		SDL_DestroyTexture(logo);
+	mSponsorLogos.clear();
+
+	for(auto* surface : surfaces)
+	{
+		// no color key, logos may use black
+		mSponsorLogos.push_back(SDL_CreateTextureFromSurface(mRenderer, surface));
+		SDL_FreeSurface(surface);
+	}
+}
+
+void RenderManagerSDL::drawSponsorBoard()
+{
+	if (!sponsorBoardActive())
+		return;
+
+	using namespace sponsors;
+
+	// frame and dark panel
+	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
+	const SDL_Rect frame = {BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, BOARD_HEIGHT};
+	SDL_SetRenderDrawColor(mRenderer, 44, 46, 52, 255);
+	SDL_RenderFillRect(mRenderer, &frame);
+	const SDL_Rect edge = {BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, 2};
+	SDL_SetRenderDrawColor(mRenderer, 96, 100, 110, 255);
+	SDL_RenderFillRect(mRenderer, &edge);
+	const SDL_Rect panel = {BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT};
+	SDL_SetRenderDrawColor(mRenderer, 6, 6, 8, 255);
+	SDL_RenderFillRect(mRenderer, &panel);
+
+	// logos, clipped to the panel
+	SDL_RenderSetClipRect(mRenderer, &panel);
+	for (const auto& placement : sponsorLayout())
+	{
+		if (placement.logo >= mSponsorLogos.size())
+			continue;
+		SDL_Texture* logo = mSponsorLogos[placement.logo];
+		int w = 0, h = 0;
+		if (!logo || SDL_QueryTexture(logo, nullptr, nullptr, &w, &h) != 0)
+			continue;
+		const SDL_Rect target = {placement.x, PANEL_TOP + (PANEL_HEIGHT - h) / 2, w, h};
+		SDL_RenderCopy(mRenderer, logo, nullptr, &target);
+	}
+	SDL_RenderSetClipRect(mRenderer, nullptr);
+
+	// LED grid on top
+	SDL_RenderCopy(mRenderer, mSponsorMask, nullptr, &panel);
+
+	// drawGame restores the net pole from the background afterwards, so it stands in front of the board
+}
 
 void RenderManagerSDL::showShadow(bool shadow)
 {
@@ -634,6 +707,8 @@ void RenderManagerSDL::refresh()
 void RenderManagerSDL::drawGame(const DuelMatchState& gameState)
 {
 	SDL_RenderCopy(mRenderer, mBackground, nullptr, nullptr);
+
+	drawSponsorBoard();
 
 	SDL_Rect position;
 

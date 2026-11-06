@@ -22,11 +22,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include <cmath>
 #include <map>
+#include <vector>
 #include <SDL.h>
 
 #include "Vector.h"
 #include "Color.h"
 #include "BlobbyDebug.h"
+#include "SponsorBoard.h"
 
 /// converts an animation state into an index below frames, whatever value the state has
 inline int animationFrame(double state, int frames)
@@ -136,6 +138,14 @@ class RenderManager : public ObjectCounter<RenderManager>
 
 		virtual void showShadow(bool shadow) {};
 
+		// Replaces the sponsor board logos with the given BMP files.
+		// Files that fail validation or decoding are skipped.
+		// Logos read from disk and logos received from a server both come in here.
+		void setSponsorLogos(const std::vector<std::vector<char>>& bmpFiles);
+
+		// The board is drawn when this is on and at least one logo is loaded
+		void showSponsors(bool show);
+
 		void setMouseMarker(float position);
 
 		// This simply draws the given text with its top left corner at the
@@ -189,8 +199,21 @@ class RenderManager : public ObjectCounter<RenderManager>
 
 		std::map<std::string, BufferedImage*> mImageMap;
 
+		// Hands the decoded sponsor logos to the renderer, which takes ownership of the surfaces.
+		// The default implementation frees them.
+		virtual void replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces);
+
+		// true when the sponsor board should be drawn
+		bool sponsorBoardActive() const;
+
+		// visible logos and their positions at the current time
+		std::vector<sponsors::Placement> sponsorLayout() const;
+
 		float mMouseMarkerPosition;
 
 	private:
 		std::unique_ptr<BloodManager> mBloodMgr;
+
+		bool mShowSponsors = false;
+		std::vector<int> mSponsorWidths;
 };

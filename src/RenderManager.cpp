@@ -27,6 +27,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "IUserConfigReader.h"
 #include "FontIndex.h"
 
+#include <iostream>
+
 /* implementation */
 
 RenderManager::~RenderManager() = default;
@@ -196,4 +198,58 @@ Color RenderManager::getOscillationColor() const
 		int((std::sin(time*2.5) + 1.0) * 128),
 		int((std::sin(time*3.5) + 1.0) * 128)
 	};
+}
+
+void RenderManager::setSponsorLogos(const std::vector<std::vector<char>>& bmpFiles)
+{
+	std::vector<SDL_Surface*> surfaces;
+	std::vector<int> widths;
+
+	for(const auto& file : bmpFiles)
+	{
+		if(surfaces.size() >= sponsors::MAX_LOGOS)
+			break;
+
+		std::string error;
+		if(!sponsors::validateBmp(file.data(), file.size(), &error))
+		{
+			std::cerr << "Warning: skipping sponsor logo: " << error << std::endl;
+			continue;
+		}
+
+		SDL_RWops* rwops = SDL_RWFromConstMem(file.data(), int(file.size()));
+		SDL_Surface* surface = rwops ? SDL_LoadBMP_RW(rwops, 1) : nullptr;
+		if(!surface)
+		{
+			std::cerr << "Warning: skipping sponsor logo: " << SDL_GetError() << std::endl;
+			continue;
+		}
+
+		surfaces.push_back(surface);
+		widths.push_back(surface->w);
+	}
+
+	mSponsorWidths = widths;
+	replaceSponsorSurfaces(std::move(surfaces));
+}
+
+void RenderManager::showSponsors(bool show)
+{
+	mShowSponsors = show;
+}
+
+void RenderManager::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
+{
+	for(auto* surface : surfaces)
+		SDL_FreeSurface(surface);
+}
+
+bool RenderManager::sponsorBoardActive() const
+{
+	return mShowSponsors && !mSponsorWidths.empty();
+}
+
+std::vector<sponsors::Placement> RenderManager::sponsorLayout() const
+{
+	return sponsors::layout(mSponsorWidths, SDL_GetTicks());
 }

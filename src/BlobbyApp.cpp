@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "IUserConfigReader.h"
 #include "IMGUI.h"
 #include "FileSystem.h"
+#include "SponsorBoard.h"
 
 /* implementation */
 void BlobbyApp::switchToState(std::unique_ptr<State> newState)
@@ -130,6 +131,8 @@ void BlobbyApp::setupRenderManager(const IUserConfigReader& config) {
 	bool shadows = config.getBool("show_shadow");
 	mRenderMgr->init(BASE_RESOLUTION_X, BASE_RESOLUTION_Y, fullscreen);
 	mRenderMgr->showShadow(shadows);
+	mRenderMgr->showSponsors(config.getBool("show_sponsors", true));
+	mRenderMgr->setSponsorLogos(sponsors::readLogoFiles());
 
 	std::string bg = std::string("backgrounds/") + config.getString("background");
 	if ( FileSystem::getSingleton().exists(bg) )

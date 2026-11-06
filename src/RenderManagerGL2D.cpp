@@ -323,6 +323,21 @@ void RenderManagerGL2D::init(int xResolution, int yResolution, bool fullscreen)
 
 	mParticle = loadTexture(loadSurface("gfx/blood.bmp"), false);
 
+	// 2x2 LED grid tile for the sponsor board, repeated over the panel
+	{
+		GLubyte mask[2 * 2 * 4] = {};
+		for (int y = 0; y < 2; ++y)
+			for (int x = 0; x < 2; ++x)
+				mask[(y * 2 + x) * 4 + 3] = sponsors::ledMaskAlpha(x, y);
+		glGenTextures(1, &mSponsorMask);
+		glBindTexture(mSponsorMask);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, mask);
+	}
+
 	glViewport(0, 0, xResolution, yResolution);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -353,6 +368,8 @@ RenderManagerGL2D::~RenderManagerGL2D()
 	}
 
 	glDeleteTextures(1, &mParticle);
+	deleteSponsorLogos();
+	glDeleteTextures(1, &mSponsorMask);
 
 	SDL_GL_DeleteContext(mGlContext);
 	SDL_DestroyWindow(mWindow);
@@ -386,6 +403,132 @@ void RenderManagerGL2D::setBlobColor(int player, Color color)
 
 	if (player == RIGHT_PLAYER)
 		mRightBlobColor = color;
+}
+
+void RenderManagerGL2D::deleteSponsorLogos()
+{
+	for (auto& logo : mSponsorLogos)
+		glDeleteTextures(1, &logo.texture);
+	mSponsorLogos.clear();
+	// the deleted names may be reused, so forget the cached binding
+	mCurrentTexture = 0;
+}
+
+void RenderManagerGL2D::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
+{
+	deleteSponsorLogos();
+
+	for (auto* surface : surfaces)
+	{
+		// copy into a power of two RGBA surface without a color key, logos may use black
+		const int potW = getNextPOT(surface->w);
+		const int potH = getNextPOT(surface->h);
+		SDL_Surface* padded = SDL_CreateRGBSurface(SDL_SWSURFACE, potW, potH, 32,
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+		                0xff000000, 0x00ff0000, 0x0000ff00, 0x000000ff);
+#else
+		                0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000);
+#endif
+		if (!padded)
+		{
+			// keep the slot so the logo indices still match, it is skipped when drawing
+			mSponsorLogos.emplace_back(0, 0, 0, surface->w, surface->h, potW, potH);
+			SDL_FreeSurface(surface);
+			continue;
+		}
+		SDL_Rect target = {0, 0, surface->w, surface->h};
+		SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
+		SDL_BlitSurface(surface, nullptr, padded, &target);
+
+		GLuint texture;
+		glGenTextures(1, &texture);
+		glBindTexture(texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, potW, potH, 0, GL_RGBA, GL_UNSIGNED_BYTE, padded->pixels);
+
+		mSponsorLogos.emplace_back(texture, 0, 0, surface->w, surface->h, potW, potH);
+		SDL_FreeSurface(padded);
+		SDL_FreeSurface(surface);
+	}
+}
+
+void RenderManagerGL2D::drawTexturedRect(float x, float y, float w, float h, float u0, float v0, float u1, float v1)
+{
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+
+	GLfloat vertices[] = {x, y,
+	                      x + w, y,
+	                      x + w, y + h,
+	                      x, y + h};
+
+	GLfloat texCoords[] = {u0, v0,
+	                       u1, v0,
+	                       u1, v1,
+	                       u0, v1};
+
+	glVertexPointer(2, GL_FLOAT, 0, vertices);
+	glTexCoordPointer(2, GL_FLOAT, 0, texCoords);
+	glDrawArrays(GL_QUADS, 0, 4);
+
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+}
+
+void RenderManagerGL2D::drawSponsorBoard()
+{
+	if (!sponsorBoardActive())
+		return;
+
+	using namespace sponsors;
+
+	glDisable(GL_ALPHA_TEST);
+	glDisable(GL_BLEND);
+
+	// frame and dark panel
+	glDisable(GL_TEXTURE_2D);
+	glColor4ub(44, 46, 52, 255);
+	drawTexturedRect(BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, BOARD_HEIGHT, 0, 0, 0, 0);
+	glColor4ub(96, 100, 110, 255);
+	drawTexturedRect(BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, 2, 0, 0, 0, 0);
+	glColor4ub(6, 6, 8, 255);
+	drawTexturedRect(BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT, 0, 0, 0, 0);
+	glEnable(GL_TEXTURE_2D);
+
+	// logos, clipped to the board horizontally by the window edges
+	glColor4f(1.0, 1.0, 1.0, 1.0);
+	for (const auto& placement : sponsorLayout())
+	{
+		if (placement.logo >= mSponsorLogos.size() || mSponsorLogos[placement.logo].texture == 0)
+			continue;
+		const Texture& logo = mSponsorLogos[placement.logo];
+		glBindTexture(logo.texture);
+		const float top = PANEL_TOP + int(PANEL_HEIGHT - logo.h) / 2;
+		drawTexturedRect(placement.x, top, logo.w, logo.h,
+		                 logo.indices[0], logo.indices[1], logo.indices[4], logo.indices[5]);
+	}
+
+	// LED grid on top
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
+	glBindTexture(mSponsorMask);
+	drawTexturedRect(BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT,
+	                 0.f, 0.f, BOARD_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
+	glDisable(GL_BLEND);
+
+	// the net pole stands in front of the board, so draw that strip of the background again.
+	// The 800x600 background sits in the middle of its power of two texture.
+	const BufferedImage* background = mImageMap["background"];
+	const float texW = background->w;
+	const float texH = background->h;
+	const float offsetX = (texW - 800.f) / 2.f;
+	const float offsetY = (texH - 600.f) / 2.f;
+	glBindTexture(mBackground);
+	drawTexturedRect(ROD_LEFT, BOARD_TOP, ROD_WIDTH, BOARD_HEIGHT,
+	                 (offsetX + ROD_LEFT) / texW, (offsetY + BOARD_TOP) / texH,
+	                 (offsetX + ROD_LEFT + ROD_WIDTH) / texW, (offsetY + BOARD_TOP + BOARD_HEIGHT) / texH);
 }
 
 void RenderManagerGL2D::showShadow(bool shadow)
@@ -569,6 +712,7 @@ void RenderManagerGL2D::drawGame(const DuelMatchState& gameState)
 	glLoadIdentity();
 	drawQuad(400.0, 300.0, 1024.0, 1024.0);
 
+	drawSponsorBoard();
 
 	if(mShowShadow)
 	{
