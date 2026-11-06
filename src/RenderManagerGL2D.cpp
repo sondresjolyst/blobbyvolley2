@@ -531,8 +531,10 @@ void RenderManagerGL2D::drawSponsorBoard()
 	// shadow, frame and panel
 	drawSponsorFills(look.under);
 
-	// logos, cut off at the panel edges
+	// logos, cut off at the panel edges and blended with their alpha so the panel shows through
 	glColor4f(1.0, 1.0, 1.0, 1.0);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
 	for (const auto& placement : sponsorLayout())
 	{
 		if (placement.logo >= mSponsorLogos.size() || mSponsorLogos[placement.logo].texture == 0)
@@ -548,6 +550,7 @@ void RenderManagerGL2D::drawSponsorBoard()
 		drawTexturedRect(placement.x + skip, top, visible, logo.h,
 		                 u0 + skip * du, logo.indices[1], u0 + (skip + visible) * du, logo.indices[5]);
 	}
+	glDisable(GL_BLEND);
 
 	// LED grid on top
 	if (look.ledGrid)

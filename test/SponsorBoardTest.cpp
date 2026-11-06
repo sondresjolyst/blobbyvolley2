@@ -45,6 +45,31 @@ namespace
 		return d;
 	}
 
+	// builds a bottom-up 32-bit BI_BITFIELDS BMP with a V4 (108) or V5 (124) header
+	std::vector<char> makeBmp32(std::int32_t width, std::int32_t height, std::uint32_t infoSize = 124,
+	                            std::uint32_t r = 0x00FF0000u, std::uint32_t g = 0x0000FF00u,
+	                            std::uint32_t b = 0x000000FFu, std::uint32_t a = 0xFF000000u)
+	{
+		const std::uint32_t offset = 14 + infoSize;
+		const std::uint32_t size = offset + std::uint32_t(width) * 4 * std::uint32_t(height < 0 ? -height : height);
+		std::vector<char> d(size, 0);
+		d[0] = 'B';
+		d[1] = 'M';
+		putU32(d, 2, size);
+		putU32(d, 10, offset);
+		putU32(d, 14, infoSize);
+		putU32(d, 18, width);
+		putU32(d, 22, height);
+		putU16(d, 26, 1);
+		putU16(d, 28, 32);
+		putU32(d, 30, 3);
+		putU32(d, 54, r);
+		putU32(d, 58, g);
+		putU32(d, 62, b);
+		putU32(d, 66, a);
+		return d;
+	}
+
 	bool valid(const std::vector<char>& d)
 	{
 		return sponsors::validateBmp(d.data(), d.size());
@@ -96,6 +121,53 @@ BOOST_AUTO_TEST_CASE( sponsor_bmp_rejects_bad_files )
 	BOOST_CHECK(!valid(badInfo));
 
 	std::vector<char> huge = makeBmp(100, 32);
+	huge.resize(sponsors::MAX_FILE_SIZE + 1);
+	BOOST_CHECK(!valid(huge));
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_bmp_accepts_32_bit_alpha )
+{
+	BOOST_CHECK(valid(makeBmp32(160, 32)));
+	BOOST_CHECK(valid(makeBmp32(78, 32, 108)));
+	BOOST_CHECK(valid(makeBmp32(sponsors::MAX_LOGO_WIDTH, sponsors::MAX_LOGO_HEIGHT)));
+	BOOST_CHECK(valid(makeBmp32(50, -32)));
+	// other byte orders are fine as long as every channel has its own byte
+	BOOST_CHECK(valid(makeBmp32(40, 32, 124, 0x000000FFu, 0x0000FF00u, 0x00FF0000u, 0xFF000000u)));
+	// the largest logo fits the size limit
+	BOOST_CHECK(makeBmp32(sponsors::MAX_LOGO_WIDTH, sponsors::MAX_LOGO_HEIGHT).size() <= sponsors::MAX_FILE_SIZE);
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_bmp_rejects_bad_32_bit )
+{
+	// no alpha mask, or a mask that is not one whole byte, or two channels sharing a byte
+	BOOST_CHECK(!valid(makeBmp32(100, 32, 124, 0x00FF0000u, 0x0000FF00u, 0x000000FFu, 0)));
+	BOOST_CHECK(!valid(makeBmp32(100, 32, 124, 0x00FF0000u, 0x0000FF00u, 0x000000FFu, 0xF0000000u)));
+	BOOST_CHECK(!valid(makeBmp32(100, 32, 124, 0x00FF0000u, 0x00FF0000u, 0x000000FFu, 0xFF000000u)));
+	BOOST_CHECK(!valid(makeBmp32(100, 32, 124, 0x00FFFF00u, 0x0000FF00u, 0x000000FFu, 0xFF000000u)));
+	BOOST_CHECK(!valid(makeBmp32(100, 32, 124, 0x00FF0000u, 0x0000FF00u, 0x000000FFu, 0x00FF0000u)));
+
+	// a 40 byte header cannot hold the alpha mask
+	auto shortHeader = makeBmp32(100, 32);
+	putU32(shortHeader, 14, 40);
+	BOOST_CHECK(!valid(shortHeader));
+
+	// 32 bits per pixel needs BI_BITFIELDS
+	auto rgb = makeBmp32(100, 32);
+	putU32(rgb, 30, 0);
+	BOOST_CHECK(!valid(rgb));
+
+	// truncated pixel data and a pixel offset past the end
+	auto truncated = makeBmp32(100, 32);
+	truncated.resize(truncated.size() - 1);
+	BOOST_CHECK(!valid(truncated));
+	auto badOffset = makeBmp32(100, 32);
+	putU32(badOffset, 10, std::uint32_t(badOffset.size() + 1));
+	BOOST_CHECK(!valid(badOffset));
+
+	// too large or too wide
+	BOOST_CHECK(!valid(makeBmp32(sponsors::MAX_LOGO_WIDTH + 1, 32)));
+	BOOST_CHECK(!valid(makeBmp32(100, sponsors::MAX_LOGO_HEIGHT + 1)));
+	auto huge = makeBmp32(100, 32);
 	huge.resize(sponsors::MAX_FILE_SIZE + 1);
 	BOOST_CHECK(!valid(huge));
 }

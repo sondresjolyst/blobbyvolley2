@@ -478,7 +478,11 @@ void RenderManagerSDL::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces
 	for(auto* surface : surfaces)
 	{
 		// no color key, logos may use black
-		mSponsorLogos.push_back(SDL_CreateTextureFromSurface(mRenderer, surface));
+		// logos may be partly transparent, so the panel shows through
+		SDL_Texture* logo = SDL_CreateTextureFromSurface(mRenderer, surface);
+		if (logo)
+			SDL_SetTextureBlendMode(logo, SDL_BLENDMODE_BLEND);
+		mSponsorLogos.push_back(logo);
 		SDL_FreeSurface(surface);
 	}
 }

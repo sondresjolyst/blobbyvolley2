@@ -15,7 +15,7 @@ The game can show a scrolling LED board with sponsor logos behind the net during
 
 Put the logos in a folder named `sponsors`. The game reads it from the `data` folder and from the user folder, which on Windows is `%APPDATA%\org.dk\blobby`. The game creates an empty `sponsors` folder there on start.
 
-Each logo must be an uncompressed 24-bit BMP file of at most 64 KB, up to 160 pixels wide and 40 pixels high. 32 pixels high looks best. The logos scroll in file name order. Files that do not match are skipped with a warning.
+Each logo must be a BMP file up to 160 pixels wide and 40 pixels high. 32 pixels high looks best. Opaque logos can be uncompressed 24-bit BMPs. Logos with transparency must be 32-bit BMPs with an alpha channel, saved with a V4 or V5 header and BI_BITFIELDS, so the board shows through. The logos scroll in file name order. Files that do not match are skipped with a warning.
 
 ### Dedicated Server
 The dedicated server is built as `src/blobby-server`. It runs at 100% game speed by default, which is 75 FPS.

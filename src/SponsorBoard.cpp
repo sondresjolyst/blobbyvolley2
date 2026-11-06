@@ -356,13 +356,42 @@ bool validateBmp(const char* data, std::size_t size, std::string* error)
 
 	if(readU16(data, 26) != 1)
 		return fail(error, "bad plane count");
-	if(readU16(data, 28) != 24)
-		return fail(error, "not 24 bits per pixel");
-	if(readU32(data, 30) != 0)
-		return fail(error, "compressed BMP");
+
+	const std::uint16_t bits = readU16(data, 28);
+	const std::uint32_t compression = readU32(data, 30);
+	if(bits == 24)
+	{
+		if(compression != 0)
+			return fail(error, "compressed BMP");
+	}
+	else if(bits == 32)
+	{
+		// 32-bit logos carry alpha, so they need BI_BITFIELDS and a header that holds the alpha mask
+		constexpr std::uint32_t BI_BITFIELDS = 3;
+		constexpr std::uint32_t V4_HEADER = 108;
+		if(compression != BI_BITFIELDS)
+			return fail(error, "32-bit BMP without BI_BITFIELDS");
+		if(infoSize < V4_HEADER)
+			return fail(error, "32-bit BMP without a V4 or V5 header");
+
+		// red, green, blue and alpha masks must each be one whole byte, all different
+		std::uint32_t seen = 0;
+		for(int i = 0; i < 4; ++i)
+		{
+			const std::uint32_t mask = readU32(data, FILE_HEADER + 40 + 4 * i);
+			const bool wholeByte = mask == 0x000000FFu || mask == 0x0000FF00u || mask == 0x00FF0000u || mask == 0xFF000000u;
+			if(!wholeByte || (seen & mask))
+				return fail(error, "bad colour masks");
+			seen |= mask;
+		}
+	}
+	else
+	{
+		return fail(error, "not 24 or 32 bits per pixel");
+	}
 
 	// rows are padded to 4 bytes, all values here are small so nothing overflows
-	const std::uint32_t stride = (std::uint32_t(width) * 3 + 3) / 4 * 4;
+	const std::uint32_t stride = (std::uint32_t(width) * (bits / 8) + 3) / 4 * 4;
 	if(pixelOffset < FILE_HEADER + infoSize || pixelOffset > size)
 		return fail(error, "bad pixel offset");
 	if(stride * height > size - pixelOffset)

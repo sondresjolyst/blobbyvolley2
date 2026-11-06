@@ -268,23 +268,29 @@ SDL_Surface* RenderManager::prepareSponsorLogo(SDL_Surface* source)
 		{
 			const int x0 = x * src->w / dw;
 			const int x1 = std::max(x0 + 1, (x + 1) * src->w / dw);
-			int r = 0, g = 0, b = 0, n = 0;
+			// average with alpha weights so transparent pixels do not darken the edges
+			int r = 0, g = 0, b = 0, a = 0, n = 0;
 			for(int sy = y0; sy < y1; ++sy)
 			{
 				const auto* in = (const Uint32*)((const Uint8*)src->pixels + sy * src->pitch);
 				for(int sx = x0; sx < x1; ++sx)
 				{
-					r += (in[sx] >> 16) & 0xFF;
-					g += (in[sx] >> 8) & 0xFF;
-					b += in[sx] & 0xFF;
+					const int pa = (in[sx] >> 24) & 0xFF;
+					r += ((in[sx] >> 16) & 0xFF) * pa;
+					g += ((in[sx] >> 8) & 0xFF) * pa;
+					b += (in[sx] & 0xFF) * pa;
+					a += pa;
 					++n;
 				}
 			}
-			auto rr = Uint8(r / n);
-			auto gg = Uint8(g / n);
-			auto bb = Uint8(b / n);
-			sponsors::ledFilter(rr, gg, bb);
-			out[x] = 0xFF000000u | (Uint32(rr) << 16) | (Uint32(gg) << 8) | Uint32(bb);
+			auto rr = Uint8(a ? r / a : 0);
+			auto gg = Uint8(a ? g / a : 0);
+			auto bb = Uint8(a ? b / a : 0);
+			const auto aa = Uint8(a / n);
+			// the LED look only matters where the logo is visible
+			if(aa)
+				sponsors::ledFilter(rr, gg, bb);
+			out[x] = (Uint32(aa) << 24) | (Uint32(rr) << 16) | (Uint32(gg) << 8) | Uint32(bb);
 		}
 	}
 	SDL_UnlockSurface(dst);

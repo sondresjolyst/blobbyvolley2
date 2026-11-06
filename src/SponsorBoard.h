@@ -30,10 +30,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 /// The board is drawing only. Nothing here touches the simulation.
 namespace sponsors
 {
-	/// Limits for a single logo file. Logos are 24-bit BMP files of about 32 px height.
+	/// Limits for a single logo file. Logos are BMP files of about 32 px height, either 24-bit
+	/// or 32-bit with an alpha channel (BITMAPV4HEADER or BITMAPV5HEADER with BI_BITFIELDS).
 	constexpr int MAX_LOGO_WIDTH = 160;
 	constexpr int MAX_LOGO_HEIGHT = 40;
-	constexpr std::size_t MAX_FILE_SIZE = 64 * 1024;
+	/// 14 byte file header, 124 byte BITMAPV5HEADER, 4 bytes per pixel, and some room for extra header data
+	constexpr std::size_t MAX_FILE_SIZE = 14 + 124 + MAX_LOGO_WIDTH * MAX_LOGO_HEIGHT * 4 + 1024;
 	constexpr std::size_t MAX_LOGOS = 32;
 
 	/// Board geometry in the 800x600 game coordinates.
@@ -132,7 +134,8 @@ namespace sponsors
 	/// Dims and desaturates a logo pixel a little so it looks lit by LEDs.
 	void ledFilter(std::uint8_t& r, std::uint8_t& g, std::uint8_t& b);
 
-	/// Checks that data holds an uncompressed 24-bit BMP within the size limits
+	/// Checks that data holds an uncompressed 24-bit BMP, or a 32-bit BI_BITFIELDS BMP with a V4 or V5
+	/// header whose colour and alpha masks are distinct whole bytes, within the size limits and
 	/// whose pixel data fits inside the buffer. On failure, error gets the reason if given.
 	bool validateBmp(const char* data, std::size_t size, std::string* error = nullptr);
 
