@@ -1,0 +1,17 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  release-please:
+    name: Release Please
+    uses: equinor/ops-actions/.github/workflows/release-please-manifest.yml@def1359ccd977da6f0720b22328ba6ac02b380ae # v9.43.2
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
