@@ -1,0 +1,11 @@
+.git
+.github
+b-*
+build*
+*.log
+*.md
+doc
+test
+win
+Dockerfile
+.dockerignore

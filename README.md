@@ -15,6 +15,21 @@ The dedicated server is built as `src/blobby-server`. It runs at 100% game speed
 
 The default port is 1234.
 
+#### Run the server in Docker
+A container image of the dedicated server is published on Docker Hub as `sondresjo/blobby-server`. On Windows, start Docker Desktop and run:
+```bash
+docker run -d --name blobby-server -p 1234:1234/udp sondresjo/blobby-server
+```
+The server log is shown with `docker logs blobby-server`.
+
+To use your own config, put a copy of `data/server.xml` in a folder, for example `C:lobby\custom.xml`, and mount the folder:
+```bash
+docker run -d --name blobby-server -p 1234:1234/udp -v C:lobby:/usr/local/share/blobby/server:ro sondresjo/blobby-server -c custom.xml
+```
+Players on other machines may need a Windows firewall rule that allows inbound UDP on port 1234.
+
+To build the image yourself, run `docker build -t blobby-server .` in the repository root.
+
 ### Source Code
 Clone the git repository:
 ```bash
