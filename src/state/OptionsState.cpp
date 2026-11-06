@@ -183,6 +183,7 @@ void GraphicOptionsState::init()
 	mLeftMorphing = mOptionConfig.getBool("left_blobby_oscillate");
 	mRightMorphing = mOptionConfig.getBool("right_blobby_oscillate");
 	mShowShadow = mOptionConfig.getBool("show_shadow");
+	mShowSponsors = mOptionConfig.getBool("show_sponsors", true);
 }
 
 GraphicOptionsState::~GraphicOptionsState() = default;
@@ -200,6 +201,8 @@ void GraphicOptionsState::save()
 
 	getApp().getRenderManager().showShadow(mShowShadow);
 	mOptionConfig.setBool("show_shadow", mShowShadow);
+	getApp().getRenderManager().showSponsors(mShowSponsors);
+	mOptionConfig.setBool("show_sponsors", mShowSponsors);
 
 	mOptionConfig.setInteger("left_blobby_color_r", mR1);
 	mOptionConfig.setInteger("left_blobby_color_g", mG1);
@@ -250,6 +253,7 @@ void GraphicOptionsState::step_impl()
 #endif
 
 	imgui.doText(GEN_ID, Vector2(34.0, heightOfElement), TextManager::OP_SHOW_SHADOW);
+	imgui.doText(GEN_ID, Vector2(444.0, heightOfElement), TextManager::OP_SHOW_SPONSORS);
 	heightOfElement += 30;
 	if (imgui.doButton(GEN_ID, Vector2(72.0, heightOfElement), TextManager::LBL_YES))
 		mShowShadow = true;
@@ -259,6 +263,15 @@ void GraphicOptionsState::step_impl()
 		imgui.doImage(GEN_ID, Vector2(54.0, heightOfElement + 13.0), "gfx/pfeil_rechts.bmp");
 	else
 		imgui.doImage(GEN_ID, Vector2(204.0, heightOfElement + 13.0), "gfx/pfeil_rechts.bmp");
+
+	if (imgui.doButton(GEN_ID, Vector2(482.0, heightOfElement), TextManager::LBL_YES))
+		mShowSponsors = true;
+	if (imgui.doButton(GEN_ID, Vector2(630.0, heightOfElement), TextManager::LBL_NO))
+		mShowSponsors = false;
+	if (mShowSponsors)
+		imgui.doImage(GEN_ID, Vector2(464.0, heightOfElement + 13.0), "gfx/pfeil_rechts.bmp");
+	else
+		imgui.doImage(GEN_ID, Vector2(614.0, heightOfElement + 13.0), "gfx/pfeil_rechts.bmp");
 
 #if BLOBBY_ON_MOBILE
 	float standardLineHeight = 50.0;

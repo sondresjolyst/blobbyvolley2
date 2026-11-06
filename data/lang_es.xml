@@ -72,6 +72,7 @@
 	<string english = "window mode" translation = "ventana" />
 	<string english = "render device" translation = "Cambiar configuración de gráficos" />
 	<string english = "show shadow" translation = "mostrar sombra" />
+	<string english = "show sponsors" translation = "mostrar patrocinadores" />
 	<string english = "blob colors" translation = "colores de las manchas" />
 	<string english = "left player" translation = "izquierda" />
 	<string english = "right player" translation = "derecha" />

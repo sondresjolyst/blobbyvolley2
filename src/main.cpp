@@ -78,6 +78,7 @@ void setupPHYSFS()
 		fs.probeDir(sub_dir);
 	}
 	fs.probeDir("replays");
+	fs.probeDir("sponsors");
 
 	// set read dir (files in datafolder next to working dir)
 	{

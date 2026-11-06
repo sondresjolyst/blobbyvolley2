@@ -27,6 +27,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "IUserConfigReader.h"
 #include "FontIndex.h"
 
+#include <algorithm>
+#include <iostream>
+
 /* implementation */
 
 RenderManager::~RenderManager() = default;
@@ -196,4 +199,133 @@ Color RenderManager::getOscillationColor() const
 		int((std::sin(time*2.5) + 1.0) * 128),
 		int((std::sin(time*3.5) + 1.0) * 128)
 	};
+}
+
+void RenderManager::setSponsorLogos(const std::vector<std::vector<char>>& bmpFiles)
+{
+	std::vector<SDL_Surface*> surfaces;
+	std::vector<int> widths;
+
+	for(const auto& file : bmpFiles)
+	{
+		if(surfaces.size() >= sponsors::MAX_LOGOS)
+			break;
+
+		std::string error;
+		if(!sponsors::validateBmp(file.data(), file.size(), &error))
+		{
+			std::cerr << "Warning: skipping sponsor logo: " << error << std::endl;
+			continue;
+		}
+
+		SDL_RWops* rwops = SDL_RWFromConstMem(file.data(), int(file.size()));
+		SDL_Surface* surface = rwops ? SDL_LoadBMP_RW(rwops, 1) : nullptr;
+		if(!surface)
+		{
+			std::cerr << "Warning: skipping sponsor logo: " << SDL_GetError() << std::endl;
+			continue;
+		}
+
+		SDL_Surface* logo = prepareSponsorLogo(surface);
+		SDL_FreeSurface(surface);
+		if(!logo)
+			continue;
+
+		surfaces.push_back(logo);
+		widths.push_back(logo->w);
+	}
+
+	// an empty list hides the board and frees the old logos
+	mSponsorBoard.setLogoWidths(widths);
+	replaceSponsorSurfaces(std::move(surfaces));
+}
+
+SDL_Surface* RenderManager::prepareSponsorLogo(SDL_Surface* source)
+{
+	// Scale to the panel height with a box filter and give it the LED look.
+	// This happens once here, so both renderers draw the same pixels 1:1.
+	SDL_Surface* src = SDL_ConvertSurfaceFormat(source, SDL_PIXELFORMAT_ARGB8888, 0);
+	if(!src)
+		return nullptr;
+
+	const int dw = sponsors::scaledWidth(src->w, src->h);
+	const int dh = sponsors::LOGO_HEIGHT;
+	SDL_Surface* dst = SDL_CreateRGBSurfaceWithFormat(0, dw, dh, 32, SDL_PIXELFORMAT_ARGB8888);
+	if(!dst)
+	{
+		SDL_FreeSurface(src);
+		return nullptr;
+	}
+
+	SDL_LockSurface(src);
+	SDL_LockSurface(dst);
+	for(int y = 0; y < dh; ++y)
+	{
+		const int y0 = y * src->h / dh;
+		const int y1 = std::max(y0 + 1, (y + 1) * src->h / dh);
+		auto* out = (Uint32*)((Uint8*)dst->pixels + y * dst->pitch);
+		for(int x = 0; x < dw; ++x)
+		{
+			const int x0 = x * src->w / dw;
+			const int x1 = std::max(x0 + 1, (x + 1) * src->w / dw);
+			// average with alpha weights so transparent pixels do not darken the edges
+			int r = 0, g = 0, b = 0, a = 0, n = 0;
+			for(int sy = y0; sy < y1; ++sy)
+			{
+				const auto* in = (const Uint32*)((const Uint8*)src->pixels + sy * src->pitch);
+				for(int sx = x0; sx < x1; ++sx)
+				{
+					const int pa = (in[sx] >> 24) & 0xFF;
+					r += ((in[sx] >> 16) & 0xFF) * pa;
+					g += ((in[sx] >> 8) & 0xFF) * pa;
+					b += (in[sx] & 0xFF) * pa;
+					a += pa;
+					++n;
+				}
+			}
+			auto rr = Uint8(a ? r / a : 0);
+			auto gg = Uint8(a ? g / a : 0);
+			auto bb = Uint8(a ? b / a : 0);
+			const auto aa = Uint8(a / n);
+			// the LED look only matters where the logo is visible
+			if(aa)
+				sponsors::ledFilter(rr, gg, bb);
+			out[x] = (Uint32(aa) << 24) | (Uint32(rr) << 16) | (Uint32(gg) << 8) | Uint32(bb);
+		}
+	}
+	SDL_UnlockSurface(dst);
+	SDL_UnlockSurface(src);
+	SDL_FreeSurface(src);
+	return dst;
+}
+
+void RenderManager::showSponsors(bool show)
+{
+	mSponsorBoard.setVisible(show);
+}
+
+void RenderManager::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
+{
+	for(auto* surface : surfaces)
+		SDL_FreeSurface(surface);
+}
+
+void RenderManager::setSponsorBoardStyle(sponsors::BoardStyle style)
+{
+	mSponsorBoard.setStyle(style);
+}
+
+const sponsors::BoardLook& RenderManager::sponsorLook() const
+{
+	return sponsors::boardLook(mSponsorBoard.style());
+}
+
+bool RenderManager::sponsorBoardActive() const
+{
+	return mSponsorBoard.active();
+}
+
+std::vector<sponsors::Placement> RenderManager::sponsorLayout() const
+{
+	return mSponsorBoard.placements(SDL_GetTicks());
 }

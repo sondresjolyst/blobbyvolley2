@@ -68,6 +68,9 @@ class RenderManagerGL2D : public RenderManager
 		void endDrawParticles() override;
 		void drawGame(const DuelMatchState& gameState) override;
 
+	protected:
+		void replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces) override;
+
 	private:
 		// Make sure this object is created before any opengl call
 		SDL_GLContext mGlContext;
@@ -92,6 +95,10 @@ class RenderManagerGL2D : public RenderManager
 		std::vector<Texture> mHighlightFont;
 		GLuint mParticle;
 
+		// sponsor board
+		std::vector<Texture> mSponsorLogos;
+		GLuint mSponsorMask = 0;
+
 		std::list<Vector2> mLastBallStates;
 
 		bool mShowShadow;
@@ -103,6 +110,11 @@ class RenderManagerGL2D : public RenderManager
 		void drawQuad(float x, float y, const Texture& tex);
 		GLuint loadTexture(SDL_Surface* surface, bool specular);
 		int getNextPOT(int npot);
+		void deleteSponsorLogos();
+		void drawSponsorBoard();
+		void drawSponsorFills(const std::vector<sponsors::Fill>& fills);
+		void drawBackgroundPart(int srcX, int srcY, int w, int h, int dstX, int dstY);
+		void drawTexturedRect(float x, float y, float w, float h, float u0, float v0, float u1, float v1);
 
 		void glEnable(unsigned int flag);
 		void glDisable(unsigned int flag);

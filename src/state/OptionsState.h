@@ -71,6 +71,7 @@ private:
 	int mR1, mG1, mB1, mR2, mG2, mB2;
 	bool mLeftMorphing, mRightMorphing;
 	bool mShowShadow;
+	bool mShowSponsors;
 };
 
 /*! \class InputOptionsState

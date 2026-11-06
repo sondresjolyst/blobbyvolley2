@@ -73,6 +73,7 @@
 	<string english = "window mode" translation = "mode fenetre" />
 	<string english = "render device" translation = "peripherique de rendu" />
 	<string english = "show shadow" translation = "afficher les ombres" />
+	<string english = "show sponsors" translation = "afficher les sponsors" />
 	<string english = "blob colors" translation = "couleurs du blob" />
 	<string english = "left player" translation = "joueur a gauche" />
 	<string english = "right player" translation = "joueur a droite" />

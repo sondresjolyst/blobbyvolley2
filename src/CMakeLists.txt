@@ -58,6 +58,7 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	RenderManagerGL2D.cpp RenderManagerGL2D.h
 	RenderManagerSDL.cpp RenderManagerSDL.h
 	RenderManagerNull.cpp RenderManagerNull.h
+	SponsorBoard.cpp SponsorBoard.h
 	ScriptedInputSource.cpp ScriptedInputSource.h
 	SoundManager.cpp SoundManager.h
 	Vector.h
