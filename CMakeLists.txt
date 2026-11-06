@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.11)
 
 project(blobby VERSION 1.1.1)
 
+include(cmake/ForkVersion.cmake)
+
 option(BUILD_TESTS "Build test programs" OFF)
 option(BUILD_MACOS_BUNDLE "Create a self-containing MacOS bundle" OFF)
 
