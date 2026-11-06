@@ -73,6 +73,7 @@
 	<string english = "window mode" translation = "Okenní režim" />
 	<string english = "render device" translation = "Vykreslovací zařízení" />
 	<string english = "show shadow" translation = "Ukázat stíny" />
+	<string english = "show sponsors" translation = "Ukázat sponzory" />
 	<string english = "blob colors" translation = "Barvy kapkovitých hráčů" />
 	<string english = "left player" translation = "Hráč nalevo" />
 	<string english = "right player" translation = "Hráč napravo" />
