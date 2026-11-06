@@ -41,6 +41,7 @@ set(common_SRC
 	server/NetworkPlayer.cpp server/NetworkPlayer.h
 	server/NetworkGame.cpp server/NetworkGame.h
 	server/MatchMaker.cpp server/MatchMaker.h
+	server/JoinCodes.cpp server/JoinCodes.h
 	replays/ReplayRecorder.cpp replays/ReplayRecorder.h
 	replays/ReplaySavePoint.cpp replays/ReplaySavePoint.h
 	)

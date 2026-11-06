@@ -102,7 +102,9 @@ void LobbyState::step_impl()
 			case ID_CONNECTION_LOST:
 			case ID_DISCONNECTION_NOTIFICATION:
 			{
-				mLobbyState = ConnectionState::DISCONNECTED;
+				// keep showing why we were refused
+				if (mLobbyState != ConnectionState::REFUSED)
+					mLobbyState = ConnectionState::DISCONNECTED;
 				break;
 			}
 			// we ignore these packets. they tell us about remote connections, which we handle manually with ID_SERVER_STATUS packets.
@@ -113,12 +115,22 @@ void LobbyState::step_impl()
 				break;
 			case ID_LOBBY:
 				{
-				mLobbyState = ConnectionState::CONNECTED;
 				RakNet::BitStream stream(packet->data, packet->length, false);
 				auto in = createGenericReader( &stream );
 				unsigned char t;
 				in->byte(t);
 				in->byte(t);
+				if((LobbyPacketType)t == LobbyPacketType::ENTRY_REFUSED)
+				{
+					unsigned char reason = 0xFF;
+					stream.Read(reason);
+					mRefusedReason = reason;
+					mLobbyState = ConnectionState::REFUSED;
+					break;
+				}
+				if (mLobbyState == ConnectionState::REFUSED)
+					break;
+				mLobbyState = ConnectionState::CONNECTED;
 				if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
 				{
 					uint32_t player_count;
@@ -234,6 +246,15 @@ void LobbyState::step_impl()
 		else if (mLobbyState == ConnectionState::CONNECTION_FAILED )
 		{
 			imgui.doText(GEN_ID, Vector2( 100, 55 ), TextManager::NET_CON_FAILED);
+		}
+		else if (mLobbyState == ConnectionState::REFUSED )
+		{
+			TextManager::STRING text = TextManager::NET_ENTRY_REFUSED;
+			if (mRefusedReason == (unsigned char)EntryRefusedReason::UNKNOWN_CODE)
+				text = TextManager::NET_UNKNOWN_CODE;
+			else if (mRefusedReason == (unsigned char)EntryRefusedReason::CODE_IN_USE)
+				text = TextManager::NET_CODE_IN_USE;
+			imgui.doText(GEN_ID, Vector2( 100, 55 ), text);
 		}
 
 		// empty player list

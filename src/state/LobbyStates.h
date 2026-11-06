@@ -15,7 +15,8 @@ enum class ConnectionState
 	CONNECTING,
 	CONNECTED,
 	DISCONNECTED,
-	CONNECTION_FAILED
+	CONNECTION_FAILED,
+	REFUSED
 };
 
 /// \todo this currently also contains server config data
@@ -73,6 +74,8 @@ class LobbyState : public State
 		PreviousState mPrevious;
 
 		ConnectionState mLobbyState;
+		// why a tournament server refused us, an EntryRefusedReason
+		unsigned char mRefusedReason = 0;
 
 		ServerStatusData mStatus;
 		std::shared_ptr<LobbySubstate> mSubState;

@@ -46,6 +46,12 @@ extern std::atomic<int> SWLS_PacketCount;
 extern std::atomic<int> SWLS_Connections;
 extern std::atomic<int> SWLS_Games;
 
+namespace
+{
+	// time a refused client gets to receive the reason before the connection closes
+	const std::chrono::milliseconds REFUSED_CLOSE_DELAY(1000);
+}
+
 #ifdef __ANDROID__
 extern "C"
 #endif
@@ -190,6 +196,9 @@ void DedicatedServer::processPackets()
 			case ID_DISCONNECTION_NOTIFICATION:
 			{
 				mActiveConnections.erase(packet->playerId);
+				mRefusedConnections.erase(packet->playerId);
+				if( mJoinCodes )
+					mJoinCodes->release(packet->playerId);
 
 				auto player = mPlayerMap.find(packet->playerId);
 				// delete the disconnecting player.
@@ -238,6 +247,13 @@ void DedicatedServer::processPackets()
 
 void DedicatedServer::updateGames()
 {
+	if( mJoinCodes )
+	{
+		auto now = std::chrono::steady_clock::now().time_since_epoch();
+		mJoinCodes->poll( std::chrono::duration_cast<std::chrono::milliseconds>(now).count() );
+		closeRefusedConnections();
+	}
+
 	// update new game creation for locally hosted games.
 	if( mPlayerHosted )
 	{
@@ -302,6 +318,17 @@ int DedicatedServer::getConnectedClients() const
 void DedicatedServer::allowNewPlayers( bool allow )
 {
 	mAcceptNewPlayers = allow;
+}
+
+void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
+{
+	mJoinCodes = std::move(gate);
+	if( mJoinCodes )
+	{
+		mJoinCodes->setLogFunction([](JoinCodeGate::LogLevel level, const std::string& message){
+			syslog(level == JoinCodeGate::LogLevel::PROBLEM ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
+		});
+	}
 }
 
 // debug
@@ -386,7 +413,24 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		return;
 	}
 
+	// a refused connection only waits to be closed
+	if( mRefusedConnections.count(source) != 0 )
+	{
+		return;
+	}
+
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
+
+	if( mJoinCodes )
+	{
+		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
+		if( result != JoinCodeGate::Result::ACCEPTED )
+		{
+			refuseEntry( source, result == JoinCodeGate::Result::CODE_IN_USE ?
+							EntryRefusedReason::CODE_IN_USE : EntryRefusedReason::UNKNOWN_CODE );
+			return;
+		}
+	}
 
 	// add to player map. protect with mutex
 	{
@@ -415,6 +459,39 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	}
 }
 
+
+void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
+{
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_LOBBY);
+	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
+	stream.Write((unsigned char)reason);
+	mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, source);
+
+	mRefusedConnections[source] = std::chrono::steady_clock::now() + REFUSED_CLOSE_DELAY;
+	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+}
+
+void DedicatedServer::closeRefusedConnections()
+{
+	auto now = std::chrono::steady_clock::now();
+	for( auto it = mRefusedConnections.begin(); it != mRefusedConnections.end(); )
+	{
+		if( it->second <= now )
+		{
+			PlayerID target = it->first;
+			mServer->access( [&](RakServer& srv){ srv.CloseConnection( target, true ); } );
+			mActiveConnections.erase( target );
+			it = mRefusedConnections.erase( it );
+			syslog(LOG_DEBUG, "Closed refused connection from %s, %d clients connected now",
+				   target.toString().c_str(), getConnectedClients());
+		}
+		else
+		{
+			++it;
+		}
+	}
+}
 
 void DedicatedServer::processSingleMessage(MessageType message_id, PlayerID source, RakNet::BitStream& data)
 {

@@ -73,6 +73,11 @@ const std::string& NetworkPlayer::getName() const
 {
 	return mIdentity.getName();
 }
+void NetworkPlayer::setName(const std::string& name)
+{
+	mIdentity.setName(name);
+}
+
 Color NetworkPlayer::getColor() const
 {
 	return mIdentity.getStaticColor();
