@@ -7,4 +7,8 @@
 	<var name="name" value="Blobby Volley 2 Server"/>
 	<var name="description" value="replace this with a description of the server. To do this, edit data/server.xml"/>
 	<var name="rules" value="default.lua classic.lua back_defence.lua one_hit_wonder.lua the_double.lua blitz.lua firewall.lua sticky_mode.lua jumping_jack.lua tennis.lua"/>
+	<!-- In tournament mode players type their join code as name. The server swaps it for the nickname in the players file and refuses unknown codes. -->
+	<var name="tournament_mode" value="false"/>
+	<!-- Players file of tournament mode. A relative path starts in the working directory of the server. -->
+	<var name="tournament_players_file" value="tournament_players.xml"/>
 </userconfig>

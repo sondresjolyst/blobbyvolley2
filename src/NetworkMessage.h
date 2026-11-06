@@ -183,6 +183,13 @@ enum MessageType
 //		ID_CHALLENGE
 //		(unsigned char) TYPE
 //
+//		ENTRY_REFUSED is only sent by a server in tournament mode. It answers an
+//		ID_ENTER_SERVER whose name is not an accepted join code. The server closes
+//		the connection shortly after.
+//		ID_LOBBY
+//		ENTRY_REFUSED
+//		reason (EntryRefusedReason)
+//
 
 enum class LobbyPacketType : unsigned char
 {
@@ -192,7 +199,14 @@ enum class LobbyPacketType : unsigned char
 	JOIN_GAME,
 	LEAVE_GAME,
 	GAME_STATUS,
-	START_GAME
+	START_GAME,
+	ENTRY_REFUSED
+};
+
+enum class EntryRefusedReason : unsigned char
+{
+	UNKNOWN_CODE,
+	CODE_IN_USE
 };
 
 class IUserConfigReader;
