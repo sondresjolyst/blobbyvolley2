@@ -92,15 +92,32 @@ namespace
 		}
 	}
 
-	/// A host of only digits and dots must be a dotted IPv4 address.
+	/// A host name, or a dotted IPv4 address when it starts with a digit.
+	/// RakNet passes a host that starts with 0, 1 or 2 to inet_addr without a lookup, and inet_addr
+	/// also reads hex, octal and short forms such as 0x7f000001, 0177.0.0.1 and 127.1.
+	/// So a host that starts with a digit must be four decimal parts, and no label may look like hex.
 	bool isWellFormedHost(const std::string& host)
 	{
 		if (!isHostName(host))
 			return false;
+
+		std::size_t label = 0;
+		while (label < host.size())
+		{
+			if (host.compare(label, 2, "0x") == 0)
+				return false;
+			std::size_t dot = host.find('.', label);
+			if (dot == std::string::npos)
+				break;
+			label = dot + 1;
+		}
+
+		if (!isDigit(host[0]))
+			return true;
 		for (char c : host)
 		{
 			if (!isDigit(c) && c != '.')
-				return true;
+				return false;
 		}
 
 		int parts = 0;

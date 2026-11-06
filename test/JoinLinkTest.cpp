@@ -107,6 +107,20 @@ BOOST_AUTO_TEST_CASE(refuses_bad_hosts)
 	BOOST_CHECK(parse("blobby://join?server=01.2.3.4:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
 	BOOST_CHECK(parse("blobby://join?server=1234:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
 
+	// inet_addr reads these as addresses, so a host that starts with a digit must be dotted decimal
+	BOOST_CHECK(parse("blobby://join?server=0x7f000001:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=0x7f.1:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=0177.0.0.1:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=127.1:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=2fast.lan:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=9lives:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=1.2.3.4a:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=lan.0x7f:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=0X7F000001:1234&code=K7QM2XPR4T") == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(parse("blobby://join?server=fast2.lan:1234&code=K7QM2XPR4T") == JoinLinkError::NONE);
+	BOOST_CHECK(parse("blobby://join?server=127.0.0.1:1234&code=K7QM2XPR4T") == JoinLinkError::NONE);
+	BOOST_CHECK(parse("blobby://join?server=0.0.0.0:1234&code=K7QM2XPR4T") == JoinLinkError::NONE);
+
 	// the client holds at most 63 bytes of host
 	std::string longest(63, 'a');
 	BOOST_CHECK(parse("blobby://join?server=" + longest + ":1234&code=K7QM2XPR4T") == JoinLinkError::NONE);

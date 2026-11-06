@@ -219,6 +219,30 @@ namespace
 		return false;
 	}
 
+	/// Asks the player before the game connects to the server of a link, since any web page can open one.
+	/// Returns true only when the player picks Yes.
+	bool confirmJoin(const JoinLink& link)
+	{
+		std::string question = "Join the tournament server " + link.host + ":" + std::to_string(link.port) + "?";
+		const SDL_MessageBoxButtonData buttons[] = {
+			{ SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No" },
+			{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes" },
+		};
+		SDL_MessageBoxData data = {};
+		data.flags = SDL_MESSAGEBOX_INFORMATION;
+		data.window = nullptr;
+		data.title = AppTitle;
+		data.message = question.c_str();
+		data.numbuttons = 2;
+		data.buttons = buttons;
+		data.colorScheme = nullptr;
+
+		int chosen = 0;
+		if (SDL_ShowMessageBox(&data, &chosen) != 0)
+			return false;
+		return chosen == 1;
+	}
+
 	/// The server a join link points to.
 	ServerInfo serverFromLink(const JoinLink& link)
 	{
@@ -306,7 +330,7 @@ int main(int argc, char* argv[])
 		}
 
 		std::unique_ptr<State> first_state;
-		if (request.hasLink)
+		if (request.hasLink && confirmJoin(request.link))
 			first_state.reset(new LobbyState(serverFromLink(request.link), PreviousState::MAIN, request.link.code));
 		else
 			first_state.reset(new MainMenuState());
