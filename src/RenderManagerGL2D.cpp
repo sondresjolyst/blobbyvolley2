@@ -523,12 +523,13 @@ void RenderManagerGL2D::drawSponsorBoard()
 		return;
 
 	using namespace sponsors;
+	const BoardLook& look = sponsorLook();
 
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_BLEND);
 
 	// shadow, frame and panel
-	drawSponsorFills(boardBody());
+	drawSponsorFills(look.under);
 
 	// logos, cut off at the panel edges
 	glColor4f(1.0, 1.0, 1.0, 1.0);
@@ -538,24 +539,32 @@ void RenderManagerGL2D::drawSponsorBoard()
 			continue;
 		const Texture& logo = mSponsorLogos[placement.logo];
 		int skip, visible;
-		if (!clipToPanel(placement.x, int(logo.w), skip, visible))
+		if (!clipToPanel(placement.x, int(logo.w), skip, visible, look.panelX, look.panelW))
 			continue;
 		const float u0 = logo.indices[0];
 		const float du = (logo.indices[2] - logo.indices[0]) / logo.w;
 		glBindTexture(logo.texture);
-		const float top = PANEL_TOP + int(PANEL_HEIGHT - logo.h) / 2;
+		const float top = look.panelY + int(look.panelH - logo.h) / 2;
 		drawTexturedRect(placement.x + skip, top, visible, logo.h,
 		                 u0 + skip * du, logo.indices[1], u0 + (skip + visible) * du, logo.indices[5]);
 	}
 
 	// LED grid on top
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	glEnable(GL_BLEND);
-	glBindTexture(mSponsorMask);
-	drawTexturedRect(PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT,
-	                 0.f, 0.f, PANEL_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
+	if (look.ledGrid)
+	{
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnable(GL_BLEND);
+		glBindTexture(mSponsorMask);
+		drawTexturedRect(look.panelX, look.panelY, look.panelW, look.panelH,
+		                 0.f, 0.f, look.panelW / 2.f, look.panelH / 2.f);
+		glDisable(GL_BLEND);
+	}
+
+	drawSponsorFills(look.over);
 
 	// sand drifting over the bottom edge
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_BLEND);
 	for (const auto& copy : sandDrift())
 	{
 		glColor4ub(255, 255, 255, copy.alpha);
@@ -567,7 +576,7 @@ void RenderManagerGL2D::drawSponsorBoard()
 
 	// the net pole stands in front of the board, so draw that strip of the background again
 	glColor4f(1.0, 1.0, 1.0, 1.0);
-	drawBackgroundPart(ROD_LEFT, BOARD_TOP, ROD_WIDTH, AREA_HEIGHT, ROD_LEFT, BOARD_TOP);
+	drawBackgroundPart(ROD_LEFT, AREA_TOP, ROD_WIDTH, AREA_HEIGHT, ROD_LEFT, AREA_TOP);
 }
 
 void RenderManagerGL2D::showShadow(bool shadow)

@@ -304,6 +304,16 @@ void RenderManager::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
 		SDL_FreeSurface(surface);
 }
 
+void RenderManager::setSponsorBoardStyle(sponsors::BoardStyle style)
+{
+	mSponsorBoard.setStyle(style);
+}
+
+const sponsors::BoardLook& RenderManager::sponsorLook() const
+{
+	return sponsors::boardLook(mSponsorBoard.style());
+}
+
 bool RenderManager::sponsorBoardActive() const
 {
 	return mSponsorBoard.active();

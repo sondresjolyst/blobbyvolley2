@@ -132,6 +132,8 @@ void BlobbyApp::setupRenderManager(const IUserConfigReader& config) {
 	mRenderMgr->init(BASE_RESOLUTION_X, BASE_RESOLUTION_Y, fullscreen);
 	mRenderMgr->showShadow(shadows);
 	mRenderMgr->showSponsors(config.getBool("show_sponsors", true));
+	// for local testing, tournament matches will get the style from the server
+	mRenderMgr->setSponsorBoardStyle(sponsors::parseBoardStyle(config.getString("sponsor_board_style", "led")));
 	mRenderMgr->setSponsorLogos(sponsors::readLogoFiles());
 
 	std::string bg = std::string("backgrounds/") + config.getString("background");

@@ -52,8 +52,9 @@ namespace sponsors
 	constexpr int PANEL_WIDTH = BOARD_WIDTH - 6;
 	constexpr int PANEL_TOP = BOARD_TOP + 5;
 	constexpr int PANEL_HEIGHT = 22;
-	/// everything the board draws lies between BOARD_TOP and BOARD_TOP + AREA_HEIGHT
-	constexpr int AREA_HEIGHT = BOARD_HEIGHT + 3;
+	/// everything the board draws lies between AREA_TOP and AREA_TOP + AREA_HEIGHT
+	constexpr int AREA_TOP = BOARD_TOP - 6;
+	constexpr int AREA_HEIGHT = BOARD_BOTTOM + 3 - AREA_TOP;
 
 	/// Logos are scaled to this height on the panel.
 	constexpr int LOGO_HEIGHT = PANEL_HEIGHT;
@@ -89,10 +90,35 @@ namespace sponsors
 		std::uint8_t alpha;
 	};
 
-	/// Cast shadow, contact darkening, frame and panel, in drawing order. Drawn before the logos.
+	/// Board styles. The site sends them as off, led, printed, wood, slim and padded.
+	enum class BoardStyle
+	{
+		OFF,		///< no board
+		LED,		///< dark LED panel in a metal frame, the default
+		PRINTED,	///< white printed panels in a thin grey frame
+		WOOD,		///< wooden beach bar board with posts and light panels
+		SLIM,		///< slim glossy LED without a frame
+		PADDED		///< padded board with rounded edges, like court padding
+	};
+
+	/// Parses the style name sent by the site. Unknown names give LED.
+	BoardStyle parseBoardStyle(const std::string& name);
+	/// The name of a style as the site sends it.
+	const char* boardStyleName(BoardStyle style);
+
+	/// Everything a renderer needs to draw one board style.
+	struct BoardLook
+	{
+		std::vector<Fill> under;	///< cast shadow, contact darkening and the board, drawn before the logos
+		std::vector<Fill> over;		///< parts in front of the logos, such as seams and posts
+		int panelX, panelY, panelW, panelH;	///< where the logos scroll
+		bool ledGrid;				///< whether the LED grid is laid over the panel
+	};
+
+	/// The look of a style. All styles share the placement, the shadow, the contact line and the sand drift.
 	/// The shadow follows the palm shadows in the default background: the sun is front left,
 	/// so it falls right and slightly back, at about 0.31 of the sand colour.
-	const std::vector<Fill>& boardBody();
+	const BoardLook& boardLook(BoardStyle style);
 
 	/// Sand drifting over the bottom edge. Drawn after the logos.
 	const std::vector<BackgroundCopy>& sandDrift();
@@ -118,12 +144,13 @@ namespace sponsors
 
 	/// The part of a logo at x with the given width that lies on the panel.
 	/// Returns false when nothing is visible. skip is the number of columns cut off on the left.
-	bool clipToPanel(int x, int width, int& skip, int& visible);
+	bool clipToPanel(int x, int width, int& skip, int& visible, int panelLeft = PANEL_LEFT, int panelWidth = PANEL_WIDTH);
 
 	/// Computes which logos are visible on the panel and where, for scaled logos of the given widths,
 	/// at the given time in milliseconds. The time comes from the render path,
 	/// so the board scrolls with the clock and not with the simulation.
-	std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t timeMs);
+	std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t timeMs,
+	                              int panelLeft = PANEL_LEFT, int panelWidth = PANEL_WIDTH);
 
 	/// Alpha of the dark LED grid laid over the panel at a panel pixel. Repeats every 2 pixels.
 	std::uint8_t ledMaskAlpha(int x, int y);
@@ -135,16 +162,22 @@ namespace sponsors
 		public:
 			void setLogoWidths(std::vector<int> widths) { mWidths = std::move(widths); }
 			void setVisible(bool visible) { mVisible = visible; }
-			bool active() const { return mVisible && !mWidths.empty(); }
+			void setStyle(BoardStyle style) { mStyle = style; }
+			BoardStyle style() const { return mStyle; }
+			bool active() const { return mVisible && mStyle != BoardStyle::OFF && !mWidths.empty(); }
 			std::size_t logoCount() const { return mWidths.size(); }
 			/// visible logos at the given time, empty when the board is not active
 			std::vector<Placement> placements(std::uint32_t timeMs) const
 			{
-				return active() ? layout(mWidths, timeMs) : std::vector<Placement>{};
+				if(!active())
+					return {};
+				const BoardLook& look = boardLook(mStyle);
+				return layout(mWidths, timeMs, look.panelX, look.panelW);
 			}
 
 		private:
 			bool mVisible = false;
+			BoardStyle mStyle = BoardStyle::LED;
 			std::vector<int> mWidths;
 	};
 

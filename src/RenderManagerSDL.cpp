@@ -146,7 +146,7 @@ void RenderManagerSDL::init(int xResolution, int yResolution, bool fullscreen)
 	SDL_FreeSurface(tmpSurface);
 
 	// Create the LED grid that is laid over the sponsor board
-	tmpSurface = SDL_CreateRGBSurface(0, sponsors::PANEL_WIDTH, sponsors::PANEL_HEIGHT, 32,
+	tmpSurface = SDL_CreateRGBSurface(0, sponsors::BOARD_WIDTH, sponsors::BOARD_HEIGHT, 32,
 			0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	SDL_LockSurface(tmpSurface);
 	for (int y = 0; y < tmpSurface->h; ++y)
@@ -506,9 +506,10 @@ void RenderManagerSDL::drawSponsorBoard()
 		return;
 
 	using namespace sponsors;
+	const BoardLook& look = sponsorLook();
 
 	// shadow, frame and panel
-	drawSponsorFills(boardBody());
+	drawSponsorFills(look.under);
 
 	// logos, cut off at the panel edges
 	for (const auto& placement : sponsorLayout())
@@ -520,16 +521,22 @@ void RenderManagerSDL::drawSponsorBoard()
 		if (!logo || SDL_QueryTexture(logo, nullptr, nullptr, &w, &h) != 0)
 			continue;
 		int skip, visible;
-		if (!clipToPanel(placement.x, w, skip, visible))
+		if (!clipToPanel(placement.x, w, skip, visible, look.panelX, look.panelW))
 			continue;
 		const SDL_Rect source = {skip, 0, visible, h};
-		const SDL_Rect target = {placement.x + skip, PANEL_TOP + (PANEL_HEIGHT - h) / 2, visible, h};
+		const SDL_Rect target = {placement.x + skip, look.panelY + (look.panelH - h) / 2, visible, h};
 		SDL_RenderCopy(mRenderer, logo, &source, &target);
 	}
 
-	// LED grid on top
-	const SDL_Rect panel = {PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT};
-	SDL_RenderCopy(mRenderer, mSponsorMask, nullptr, &panel);
+	// LED grid on top, cut from the larger grid texture so it is never stretched
+	if (look.ledGrid)
+	{
+		const SDL_Rect gridSource = {0, 0, look.panelW, look.panelH};
+		const SDL_Rect panel = {look.panelX, look.panelY, look.panelW, look.panelH};
+		SDL_RenderCopy(mRenderer, mSponsorMask, &gridSource, &panel);
+	}
+
+	drawSponsorFills(look.over);
 
 	// sand drifting over the bottom edge
 	SDL_SetTextureBlendMode(mBackground, SDL_BLENDMODE_BLEND);

@@ -13,6 +13,7 @@
 	<var name="right_blobby_oscillate" value="false"/>
 	<var name="show_shadow" value="false"/>
 	<var name="show_sponsors" value="true"/>
+	<var name="sponsor_board_style" value="led"/>
 	<var name="left_script_name" value="hyp014"/>
 	<var name="right_script_name" value="reduced"/>
 	<var name="left_player_human" value="true"/>

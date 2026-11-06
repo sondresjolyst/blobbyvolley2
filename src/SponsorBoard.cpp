@@ -62,8 +62,271 @@ namespace
 	}
 }
 
+namespace
+{
+	using sponsors::Fill;
+	using sponsors::Blend;
+
+	std::uint8_t clampByte(int v)
+	{
+		return std::uint8_t(std::max(0, std::min(255, v)));
+	}
+
+	void solid(std::vector<Fill>& fills, int x, int y, int w, int h, int r, int g, int b)
+	{
+		fills.push_back(Fill{x, y, w, h, clampByte(r), clampByte(g), clampByte(b), 255, Blend::SOLID});
+	}
+
+	void alpha(std::vector<Fill>& fills, int x, int y, int w, int h, int r, int g, int b, int a)
+	{
+		fills.push_back(Fill{x, y, w, h, clampByte(r), clampByte(g), clampByte(b), clampByte(a), Blend::ALPHA});
+	}
+
+	void multiply(std::vector<Fill>& fills, int x, int y, int w, int h, int r, int g, int b)
+	{
+		fills.push_back(Fill{x, y, w, h, clampByte(r), clampByte(g), clampByte(b), 255, Blend::MULTIPLY});
+	}
+
+	// cast shadow and contact darkening shared by all styles, for a board of the given height
+	void groundShadow(std::vector<Fill>& fills, int height)
+	{
+		using namespace sponsors;
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, bottom = BOARD_BOTTOM;
+
+		// a sheared strip from the base going right and slightly back,
+		// 1.1 x the height sideways and 0.1 x the height back. Most of it lies behind the board.
+		const int shadowDx = height * 11 / 10;
+		const int shadowDy = std::max(2, height / 10);
+		for(int r = 0; r < shadowDy; ++r)
+		{
+			const int x0 = left + shadowDx * r / shadowDy;
+			const int x1 = BOARD_RIGHT + shadowDx * (r + 1) / shadowDy;
+			multiply(fills, x0, bottom - 1 - r, x1 - x0, 1, 80, 84, 78);
+			// slightly soft outer edge like the palm shadows
+			multiply(fills, x1, bottom - 1 - r, 2, 1, 150, 152, 148);
+		}
+
+		// contact darkening in front of the base, small because the front is sunlit
+		multiply(fills, left - 2, bottom, width + 4, 1, 120, 122, 118);
+		multiply(fills, left - 3, bottom + 1, width + 6, 1, 190, 190, 186);
+		multiply(fills, left - 3, bottom + 2, width + 6, 1, 225, 225, 222);
+	}
+
+	// seams between equal panels, every 119 px
+	template<class F>
+	void forSeams(int from, int to, F f)
+	{
+		for(int x = from + 119; x < to - 10; x += 119)
+			f(x);
+	}
+
+	sponsors::BoardLook makeLed()
+	{
+		using namespace sponsors;
+		BoardLook look{};
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, height = BOARD_HEIGHT, top = BOARD_TOP;
+		groundShadow(look.under, height);
+
+		// top face, seen from slightly above
+		for(int row = 0; row < TOP_FACE; ++row)
+			solid(look.under, left + 2 - row, top + row, width - 4 + 2 * row, 1, 150 - row * 10, 152 - row * 10, 160 - row * 10);
+
+		// metal front, a little wider towards the bottom, lit from above
+		for(int row = TOP_FACE; row < height; ++row)
+		{
+			const int grow = (row - TOP_FACE) / 6;
+			const int shade = 92 - row * 2;
+			solid(look.under, left - grow, top + row, width + 2 * grow, 1, shade, shade + 3, shade + 9);
+		}
+
+		// dark LED panel, a little lighter at the top
+		look.panelX = PANEL_LEFT;
+		look.panelY = PANEL_TOP;
+		look.panelW = PANEL_WIDTH;
+		look.panelH = PANEL_HEIGHT;
+		for(int row = 0; row < look.panelH; ++row)
+			solid(look.under, look.panelX, look.panelY + row, look.panelW, 1, 14 - row / 2, 15 - row / 2, 17 - row / 2);
+		look.ledGrid = true;
+		return look;
+	}
+
+	sponsors::BoardLook makePrinted()
+	{
+		using namespace sponsors;
+		BoardLook look{};
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, height = BOARD_HEIGHT, top = BOARD_TOP;
+		groundShadow(look.under, height);
+
+		for(int row = 0; row < 2; ++row)
+			solid(look.under, left + 1 - row, top + row, width - 2 + 2 * row, 1, 205 - row * 15, 205 - row * 15, 210 - row * 15);
+		solid(look.under, left, top + 2, width, height - 2, 140, 142, 148);
+
+		look.panelX = left + 1;
+		look.panelY = top + 3;
+		look.panelW = width - 2;
+		look.panelH = height - 4;
+		for(int row = 0; row < look.panelH; ++row)
+			solid(look.under, look.panelX, look.panelY + row, look.panelW, 1, 248 - row * 2, 248 - row * 2, 246 - row * 2);
+
+		const BoardLook* self = &look;
+		forSeams(left, BOARD_RIGHT, [&](int x) { solid(look.over, x, self->panelY, 1, self->panelH, 170, 172, 178); });
+		look.ledGrid = false;
+		return look;
+	}
+
+	void woodPost(std::vector<Fill>& fills, int x, int top, int height, bool cap)
+	{
+		const int postW = 6;
+		solid(fills, x, top - 5, postW, height + 5, 104, 66, 34);
+		solid(fills, x, top - 5, 2, height + 5, 132, 88, 48);
+		if(cap)
+			solid(fills, x, top - 6, postW, 1, 150, 104, 60);
+	}
+
+	sponsors::BoardLook makeWood()
+	{
+		using namespace sponsors;
+		BoardLook look{};
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, height = BOARD_HEIGHT, top = BOARD_TOP;
+		const int centerPost = left + width / 2 - 3;
+		groundShadow(look.under, height);
+
+		woodPost(look.under, left - 2, top, height, true);
+		woodPost(look.under, centerPost, top, height, true);
+		woodPost(look.under, BOARD_RIGHT - 4, top, height, true);
+
+		// planks above and below the panel, a darker groove every 8 rows
+		for(int row = 0; row < height; ++row)
+		{
+			if(row >= 4 && row < height - 4)
+				continue;
+			const int shade = 150 - row * 2 - ((row % 8 == 7) ? 28 : 0);
+			solid(look.under, left + 4, top + row, width - 8, 1, shade, shade * 64 / 100, shade * 34 / 100);
+		}
+		solid(look.under, left + 4, top + 4, 4, height - 8, 120, 78, 40);
+		solid(look.under, BOARD_RIGHT - 8, top + 4, 4, height - 8, 120, 78, 40);
+
+		look.panelX = left + 8;
+		look.panelY = top + 4;
+		look.panelW = width - 16;
+		look.panelH = height - 8;
+		for(int row = 0; row < look.panelH; ++row)
+			solid(look.under, look.panelX, look.panelY + row, look.panelW, 1, 238 - row, 228 - row, 204 - row);
+
+		// the middle post stands in front of the panel
+		woodPost(look.over, centerPost, top, height, true);
+		look.ledGrid = false;
+		return look;
+	}
+
+	sponsors::BoardLook makeSlim()
+	{
+		using namespace sponsors;
+		BoardLook look{};
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, height = 26, bottom = BOARD_BOTTOM;
+		const int top = bottom - height;
+		groundShadow(look.under, height);
+
+		look.panelX = left;
+		look.panelY = top;
+		look.panelW = width;
+		look.panelH = height;
+		for(int row = 0; row < height; ++row)
+			solid(look.under, left, top + row, width, 1, 10 - row / 3, 10 - row / 3, 12 - row / 3);
+
+		// glossy reflection strip on top and a thin edge at the base
+		solid(look.over, left, top, width, 1, 150, 155, 165);
+		alpha(look.over, left, top + 1, width, 1, 255, 255, 255, 46);
+		alpha(look.over, left, top + 2, width, 1, 255, 255, 255, 30);
+		alpha(look.over, left, top + 3, width, 1, 255, 255, 255, 16);
+		solid(look.over, left, bottom - 1, width, 1, 40, 42, 46);
+		look.ledGrid = true;
+		return look;
+	}
+
+	sponsors::BoardLook makePadded()
+	{
+		using namespace sponsors;
+		BoardLook look{};
+		const int left = BOARD_LEFT, width = BOARD_WIDTH, height = BOARD_HEIGHT, top = BOARD_TOP;
+		groundShadow(look.under, height);
+
+		// rounded ends, lighter at the top and darker at the bottom
+		const int inset[] = {5, 3, 2, 1, 1};
+		for(int row = 0; row < height; ++row)
+		{
+			int in = 0;
+			if(row < 5)
+				in = inset[row];
+			if(height - 1 - row < 5)
+				in = inset[height - 1 - row];
+			const int light = row < height / 3 ? 30 - row * 2 : (row > height * 2 / 3 ? -(row - height * 2 / 3) * 3 : 10);
+			solid(look.under, left + in, top + row, width - 2 * in, 1, 28 + light, 78 + light, 156 + light);
+		}
+		forSeams(left, BOARD_RIGHT, [&](int x) {
+			solid(look.under, x, top + 2, 1, height - 4, 16, 50, 110);
+			solid(look.under, x + 1, top + 2, 1, height - 4, 60, 110, 190);
+		});
+
+		look.panelX = left + 6;
+		look.panelY = top + 4;
+		look.panelW = width - 12;
+		look.panelH = height - 8;
+		look.ledGrid = false;
+		return look;
+	}
+}
+
 namespace sponsors
 {
+
+BoardStyle parseBoardStyle(const std::string& name)
+{
+	std::string lower = name;
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+	const auto first = lower.find_first_not_of(" \t\r\n");
+	const auto last = lower.find_last_not_of(" \t\r\n");
+	lower = first == std::string::npos ? std::string() : lower.substr(first, last - first + 1);
+
+	for(BoardStyle style : {BoardStyle::OFF, BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
+	{
+		if(lower == boardStyleName(style))
+			return style;
+	}
+	return BoardStyle::LED;
+}
+
+const char* boardStyleName(BoardStyle style)
+{
+	switch(style)
+	{
+		case BoardStyle::OFF: return "off";
+		case BoardStyle::LED: return "led";
+		case BoardStyle::PRINTED: return "printed";
+		case BoardStyle::WOOD: return "wood";
+		case BoardStyle::SLIM: return "slim";
+		case BoardStyle::PADDED: return "padded";
+	}
+	return "led";
+}
+
+const BoardLook& boardLook(BoardStyle style)
+{
+	static const BoardLook led = makeLed();
+	static const BoardLook printed = makePrinted();
+	static const BoardLook wood = makeWood();
+	static const BoardLook slim = makeSlim();
+	static const BoardLook padded = makePadded();
+	switch(style)
+	{
+		case BoardStyle::PRINTED: return printed;
+		case BoardStyle::WOOD: return wood;
+		case BoardStyle::SLIM: return slim;
+		case BoardStyle::PADDED: return padded;
+		default: return led;
+	}
+}
+
 
 bool validateBmp(const char* data, std::size_t size, std::string* error)
 {
@@ -108,7 +371,7 @@ bool validateBmp(const char* data, std::size_t size, std::string* error)
 	return true;
 }
 
-std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t timeMs)
+std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t timeMs, int panelLeft, int panelWidth)
 {
 	std::vector<Placement> result;
 
@@ -119,23 +382,23 @@ std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t time
 		return result;
 
 	const long long scrolled = (long long)timeMs * SCROLL_SPEED / 1000;
-	long long x = PANEL_LEFT - scrolled % cycle;
+	long long x = panelLeft - scrolled % cycle;
 
 	// every step moves right by at least LOGO_GAP, so this ends
-	for(std::size_t i = 0; x < PANEL_LEFT + PANEL_WIDTH; i = (i + 1) % widths.size())
+	for(std::size_t i = 0; x < panelLeft + panelWidth; i = (i + 1) % widths.size())
 	{
 		const int w = std::max(widths[i], 0);
-		if(x + w > PANEL_LEFT)
+		if(x + w > panelLeft)
 			result.push_back(Placement{i, int(x)});
 		x += w + LOGO_GAP;
 	}
 	return result;
 }
 
-bool clipToPanel(int x, int width, int& skip, int& visible)
+bool clipToPanel(int x, int width, int& skip, int& visible, int panelLeft, int panelWidth)
 {
-	const int left = std::max(x, PANEL_LEFT);
-	const int right = std::min(x + width, PANEL_LEFT + PANEL_WIDTH);
+	const int left = std::max(x, panelLeft);
+	const int right = std::min(x + width, panelLeft + panelWidth);
 	skip = left - x;
 	visible = right - left;
 	return visible > 0;
@@ -148,62 +411,6 @@ std::uint8_t ledMaskAlpha(int x, int y)
 	if(x & 1)
 		return 40;
 	return 0;
-}
-
-const std::vector<Fill>& boardBody()
-{
-	static const std::vector<Fill> body = [] {
-		std::vector<Fill> fills;
-		const int left = BOARD_LEFT;
-		const int width = BOARD_WIDTH;
-		const int bottom = BOARD_BOTTOM;
-		const int top = BOARD_TOP;
-
-		// Cast shadow, a sheared strip from the base going right and slightly back,
-		// 1.1 x the height sideways and 0.1 x the height back. Most of it lies behind the board.
-		const int shadowDx = BOARD_HEIGHT * 11 / 10;
-		const int shadowDy = std::max(2, BOARD_HEIGHT / 10);
-		for(int r = 0; r < shadowDy; ++r)
-		{
-			const int x0 = left + shadowDx * r / shadowDy;
-			const int x1 = BOARD_RIGHT + shadowDx * (r + 1) / shadowDy;
-			fills.push_back(Fill{x0, bottom - 1 - r, x1 - x0, 1, 80, 84, 78, 255, Blend::MULTIPLY});
-			// slightly soft outer edge like the palm shadows
-			fills.push_back(Fill{x1, bottom - 1 - r, 2, 1, 150, 152, 148, 255, Blend::MULTIPLY});
-		}
-
-		// contact darkening in front of the base, small because the front is sunlit
-		fills.push_back(Fill{left - 2, bottom, width + 4, 1, 120, 122, 118, 255, Blend::MULTIPLY});
-		fills.push_back(Fill{left - 3, bottom + 1, width + 6, 1, 190, 190, 186, 255, Blend::MULTIPLY});
-		fills.push_back(Fill{left - 3, bottom + 2, width + 6, 1, 225, 225, 222, 255, Blend::MULTIPLY});
-
-		// top face, seen from slightly above
-		for(int row = 0; row < TOP_FACE; ++row)
-		{
-			const auto shade = std::uint8_t(150 - row * 10);
-			fills.push_back(Fill{left + 2 - row, top + row, width - 4 + 2 * row, 1,
-				shade, std::uint8_t(shade + 2), std::uint8_t(shade + 10), 255, Blend::SOLID});
-		}
-
-		// metal front, a little wider towards the bottom, lit from above
-		for(int row = TOP_FACE; row < BOARD_HEIGHT; ++row)
-		{
-			const int grow = (row - TOP_FACE) / 6;
-			const auto shade = std::uint8_t(92 - row * 2);
-			fills.push_back(Fill{left - grow, top + row, width + 2 * grow, 1,
-				shade, std::uint8_t(shade + 3), std::uint8_t(shade + 9), 255, Blend::SOLID});
-		}
-
-		// dark LED panel, a little lighter at the top
-		for(int row = 0; row < PANEL_HEIGHT; ++row)
-		{
-			const auto shade = std::uint8_t(14 - row / 2);
-			fills.push_back(Fill{PANEL_LEFT, PANEL_TOP + row, PANEL_WIDTH, 1,
-				shade, std::uint8_t(shade + 1), std::uint8_t(shade + 3), 255, Blend::SOLID});
-		}
-		return fills;
-	}();
-	return body;
 }
 
 const std::vector<BackgroundCopy>& sandDrift()

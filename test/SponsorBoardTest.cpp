@@ -188,19 +188,76 @@ BOOST_AUTO_TEST_CASE( sponsor_board_hides_without_logos )
 
 BOOST_AUTO_TEST_CASE( sponsor_board_stays_in_its_band )
 {
-	// everything the board draws stays between the waterline band and the players
-	for(const auto& fill : sponsors::boardBody())
+	using sponsors::BoardStyle;
+	// everything every style draws stays between the waterline band and the players
+	for(BoardStyle style : {BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
 	{
-		BOOST_CHECK(fill.y >= sponsors::BOARD_TOP);
-		BOOST_CHECK(fill.y + fill.h <= sponsors::BOARD_TOP + sponsors::AREA_HEIGHT);
+		const auto& look = sponsors::boardLook(style);
+		for(const auto* fills : {&look.under, &look.over})
+		{
+			for(const auto& fill : *fills)
+			{
+				BOOST_CHECK(fill.y >= sponsors::AREA_TOP);
+				BOOST_CHECK(fill.y + fill.h <= sponsors::AREA_TOP + sponsors::AREA_HEIGHT);
+			}
+		}
+		BOOST_CHECK(look.panelH >= sponsors::LOGO_HEIGHT);
+		BOOST_CHECK(look.panelX >= sponsors::BOARD_LEFT);
+		BOOST_CHECK(look.panelX + look.panelW <= sponsors::BOARD_RIGHT);
 	}
+	BOOST_CHECK(sponsors::boardLook(BoardStyle::LED).ledGrid);
+	BOOST_CHECK(sponsors::boardLook(BoardStyle::SLIM).ledGrid);
+	BOOST_CHECK(!sponsors::boardLook(BoardStyle::PRINTED).ledGrid);
+	BOOST_CHECK(!sponsors::boardLook(BoardStyle::WOOD).ledGrid);
+
 	for(const auto& copy : sponsors::sandDrift())
 	{
 		BOOST_CHECK(copy.dstY >= sponsors::BOARD_TOP);
 		BOOST_CHECK(copy.dstY + copy.h <= sponsors::BOARD_BOTTOM);
 	}
-	BOOST_CHECK(sponsors::BOARD_TOP + sponsors::AREA_HEIGHT < 400);
-	BOOST_CHECK(sponsors::BOARD_TOP > 24 + 24);
+	BOOST_CHECK(sponsors::AREA_TOP + sponsors::AREA_HEIGHT < 400);
+	BOOST_CHECK(sponsors::AREA_TOP > 24 + 24);
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_board_style_parsing )
+{
+	using sponsors::BoardStyle;
+	using sponsors::parseBoardStyle;
+	BOOST_CHECK(parseBoardStyle("off") == BoardStyle::OFF);
+	BOOST_CHECK(parseBoardStyle("led") == BoardStyle::LED);
+	BOOST_CHECK(parseBoardStyle("printed") == BoardStyle::PRINTED);
+	BOOST_CHECK(parseBoardStyle("wood") == BoardStyle::WOOD);
+	BOOST_CHECK(parseBoardStyle("slim") == BoardStyle::SLIM);
+	BOOST_CHECK(parseBoardStyle("padded") == BoardStyle::PADDED);
+	BOOST_CHECK(parseBoardStyle(" Wood\n") == BoardStyle::WOOD);
+
+	// unknown values fall back to led
+	BOOST_CHECK(parseBoardStyle("") == BoardStyle::LED);
+	BOOST_CHECK(parseBoardStyle("neon") == BoardStyle::LED);
+	BOOST_CHECK(parseBoardStyle("ledx") == BoardStyle::LED);
+
+	for(BoardStyle style : {BoardStyle::OFF, BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
+		BOOST_CHECK(parseBoardStyle(sponsors::boardStyleName(style)) == style);
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_board_off_style_hides )
+{
+	sponsors::BoardState board;
+	board.setVisible(true);
+	board.setLogoWidths({60});
+	BOOST_CHECK(board.active());
+	board.setStyle(sponsors::BoardStyle::OFF);
+	BOOST_CHECK(!board.active());
+	BOOST_CHECK(board.placements(500).empty());
+	board.setStyle(sponsors::BoardStyle::WOOD);
+	BOOST_CHECK(board.active());
+	// logos scroll inside the panel of the chosen style
+	const auto& look = sponsors::boardLook(sponsors::BoardStyle::WOOD);
+	for(const auto& p : board.placements(500))
+	{
+		BOOST_CHECK(p.x + 60 > look.panelX);
+		BOOST_CHECK(p.x < look.panelX + look.panelW);
+	}
 }
 
 BOOST_AUTO_TEST_SUITE_END()

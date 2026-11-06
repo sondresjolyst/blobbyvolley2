@@ -146,6 +146,9 @@ class RenderManager : public ObjectCounter<RenderManager>
 		// The board is drawn when this is on and at least one logo is loaded
 		void showSponsors(bool show);
 
+		// Board style as sent by the server, see sponsors::parseBoardStyle. OFF hides the board.
+		void setSponsorBoardStyle(sponsors::BoardStyle style);
+
 		void setMouseMarker(float position);
 
 		// This simply draws the given text with its top left corner at the
@@ -208,6 +211,9 @@ class RenderManager : public ObjectCounter<RenderManager>
 
 		// true when the sponsor board should be drawn
 		bool sponsorBoardActive() const;
+
+		// the look of the current board style
+		const sponsors::BoardLook& sponsorLook() const;
 
 		// visible logos and their positions at the current time
 		std::vector<sponsors::Placement> sponsorLayout() const;
