@@ -11,7 +11,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
-COPY CMakeLists.txt ./
+COPY CMakeLists.txt version.txt ./
+COPY cmake ./cmake
 COPY deps ./deps
 COPY data ./data
 COPY src ./src
