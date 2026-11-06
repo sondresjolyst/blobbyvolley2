@@ -119,26 +119,92 @@ std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t time
 		return result;
 
 	const long long scrolled = (long long)timeMs * SCROLL_SPEED / 1000;
-	long long x = BOARD_LEFT - scrolled % cycle;
+	long long x = PANEL_LEFT - scrolled % cycle;
 
 	// every step moves right by at least LOGO_GAP, so this ends
-	for(std::size_t i = 0; x < BOARD_LEFT + BOARD_WIDTH; i = (i + 1) % widths.size())
+	for(std::size_t i = 0; x < PANEL_LEFT + PANEL_WIDTH; i = (i + 1) % widths.size())
 	{
 		const int w = std::max(widths[i], 0);
-		if(x + w > BOARD_LEFT)
+		if(x + w > PANEL_LEFT)
 			result.push_back(Placement{i, int(x)});
 		x += w + LOGO_GAP;
 	}
 	return result;
 }
 
+bool clipToPanel(int x, int width, int& skip, int& visible)
+{
+	const int left = std::max(x, PANEL_LEFT);
+	const int right = std::min(x + width, PANEL_LEFT + PANEL_WIDTH);
+	skip = left - x;
+	visible = right - left;
+	return visible > 0;
+}
+
 std::uint8_t ledMaskAlpha(int x, int y)
 {
 	if(y & 1)
-		return 120;
+		return 80;
 	if(x & 1)
-		return 70;
+		return 40;
 	return 0;
+}
+
+const std::vector<Fill>& boardBody()
+{
+	static const std::vector<Fill> body = [] {
+		std::vector<Fill> fills;
+		const int bottom = BOARD_TOP + BOARD_HEIGHT;
+
+		// soft shadow on the sand, falling slightly to the left like the palm shadows
+		for(int row = 0; row < SHADOW_HEIGHT; ++row)
+		{
+			const auto alpha = std::uint8_t(80 - row * 9);
+			fills.push_back(Fill{BOARD_LEFT - 2 - row * 2, bottom + row, BOARD_WIDTH + 2, 1, 40, 30, 10, alpha});
+		}
+
+		// short legs
+		for(int x = BOARD_LEFT + 20; x < BOARD_LEFT + BOARD_WIDTH; x += 186)
+		{
+			fills.push_back(Fill{x, bottom, 4, LEG_HEIGHT, 58, 60, 66, 255});
+			fills.push_back(Fill{x + 3, bottom, 1, LEG_HEIGHT, 30, 31, 35, 255});
+		}
+
+		// metal frame, lit from above
+		for(int row = 0; row < BOARD_HEIGHT; ++row)
+		{
+			const int shade = row == 0 ? 170 : 112 - row * 3;
+			fills.push_back(Fill{BOARD_LEFT, BOARD_TOP + row, BOARD_WIDTH, 1,
+				std::uint8_t(shade), std::uint8_t(shade + 3), std::uint8_t(shade + 10), 255});
+		}
+
+		// dark panel, a little lighter at the top
+		for(int row = 0; row < PANEL_HEIGHT; ++row)
+		{
+			const int shade = 24 - row;
+			fills.push_back(Fill{PANEL_LEFT, PANEL_TOP + row, PANEL_WIDTH, 1,
+				std::uint8_t(shade), std::uint8_t(shade + 1), std::uint8_t(shade + 3), 255});
+		}
+		return fills;
+	}();
+	return body;
+}
+
+int scaledWidth(int width, int height)
+{
+	if(width <= 0 || height <= 0)
+		return 1;
+	return std::max(1, (width * LOGO_HEIGHT + height / 2) / height);
+}
+
+void ledFilter(std::uint8_t& r, std::uint8_t& g, std::uint8_t& b)
+{
+	// mix a quarter of the grey value in and dim to 85 percent
+	const int lum = (r * 30 + g * 59 + b * 11) / 100;
+	auto mix = [lum](std::uint8_t c) { return std::uint8_t((c * 3 + lum) / 4 * 85 / 100); };
+	r = mix(r);
+	g = mix(g);
+	b = mix(b);
 }
 
 std::vector<std::vector<char>> readLogoFiles(const std::string& directory)

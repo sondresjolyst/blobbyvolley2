@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "IUserConfigReader.h"
 #include "FontIndex.h"
 
+#include <algorithm>
 #include <iostream>
 
 /* implementation */
@@ -225,12 +226,70 @@ void RenderManager::setSponsorLogos(const std::vector<std::vector<char>>& bmpFil
 			continue;
 		}
 
-		surfaces.push_back(surface);
-		widths.push_back(surface->w);
+		SDL_Surface* logo = prepareSponsorLogo(surface);
+		SDL_FreeSurface(surface);
+		if(!logo)
+			continue;
+
+		surfaces.push_back(logo);
+		widths.push_back(logo->w);
 	}
 
 	mSponsorWidths = widths;
 	replaceSponsorSurfaces(std::move(surfaces));
+}
+
+SDL_Surface* RenderManager::prepareSponsorLogo(SDL_Surface* source)
+{
+	// Scale to the panel height with a box filter and give it the LED look.
+	// This happens once here, so both renderers draw the same pixels 1:1.
+	SDL_Surface* src = SDL_ConvertSurfaceFormat(source, SDL_PIXELFORMAT_ARGB8888, 0);
+	if(!src)
+		return nullptr;
+
+	const int dw = sponsors::scaledWidth(src->w, src->h);
+	const int dh = sponsors::LOGO_HEIGHT;
+	SDL_Surface* dst = SDL_CreateRGBSurfaceWithFormat(0, dw, dh, 32, SDL_PIXELFORMAT_ARGB8888);
+	if(!dst)
+	{
+		SDL_FreeSurface(src);
+		return nullptr;
+	}
+
+	SDL_LockSurface(src);
+	SDL_LockSurface(dst);
+	for(int y = 0; y < dh; ++y)
+	{
+		const int y0 = y * src->h / dh;
+		const int y1 = std::max(y0 + 1, (y + 1) * src->h / dh);
+		auto* out = (Uint32*)((Uint8*)dst->pixels + y * dst->pitch);
+		for(int x = 0; x < dw; ++x)
+		{
+			const int x0 = x * src->w / dw;
+			const int x1 = std::max(x0 + 1, (x + 1) * src->w / dw);
+			int r = 0, g = 0, b = 0, n = 0;
+			for(int sy = y0; sy < y1; ++sy)
+			{
+				const auto* in = (const Uint32*)((const Uint8*)src->pixels + sy * src->pitch);
+				for(int sx = x0; sx < x1; ++sx)
+				{
+					r += (in[sx] >> 16) & 0xFF;
+					g += (in[sx] >> 8) & 0xFF;
+					b += in[sx] & 0xFF;
+					++n;
+				}
+			}
+			auto rr = Uint8(r / n);
+			auto gg = Uint8(g / n);
+			auto bb = Uint8(b / n);
+			sponsors::ledFilter(rr, gg, bb);
+			out[x] = 0xFF000000u | (Uint32(rr) << 16) | (Uint32(gg) << 8) | Uint32(bb);
+		}
+	}
+	SDL_UnlockSurface(dst);
+	SDL_UnlockSurface(src);
+	SDL_FreeSurface(src);
+	return dst;
 }
 
 void RenderManager::showSponsors(bool show)

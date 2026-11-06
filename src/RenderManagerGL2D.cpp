@@ -487,35 +487,44 @@ void RenderManagerGL2D::drawSponsorBoard()
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_BLEND);
 
-	// frame and dark panel
+	// shadow, legs, frame and panel
 	glDisable(GL_TEXTURE_2D);
-	glColor4ub(44, 46, 52, 255);
-	drawTexturedRect(BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, BOARD_HEIGHT, 0, 0, 0, 0);
-	glColor4ub(96, 100, 110, 255);
-	drawTexturedRect(BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, 2, 0, 0, 0, 0);
-	glColor4ub(6, 6, 8, 255);
-	drawTexturedRect(BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT, 0, 0, 0, 0);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	for (const auto& fill : boardBody())
+	{
+		if (fill.a < 255)
+			glEnable(GL_BLEND);
+		else
+			glDisable(GL_BLEND);
+		glColor4ub(fill.r, fill.g, fill.b, fill.a);
+		drawTexturedRect(fill.x, fill.y, fill.w, fill.h, 0, 0, 0, 0);
+	}
+	glDisable(GL_BLEND);
 	glEnable(GL_TEXTURE_2D);
 
-	// logos, clipped to the board horizontally by the window edges
+	// logos, cut off at the panel edges
 	glColor4f(1.0, 1.0, 1.0, 1.0);
 	for (const auto& placement : sponsorLayout())
 	{
 		if (placement.logo >= mSponsorLogos.size() || mSponsorLogos[placement.logo].texture == 0)
 			continue;
 		const Texture& logo = mSponsorLogos[placement.logo];
+		int skip, visible;
+		if (!clipToPanel(placement.x, int(logo.w), skip, visible))
+			continue;
+		const float u0 = logo.indices[0];
+		const float du = (logo.indices[2] - logo.indices[0]) / logo.w;
 		glBindTexture(logo.texture);
 		const float top = PANEL_TOP + int(PANEL_HEIGHT - logo.h) / 2;
-		drawTexturedRect(placement.x, top, logo.w, logo.h,
-		                 logo.indices[0], logo.indices[1], logo.indices[4], logo.indices[5]);
+		drawTexturedRect(placement.x + skip, top, visible, logo.h,
+		                 u0 + skip * du, logo.indices[1], u0 + (skip + visible) * du, logo.indices[5]);
 	}
 
 	// LED grid on top
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 	glBindTexture(mSponsorMask);
-	drawTexturedRect(BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT,
-	                 0.f, 0.f, BOARD_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
+	drawTexturedRect(PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT,
+	                 0.f, 0.f, PANEL_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
 	glDisable(GL_BLEND);
 
 	// the net pole stands in front of the board, so draw that strip of the background again.
@@ -526,9 +535,9 @@ void RenderManagerGL2D::drawSponsorBoard()
 	const float offsetX = (texW - 800.f) / 2.f;
 	const float offsetY = (texH - 600.f) / 2.f;
 	glBindTexture(mBackground);
-	drawTexturedRect(ROD_LEFT, BOARD_TOP, ROD_WIDTH, BOARD_HEIGHT,
+	drawTexturedRect(ROD_LEFT, BOARD_TOP, ROD_WIDTH, AREA_HEIGHT,
 	                 (offsetX + ROD_LEFT) / texW, (offsetY + BOARD_TOP) / texH,
-	                 (offsetX + ROD_LEFT + ROD_WIDTH) / texW, (offsetY + BOARD_TOP + BOARD_HEIGHT) / texH);
+	                 (offsetX + ROD_LEFT + ROD_WIDTH) / texW, (offsetY + BOARD_TOP + AREA_HEIGHT) / texH);
 }
 
 void RenderManagerGL2D::showShadow(bool shadow)

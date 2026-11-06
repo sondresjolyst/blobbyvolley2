@@ -108,14 +108,14 @@ BOOST_AUTO_TEST_CASE( sponsor_layout_scrolls_with_time )
 	auto start = sponsors::layout(widths, 0);
 	BOOST_REQUIRE(!start.empty());
 	BOOST_CHECK_EQUAL(start[0].logo, 0u);
-	BOOST_CHECK_EQUAL(start[0].x, sponsors::BOARD_LEFT);
+	BOOST_CHECK_EQUAL(start[0].x, sponsors::PANEL_LEFT);
 	BOOST_CHECK_EQUAL(start[1].logo, 1u);
-	BOOST_CHECK_EQUAL(start[1].x, 100 + sponsors::LOGO_GAP);
+	BOOST_CHECK_EQUAL(start[1].x, sponsors::PANEL_LEFT + 100 + sponsors::LOGO_GAP);
 
 	// one second later everything moved left by the scroll speed
 	auto later = sponsors::layout(widths, 1000);
 	BOOST_REQUIRE(!later.empty());
-	BOOST_CHECK_EQUAL(later[0].x, -sponsors::SCROLL_SPEED);
+	BOOST_CHECK_EQUAL(later[0].x, sponsors::PANEL_LEFT - sponsors::SCROLL_SPEED);
 
 	// after a full cycle the board looks the same
 	const int cycle = 100 + 160 + 2 * sponsors::LOGO_GAP;
@@ -135,14 +135,30 @@ BOOST_AUTO_TEST_CASE( sponsor_layout_fills_board )
 	{
 		auto placements = sponsors::layout({32}, t);
 		BOOST_REQUIRE(!placements.empty());
-		BOOST_CHECK(placements.front().x <= sponsors::BOARD_LEFT + sponsors::LOGO_GAP);
-		BOOST_CHECK(placements.back().x + 32 + sponsors::LOGO_GAP >= sponsors::BOARD_LEFT + sponsors::BOARD_WIDTH);
+		BOOST_CHECK(placements.front().x <= sponsors::PANEL_LEFT + sponsors::LOGO_GAP);
+		BOOST_CHECK(placements.back().x + 32 + sponsors::LOGO_GAP >= sponsors::PANEL_LEFT + sponsors::PANEL_WIDTH);
 		for(const auto& p : placements)
 		{
-			BOOST_CHECK(p.x + 32 > sponsors::BOARD_LEFT);
-			BOOST_CHECK(p.x < sponsors::BOARD_LEFT + sponsors::BOARD_WIDTH);
+			BOOST_CHECK(p.x + 32 > sponsors::PANEL_LEFT);
+			BOOST_CHECK(p.x < sponsors::PANEL_LEFT + sponsors::PANEL_WIDTH);
 		}
 	}
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_logo_clipping_and_scaling )
+{
+	int skip = 0, visible = 0;
+	BOOST_CHECK(sponsors::clipToPanel(sponsors::PANEL_LEFT - 10, 50, skip, visible));
+	BOOST_CHECK_EQUAL(skip, 10);
+	BOOST_CHECK_EQUAL(visible, 40);
+	BOOST_CHECK(sponsors::clipToPanel(sponsors::PANEL_LEFT + sponsors::PANEL_WIDTH - 20, 50, skip, visible));
+	BOOST_CHECK_EQUAL(skip, 0);
+	BOOST_CHECK_EQUAL(visible, 20);
+	BOOST_CHECK(!sponsors::clipToPanel(sponsors::PANEL_LEFT - 50, 50, skip, visible));
+
+	BOOST_CHECK_EQUAL(sponsors::scaledWidth(160, 32), 80);
+	BOOST_CHECK_EQUAL(sponsors::scaledWidth(1, 40), 1);
+	BOOST_CHECK(sponsors::LOGO_HEIGHT <= sponsors::PANEL_HEIGHT);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

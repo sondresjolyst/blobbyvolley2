@@ -146,7 +146,7 @@ void RenderManagerSDL::init(int xResolution, int yResolution, bool fullscreen)
 	SDL_FreeSurface(tmpSurface);
 
 	// Create the LED grid that is laid over the sponsor board
-	tmpSurface = SDL_CreateRGBSurface(0, sponsors::BOARD_WIDTH, sponsors::PANEL_HEIGHT, 32,
+	tmpSurface = SDL_CreateRGBSurface(0, sponsors::PANEL_WIDTH, sponsors::PANEL_HEIGHT, 32,
 			0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	SDL_LockSurface(tmpSurface);
 	for (int y = 0; y < tmpSurface->h; ++y)
@@ -490,20 +490,17 @@ void RenderManagerSDL::drawSponsorBoard()
 
 	using namespace sponsors;
 
-	// frame and dark panel
+	// shadow, legs, frame and panel
+	for (const auto& fill : boardBody())
+	{
+		SDL_SetRenderDrawBlendMode(mRenderer, fill.a < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
+		SDL_SetRenderDrawColor(mRenderer, fill.r, fill.g, fill.b, fill.a);
+		const SDL_Rect rect = {fill.x, fill.y, fill.w, fill.h};
+		SDL_RenderFillRect(mRenderer, &rect);
+	}
 	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
-	const SDL_Rect frame = {BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, BOARD_HEIGHT};
-	SDL_SetRenderDrawColor(mRenderer, 44, 46, 52, 255);
-	SDL_RenderFillRect(mRenderer, &frame);
-	const SDL_Rect edge = {BOARD_LEFT, BOARD_TOP, BOARD_WIDTH, 2};
-	SDL_SetRenderDrawColor(mRenderer, 96, 100, 110, 255);
-	SDL_RenderFillRect(mRenderer, &edge);
-	const SDL_Rect panel = {BOARD_LEFT, PANEL_TOP, BOARD_WIDTH, PANEL_HEIGHT};
-	SDL_SetRenderDrawColor(mRenderer, 6, 6, 8, 255);
-	SDL_RenderFillRect(mRenderer, &panel);
 
-	// logos, clipped to the panel
-	SDL_RenderSetClipRect(mRenderer, &panel);
+	// logos, cut off at the panel edges
 	for (const auto& placement : sponsorLayout())
 	{
 		if (placement.logo >= mSponsorLogos.size())
@@ -512,12 +509,16 @@ void RenderManagerSDL::drawSponsorBoard()
 		int w = 0, h = 0;
 		if (!logo || SDL_QueryTexture(logo, nullptr, nullptr, &w, &h) != 0)
 			continue;
-		const SDL_Rect target = {placement.x, PANEL_TOP + (PANEL_HEIGHT - h) / 2, w, h};
-		SDL_RenderCopy(mRenderer, logo, nullptr, &target);
+		int skip, visible;
+		if (!clipToPanel(placement.x, w, skip, visible))
+			continue;
+		const SDL_Rect source = {skip, 0, visible, h};
+		const SDL_Rect target = {placement.x + skip, PANEL_TOP + (PANEL_HEIGHT - h) / 2, visible, h};
+		SDL_RenderCopy(mRenderer, logo, &source, &target);
 	}
-	SDL_RenderSetClipRect(mRenderer, nullptr);
 
 	// LED grid on top
+	const SDL_Rect panel = {PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT};
 	SDL_RenderCopy(mRenderer, mSponsorMask, nullptr, &panel);
 
 	// drawGame restores the net pole from the background afterwards, so it stands in front of the board

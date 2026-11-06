@@ -36,21 +36,48 @@ namespace sponsors
 	constexpr std::size_t MAX_LOGOS = 32;
 
 	/// Board geometry in the 800x600 game coordinates.
-	/// The board sits behind the net at the horizon, below the score and above the players.
-	constexpr int BOARD_LEFT = 0;
-	constexpr int BOARD_WIDTH = 800;
-	constexpr int BOARD_TOP = 322;
-	constexpr int BOARD_HEIGHT = 56;
-	constexpr int PANEL_TOP = BOARD_TOP + 6;
-	constexpr int PANEL_HEIGHT = BOARD_HEIGHT - 12;
+	/// A low LED board stands on the sand behind the court, just below the waterline.
+	/// It sits below the score and above the players and is drawn behind everything else.
+	constexpr int BOARD_LEFT = 16;
+	constexpr int BOARD_WIDTH = 768;
+	constexpr int BOARD_TOP = 314;
+	constexpr int BOARD_HEIGHT = 24;
+	constexpr int FRAME = 2;
+	constexpr int PANEL_LEFT = BOARD_LEFT + FRAME;
+	constexpr int PANEL_WIDTH = BOARD_WIDTH - 2 * FRAME;
+	constexpr int PANEL_TOP = BOARD_TOP + FRAME;
+	constexpr int PANEL_HEIGHT = BOARD_HEIGHT - 2 * FRAME;
+	constexpr int LEG_HEIGHT = 5;
+	constexpr int SHADOW_HEIGHT = 8;
+	/// everything the board draws, including legs and shadow, lies in this band
+	constexpr int AREA_HEIGHT = BOARD_HEIGHT + SHADOW_HEIGHT;
+
+	/// Logos are scaled to this height on the panel.
+	constexpr int LOGO_HEIGHT = 16;
 
 	/// The part of the net pole that is drawn again on top of the board.
 	constexpr int ROD_LEFT = 400 - 7;
 	constexpr int ROD_WIDTH = 14;
 
 	/// Space between two logos and scroll speed in pixels per second.
-	constexpr int LOGO_GAP = 40;
-	constexpr int SCROLL_SPEED = 45;
+	constexpr int LOGO_GAP = 36;
+	constexpr int SCROLL_SPEED = 40;
+
+	/// A filled rectangle of the board body. Alpha below 255 means blended.
+	struct Fill
+	{
+		int x, y, w, h;
+		std::uint8_t r, g, b, a;
+	};
+
+	/// Shadow, legs, frame and panel, in drawing order. Both renderers draw the same list.
+	const std::vector<Fill>& boardBody();
+
+	/// Width of a logo of the given size after scaling it to LOGO_HEIGHT.
+	int scaledWidth(int width, int height);
+
+	/// Dims and desaturates a logo pixel a little so it looks lit by LEDs.
+	void ledFilter(std::uint8_t& r, std::uint8_t& g, std::uint8_t& b);
 
 	/// Checks that data holds an uncompressed 24-bit BMP within the size limits
 	/// whose pixel data fits inside the buffer. On failure, error gets the reason if given.
@@ -59,10 +86,14 @@ namespace sponsors
 	struct Placement
 	{
 		std::size_t logo;	///< index into the logo list
-		int x;				///< left edge in game coordinates
+		int x;				///< left edge in game coordinates, may lie left of the panel
 	};
 
-	/// Computes which logos are visible and where, for logos of the given widths,
+	/// The part of a logo at x with the given width that lies on the panel.
+	/// Returns false when nothing is visible. skip is the number of columns cut off on the left.
+	bool clipToPanel(int x, int width, int& skip, int& visible);
+
+	/// Computes which logos are visible on the panel and where, for scaled logos of the given widths,
 	/// at the given time in milliseconds. The time comes from the render path,
 	/// so the board scrolls with the clock and not with the simulation.
 	std::vector<Placement> layout(const std::vector<int>& widths, std::uint32_t timeMs);

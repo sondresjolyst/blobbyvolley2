@@ -203,6 +203,9 @@ class RenderManager : public ObjectCounter<RenderManager>
 		// The default implementation frees them.
 		virtual void replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces);
 
+		// scales a decoded logo to the panel and applies the LED look, returns a new surface
+		static SDL_Surface* prepareSponsorLogo(SDL_Surface* source);
+
 		// true when the sponsor board should be drawn
 		bool sponsorBoardActive() const;
 
