@@ -163,11 +163,13 @@ const std::vector<Fill>& boardBody()
 			fills.push_back(Fill{BOARD_LEFT - 2 - row * 2, bottom + row, BOARD_WIDTH + 2, 1, 40, 30, 10, alpha});
 		}
 
-		// short legs
-		for(int x = BOARD_LEFT + 20; x < BOARD_LEFT + BOARD_WIDTH; x += 186)
+		// short legs at both ends and under every seam
+		for(int k = 0; k <= SEGMENTS; ++k)
 		{
-			fills.push_back(Fill{x, bottom, 4, LEG_HEIGHT, 58, 60, 66, 255});
-			fills.push_back(Fill{x + 3, bottom, 1, LEG_HEIGHT, 30, 31, 35, 255});
+			const int x = std::min(BOARD_LEFT + k * SEGMENT_WIDTH - 2, BOARD_LEFT + BOARD_WIDTH - 4);
+			const int legX = std::max(x, BOARD_LEFT);
+			fills.push_back(Fill{legX, bottom, 4, LEG_HEIGHT, 58, 60, 66, 255});
+			fills.push_back(Fill{legX + 3, bottom, 1, LEG_HEIGHT, 30, 31, 35, 255});
 		}
 
 		// metal frame, lit from above
@@ -181,13 +183,28 @@ const std::vector<Fill>& boardBody()
 		// dark panel, a little lighter at the top
 		for(int row = 0; row < PANEL_HEIGHT; ++row)
 		{
-			const int shade = 24 - row;
+			const int shade = 14 - row / 2;
 			fills.push_back(Fill{PANEL_LEFT, PANEL_TOP + row, PANEL_WIDTH, 1,
 				std::uint8_t(shade), std::uint8_t(shade + 1), std::uint8_t(shade + 3), 255});
 		}
 		return fills;
 	}();
 	return body;
+}
+
+const std::vector<Fill>& boardSeams()
+{
+	static const std::vector<Fill> seams = [] {
+		std::vector<Fill> fills;
+		for(int k = 1; k < SEGMENTS; ++k)
+		{
+			const int x = BOARD_LEFT + k * SEGMENT_WIDTH - SEAM_WIDTH / 2;
+			fills.push_back(Fill{x, PANEL_TOP, SEAM_WIDTH, PANEL_HEIGHT, 52, 54, 60, 255});
+			fills.push_back(Fill{x, PANEL_TOP, 1, PANEL_HEIGHT, 92, 95, 104, 255});
+		}
+		return fills;
+	}();
+	return seams;
 }
 
 int scaledWidth(int width, int height)

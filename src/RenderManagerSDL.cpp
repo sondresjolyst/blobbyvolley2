@@ -521,6 +521,15 @@ void RenderManagerSDL::drawSponsorBoard()
 	const SDL_Rect panel = {PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT};
 	SDL_RenderCopy(mRenderer, mSponsorMask, nullptr, &panel);
 
+	// gaps between the panels
+	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
+	for (const auto& fill : boardSeams())
+	{
+		SDL_SetRenderDrawColor(mRenderer, fill.r, fill.g, fill.b, fill.a);
+		const SDL_Rect rect = {fill.x, fill.y, fill.w, fill.h};
+		SDL_RenderFillRect(mRenderer, &rect);
+	}
+
 	// drawGame restores the net pole from the background afterwards, so it stands in front of the board
 }
 

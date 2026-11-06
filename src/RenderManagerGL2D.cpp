@@ -527,6 +527,16 @@ void RenderManagerGL2D::drawSponsorBoard()
 	                 0.f, 0.f, PANEL_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
 	glDisable(GL_BLEND);
 
+	// gaps between the panels
+	glDisable(GL_TEXTURE_2D);
+	for (const auto& fill : boardSeams())
+	{
+		glColor4ub(fill.r, fill.g, fill.b, fill.a);
+		drawTexturedRect(fill.x, fill.y, fill.w, fill.h, 0, 0, 0, 0);
+	}
+	glEnable(GL_TEXTURE_2D);
+	glColor4f(1.0, 1.0, 1.0, 1.0);
+
 	// the net pole stands in front of the board, so draw that strip of the background again.
 	// The 800x600 background sits in the middle of its power of two texture.
 	const BufferedImage* background = mImageMap["background"];

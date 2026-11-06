@@ -156,7 +156,7 @@ BOOST_AUTO_TEST_CASE( sponsor_logo_clipping_and_scaling )
 	BOOST_CHECK_EQUAL(visible, 20);
 	BOOST_CHECK(!sponsors::clipToPanel(sponsors::PANEL_LEFT - 50, 50, skip, visible));
 
-	BOOST_CHECK_EQUAL(sponsors::scaledWidth(160, 32), 80);
+	BOOST_CHECK_EQUAL(sponsors::scaledWidth(160, 32), 5 * sponsors::LOGO_HEIGHT);
 	BOOST_CHECK_EQUAL(sponsors::scaledWidth(1, 40), 1);
 	BOOST_CHECK(sponsors::LOGO_HEIGHT <= sponsors::PANEL_HEIGHT);
 }

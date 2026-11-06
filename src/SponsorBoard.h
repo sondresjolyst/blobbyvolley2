@@ -36,24 +36,28 @@ namespace sponsors
 	constexpr std::size_t MAX_LOGOS = 32;
 
 	/// Board geometry in the 800x600 game coordinates.
-	/// A low LED board stands on the sand behind the court, just below the waterline.
+	/// A row of equal LED panels, about 1 m tall at the player scale, stands on the sand
+	/// at the far edge of the court, just below the waterline.
 	/// It sits below the score and above the players and is drawn behind everything else.
 	constexpr int BOARD_LEFT = 16;
 	constexpr int BOARD_WIDTH = 768;
-	constexpr int BOARD_TOP = 314;
-	constexpr int BOARD_HEIGHT = 24;
+	constexpr int BOARD_TOP = 320;
+	constexpr int BOARD_HEIGHT = 30;
 	constexpr int FRAME = 2;
 	constexpr int PANEL_LEFT = BOARD_LEFT + FRAME;
 	constexpr int PANEL_WIDTH = BOARD_WIDTH - 2 * FRAME;
 	constexpr int PANEL_TOP = BOARD_TOP + FRAME;
 	constexpr int PANEL_HEIGHT = BOARD_HEIGHT - 2 * FRAME;
+	constexpr int SEGMENTS = 6;
+	constexpr int SEGMENT_WIDTH = BOARD_WIDTH / SEGMENTS;
+	constexpr int SEAM_WIDTH = 2;
 	constexpr int LEG_HEIGHT = 5;
 	constexpr int SHADOW_HEIGHT = 8;
 	/// everything the board draws, including legs and shadow, lies in this band
 	constexpr int AREA_HEIGHT = BOARD_HEIGHT + SHADOW_HEIGHT;
 
 	/// Logos are scaled to this height on the panel.
-	constexpr int LOGO_HEIGHT = 16;
+	constexpr int LOGO_HEIGHT = 22;
 
 	/// The part of the net pole that is drawn again on top of the board.
 	constexpr int ROD_LEFT = 400 - 7;
@@ -61,7 +65,7 @@ namespace sponsors
 
 	/// Space between two logos and scroll speed in pixels per second.
 	constexpr int LOGO_GAP = 36;
-	constexpr int SCROLL_SPEED = 40;
+	constexpr int SCROLL_SPEED = 30;
 
 	/// A filled rectangle of the board body. Alpha below 255 means blended.
 	struct Fill
@@ -72,6 +76,9 @@ namespace sponsors
 
 	/// Shadow, legs, frame and panel, in drawing order. Both renderers draw the same list.
 	const std::vector<Fill>& boardBody();
+
+	/// The thin gaps between the panels. They are drawn over the scrolling logos.
+	const std::vector<Fill>& boardSeams();
 
 	/// Width of a logo of the given size after scaling it to LOGO_HEIGHT.
 	int scaledWidth(int width, int height);
