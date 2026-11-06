@@ -48,21 +48,23 @@ jobs:
     permissions: {}
     outputs:
       tag: ${{ steps.pick.outputs.tag }}
+      environment: ${{ steps.pick.outputs.environment }}
       latest: ${{ steps.pick.outputs.latest }}
     steps:
-      - name: Pick tag
+      - name: Pick tag and environment
         id: pick
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
         run: |
           if [ "$REF_TYPE" = "tag" ]; then
             echo "tag=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
-            echo "latest=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${SHA:0:7}" >> "$GITHUB_OUTPUT"
+            echo "environment=prod" >> "$GITHUB_OUTPUT"
             echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=dev" >> "$GITHUB_OUTPUT"
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
           fi
 
   push:
@@ -75,7 +77,7 @@ jobs:
     secrets:
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
     with:
-      environment: docker-hub
+      environment: ${{ needs.tag.outputs.environment }}
       registry: registry.hub.docker.com
       username: sondresjo
       repository: sondresjo/blobby-server
