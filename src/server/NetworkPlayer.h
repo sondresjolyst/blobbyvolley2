@@ -55,6 +55,8 @@ class NetworkPlayer : public ObjectCounter<NetworkPlayer>
 		const PlayerID& getID() const;
 		// gets name of this player
 		const std::string& getName() const;
+		// replaces the name, used when a join code is swapped for a nickname
+		void setName(const std::string& name);
 		// gets colour of this player
 		Color getColor() const;
 		// gets side this player wants to play on

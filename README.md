@@ -37,6 +37,24 @@ Players on other machines may need a Windows firewall rule that allows inbound U
 
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
+#### Tournament mode
+In tournament mode each player types a join code from the tournament site as player name. The server swaps the code for the nickname of that player and refuses an unknown code or a code that another connected player already uses. The client then shows why it was refused. Tournament mode is off by default. To turn it on, set these values in the server config:
+```xml
+<var name="tournament_mode" value="true"/>
+<var name="tournament_players_file" value="tournament_players.xml"/>
+```
+A relative path starts in the working directory of the server. The players file looks like this:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<tournament>
+	<player id="12" nickname="Ola" code="K7QM2XPR4T"/>
+	<player id="17" nickname="Kari" code="B9HNZ3WD6F"/>
+</tournament>
+```
+A code has 10 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Players may type it in lower case. A nickname is 1 to 15 bytes of UTF-8. The `id` is the player id on the site and may be left out. The server skips an entry with a bad code or nickname, and it skips every entry of a code that appears more than once. Other elements below `<tournament>` are ignored.
+
+The server reads the file again within a few seconds after it changes. If the file is missing or is not valid XML, the server keeps the players it read last and logs an error. Write a new file under another name and rename it over the old one, so the server never reads half a file. The log shows only the first 3 characters of a code.
+
 ### Source Code
 Clone the git repository:
 ```bash

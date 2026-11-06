@@ -52,6 +52,9 @@
 	<string english = "server full" translation = "server full" />
 	<string english = " by " translation = " by " />
 	<string english = "challenger: " translation = "challenger: " />
+	<string english = "the server refused to let you in" translation = "the server refused to let you in" />
+	<string english = "unknown join code" translation = "unknown join code" />
+	<string english = "join code already in use" translation = "join code already in use" />
 	<string english = "games: " translation = "games: " />
 	<string english = "random" translation = "random" />
 	<string english = "rules: " translation = "rules: " />

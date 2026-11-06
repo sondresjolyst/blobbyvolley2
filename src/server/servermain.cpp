@@ -106,6 +106,8 @@ int main(int argc, char** argv)
 	int maxClients = 100;
 	std::string rulesFile = DEFAULT_RULES_FILE;
 	std::string gameSpeeds = "75";
+	bool tournamentMode = false;
+	std::string tournamentPlayersFile;
 
 	UserConfig config;
 	try
@@ -114,6 +116,9 @@ int main(int argc, char** argv)
 		maxClients = config.getInteger("maximum_clients");
 		rulesFile  = config.getString("rules", DEFAULT_RULES_FILE);
 		gameSpeeds = config.getString("speeds", gameSpeeds);
+		tournamentMode = config.getBool("tournament_mode", false);
+		if(tournamentMode)
+			tournamentPlayersFile = config.getString("tournament_players_file");
 
 		// bring that value into a sane range
 		if(maxClients <= 0 || maxClients > 150)
@@ -135,6 +140,13 @@ int main(int argc, char** argv)
 	std::transform(speed_vec_str.begin(), speed_vec_str.end(), std::back_inserter(speed_vec), [](const std::string& v ){ return std::stof(v);});
 
 	DedicatedServer server(myinfo, rule_vec, speed_vec, maxClients);
+
+	if(tournamentMode)
+	{
+		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
+		server.setJoinCodeGate(std::move(gate));
+		syslog(LOG_NOTICE, "Tournament mode is on, players join with codes from %s", tournamentPlayersFile.c_str());
+	}
 
 	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server version %i.%i started", BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
 

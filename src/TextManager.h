@@ -106,6 +106,9 @@ class TextManager
 			NET_RULES_TITLE,
 			NET_RULES_BY,
 			NET_CHALLENGER,
+			NET_ENTRY_REFUSED,
+			NET_UNKNOWN_CODE,
+			NET_CODE_IN_USE,
 
 			// options
 			OP_TOUCH_TYPE,

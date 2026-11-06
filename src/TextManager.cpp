@@ -212,6 +212,9 @@ void TextManager::setDefault()
 	mStrings[NET_RULES_TITLE] = "rules: ";
 	mStrings[NET_RULES_BY] = " by ";
 	mStrings[NET_CHALLENGER] = "challenger: ";
+	mStrings[NET_ENTRY_REFUSED] = "the server refused to let you in";
+	mStrings[NET_UNKNOWN_CODE] = "unknown join code";
+	mStrings[NET_CODE_IN_USE] = "join code already in use";
 
 	mStrings[OP_TOUCH_TYPE] = "touch input type:";
 	mStrings[OP_TOUCH_ARROWS] = "arrow keys";

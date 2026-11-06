@@ -28,10 +28,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <iosfwd>
 #include <memory>
 #include <set>
+#include <chrono>
 
 #include "NetworkPlayer.h"
 #include "NetworkMessage.h"
 #include "server/MatchMaker.h"
+#include "server/JoinCodes.h"
 
 class ThreadSafeRakServer;
 
@@ -79,6 +81,10 @@ class DedicatedServer
 		// server settings
 		void allowNewPlayers( bool allow );
 
+		/// Turns on tournament mode. Every player then has to send a join code as name.
+		/// Without a gate the server behaves as a casual server.
+		void setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate );
+
 	private:
 		// creates a new game with those players
 		// does not add the game to the active game list
@@ -90,6 +96,8 @@ class DedicatedServer
 		void processSingleMessage(MessageType message_id, PlayerID source, RakNet::BitStream& data);
 		void processEnterServer(PlayerID source, RakNet::BitStream& stream);
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
+		void refuseEntry(PlayerID source, EntryRefusedReason reason);
+		void closeRefusedConnections();
 
 		// raknet server used
 		const std::unique_ptr<ThreadSafeRakServer> mServer;
@@ -118,4 +126,9 @@ class DedicatedServer
 		std::mutex mPacketQueueMutex;
 
 		MatchMaker mMatchMaker;
+
+		// tournament mode, empty on a casual server
+		std::unique_ptr<JoinCodeGate> mJoinCodes;
+		// refused connections and when to close them
+		std::map<PlayerID, std::chrono::steady_clock::time_point> mRefusedConnections;
 };
