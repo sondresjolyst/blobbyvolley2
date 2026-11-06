@@ -235,7 +235,8 @@ void RenderManager::setSponsorLogos(const std::vector<std::vector<char>>& bmpFil
 		widths.push_back(logo->w);
 	}
 
-	mSponsorWidths = widths;
+	// an empty list hides the board and frees the old logos
+	mSponsorBoard.setLogoWidths(widths);
 	replaceSponsorSurfaces(std::move(surfaces));
 }
 
@@ -294,7 +295,7 @@ SDL_Surface* RenderManager::prepareSponsorLogo(SDL_Surface* source)
 
 void RenderManager::showSponsors(bool show)
 {
-	mShowSponsors = show;
+	mSponsorBoard.setVisible(show);
 }
 
 void RenderManager::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
@@ -305,10 +306,10 @@ void RenderManager::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces)
 
 bool RenderManager::sponsorBoardActive() const
 {
-	return mShowSponsors && !mSponsorWidths.empty();
+	return mSponsorBoard.active();
 }
 
 std::vector<sponsors::Placement> RenderManager::sponsorLayout() const
 {
-	return sponsors::layout(mSponsorWidths, SDL_GetTicks());
+	return mSponsorBoard.placements(SDL_GetTicks());
 }

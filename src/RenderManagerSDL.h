@@ -111,5 +111,6 @@ class RenderManagerSDL : public RenderManager
 		void drawTextImpl(const std::string& text, Vector2 position, unsigned int flags);
 		void colorizeBlobs(int player, int frame);
 		void drawSponsorBoard();
+		void drawSponsorFills(const std::vector<sponsors::Fill>& fills);
 };
 

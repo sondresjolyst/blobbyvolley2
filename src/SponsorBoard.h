@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 /// Renderer independent parts of the scrolling sponsor board in the match background.
@@ -36,28 +37,26 @@ namespace sponsors
 	constexpr std::size_t MAX_LOGOS = 32;
 
 	/// Board geometry in the 800x600 game coordinates.
-	/// A row of equal LED panels, about 1 m tall at the player scale, stands on the sand
-	/// at the far edge of the court, just below the waterline.
+	/// A dark LED board with a metal frame stands on the sand behind the court, between the
+	/// palm trunks, so nothing in the background art should be in front of it.
 	/// It sits below the score and above the players and is drawn behind everything else.
-	constexpr int BOARD_LEFT = 16;
-	constexpr int BOARD_WIDTH = 768;
-	constexpr int BOARD_TOP = 320;
+	constexpr int BOARD_LEFT = 96;
+	constexpr int BOARD_RIGHT = 572;
+	constexpr int BOARD_WIDTH = BOARD_RIGHT - BOARD_LEFT;
+	constexpr int BOARD_BOTTOM = 348;
 	constexpr int BOARD_HEIGHT = 30;
-	constexpr int FRAME = 2;
-	constexpr int PANEL_LEFT = BOARD_LEFT + FRAME;
-	constexpr int PANEL_WIDTH = BOARD_WIDTH - 2 * FRAME;
-	constexpr int PANEL_TOP = BOARD_TOP + FRAME;
-	constexpr int PANEL_HEIGHT = BOARD_HEIGHT - 2 * FRAME;
-	constexpr int SEGMENTS = 6;
-	constexpr int SEGMENT_WIDTH = BOARD_WIDTH / SEGMENTS;
-	constexpr int SEAM_WIDTH = 2;
-	constexpr int LEG_HEIGHT = 5;
-	constexpr int SHADOW_HEIGHT = 8;
-	/// everything the board draws, including legs and shadow, lies in this band
-	constexpr int AREA_HEIGHT = BOARD_HEIGHT + SHADOW_HEIGHT;
+	constexpr int BOARD_TOP = BOARD_BOTTOM - BOARD_HEIGHT;
+	/// rows of the top face, seen from slightly above
+	constexpr int TOP_FACE = 3;
+	constexpr int PANEL_LEFT = BOARD_LEFT + 3;
+	constexpr int PANEL_WIDTH = BOARD_WIDTH - 6;
+	constexpr int PANEL_TOP = BOARD_TOP + 5;
+	constexpr int PANEL_HEIGHT = 22;
+	/// everything the board draws lies between BOARD_TOP and BOARD_TOP + AREA_HEIGHT
+	constexpr int AREA_HEIGHT = BOARD_HEIGHT + 3;
 
 	/// Logos are scaled to this height on the panel.
-	constexpr int LOGO_HEIGHT = 22;
+	constexpr int LOGO_HEIGHT = PANEL_HEIGHT;
 
 	/// The part of the net pole that is drawn again on top of the board.
 	constexpr int ROD_LEFT = 400 - 7;
@@ -67,18 +66,39 @@ namespace sponsors
 	constexpr int LOGO_GAP = 36;
 	constexpr int SCROLL_SPEED = 30;
 
-	/// A filled rectangle of the board body. Alpha below 255 means blended.
+	/// How a fill is combined with what is already drawn.
+	enum class Blend
+	{
+		SOLID,		///< replaces the pixels
+		ALPHA,		///< blended with alpha a
+		MULTIPLY	///< multiplies the pixels with the colour, for shadows on the sand
+	};
+
+	/// A filled rectangle of the board.
 	struct Fill
 	{
 		int x, y, w, h;
 		std::uint8_t r, g, b, a;
+		Blend blend;
 	};
 
-	/// Shadow, legs, frame and panel, in drawing order. Both renderers draw the same list.
+	/// A strip of the background copied to another place with alpha, for sand drifting over the base.
+	struct BackgroundCopy
+	{
+		int srcX, srcY, w, h, dstX, dstY;
+		std::uint8_t alpha;
+	};
+
+	/// Cast shadow, contact darkening, frame and panel, in drawing order. Drawn before the logos.
+	/// The shadow follows the palm shadows in the default background: the sun is front left,
+	/// so it falls right and slightly back, at about 0.31 of the sand colour.
 	const std::vector<Fill>& boardBody();
 
-	/// The thin gaps between the panels. They are drawn over the scrolling logos.
-	const std::vector<Fill>& boardSeams();
+	/// Sand drifting over the bottom edge. Drawn after the logos.
+	const std::vector<BackgroundCopy>& sandDrift();
+
+	/// The contact line where the board meets the sand. Drawn last.
+	const std::vector<Fill>& contactLine();
 
 	/// Width of a logo of the given size after scaling it to LOGO_HEIGHT.
 	int scaledWidth(int width, int height);
@@ -107,6 +127,26 @@ namespace sponsors
 
 	/// Alpha of the dark LED grid laid over the panel at a panel pixel. Repeats every 2 pixels.
 	std::uint8_t ledMaskAlpha(int x, int y);
+
+	/// What the renderers need to know about the loaded logos. An empty logo list hides the board,
+	/// so replacing the logos with an empty list at runtime removes it cleanly.
+	class BoardState
+	{
+		public:
+			void setLogoWidths(std::vector<int> widths) { mWidths = std::move(widths); }
+			void setVisible(bool visible) { mVisible = visible; }
+			bool active() const { return mVisible && !mWidths.empty(); }
+			std::size_t logoCount() const { return mWidths.size(); }
+			/// visible logos at the given time, empty when the board is not active
+			std::vector<Placement> placements(std::uint32_t timeMs) const
+			{
+				return active() ? layout(mWidths, timeMs) : std::vector<Placement>{};
+			}
+
+		private:
+			bool mVisible = false;
+			std::vector<int> mWidths;
+	};
 
 	/// Reads all BMP files in the given PhysFS directory, sorted by name.
 	/// Files that are too large, unreadable or not valid logos are skipped with a warning.

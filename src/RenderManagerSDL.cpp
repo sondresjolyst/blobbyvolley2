@@ -483,6 +483,23 @@ void RenderManagerSDL::replaceSponsorSurfaces(std::vector<SDL_Surface*> surfaces
 	}
 }
 
+void RenderManagerSDL::drawSponsorFills(const std::vector<sponsors::Fill>& fills)
+{
+	for (const auto& fill : fills)
+	{
+		switch (fill.blend)
+		{
+			case sponsors::Blend::SOLID: SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE); break;
+			case sponsors::Blend::ALPHA: SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_BLEND); break;
+			case sponsors::Blend::MULTIPLY: SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_MOD); break;
+		}
+		SDL_SetRenderDrawColor(mRenderer, fill.r, fill.g, fill.b, fill.a);
+		const SDL_Rect rect = {fill.x, fill.y, fill.w, fill.h};
+		SDL_RenderFillRect(mRenderer, &rect);
+	}
+	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
+}
+
 void RenderManagerSDL::drawSponsorBoard()
 {
 	if (!sponsorBoardActive())
@@ -490,15 +507,8 @@ void RenderManagerSDL::drawSponsorBoard()
 
 	using namespace sponsors;
 
-	// shadow, legs, frame and panel
-	for (const auto& fill : boardBody())
-	{
-		SDL_SetRenderDrawBlendMode(mRenderer, fill.a < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
-		SDL_SetRenderDrawColor(mRenderer, fill.r, fill.g, fill.b, fill.a);
-		const SDL_Rect rect = {fill.x, fill.y, fill.w, fill.h};
-		SDL_RenderFillRect(mRenderer, &rect);
-	}
-	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
+	// shadow, frame and panel
+	drawSponsorFills(boardBody());
 
 	// logos, cut off at the panel edges
 	for (const auto& placement : sponsorLayout())
@@ -521,14 +531,19 @@ void RenderManagerSDL::drawSponsorBoard()
 	const SDL_Rect panel = {PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT};
 	SDL_RenderCopy(mRenderer, mSponsorMask, nullptr, &panel);
 
-	// gaps between the panels
-	SDL_SetRenderDrawBlendMode(mRenderer, SDL_BLENDMODE_NONE);
-	for (const auto& fill : boardSeams())
+	// sand drifting over the bottom edge
+	SDL_SetTextureBlendMode(mBackground, SDL_BLENDMODE_BLEND);
+	for (const auto& copy : sandDrift())
 	{
-		SDL_SetRenderDrawColor(mRenderer, fill.r, fill.g, fill.b, fill.a);
-		const SDL_Rect rect = {fill.x, fill.y, fill.w, fill.h};
-		SDL_RenderFillRect(mRenderer, &rect);
+		SDL_SetTextureAlphaMod(mBackground, copy.alpha);
+		const SDL_Rect src = {copy.srcX, copy.srcY, copy.w, copy.h};
+		const SDL_Rect dst = {copy.dstX, copy.dstY, copy.w, copy.h};
+		SDL_RenderCopy(mRenderer, mBackground, &src, &dst);
 	}
+	SDL_SetTextureAlphaMod(mBackground, 255);
+	SDL_SetTextureBlendMode(mBackground, SDL_BLENDMODE_NONE);
+
+	drawSponsorFills(contactLine());
 
 	// drawGame restores the net pole from the background afterwards, so it stands in front of the board
 }

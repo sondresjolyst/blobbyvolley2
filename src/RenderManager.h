@@ -217,6 +217,5 @@ class RenderManager : public ObjectCounter<RenderManager>
 	private:
 		std::unique_ptr<BloodManager> mBloodMgr;
 
-		bool mShowSponsors = false;
-		std::vector<int> mSponsorWidths;
+		sponsors::BoardState mSponsorBoard;
 };

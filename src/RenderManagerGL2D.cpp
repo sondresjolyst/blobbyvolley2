@@ -477,6 +477,46 @@ void RenderManagerGL2D::drawTexturedRect(float x, float y, float w, float h, flo
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 
+void RenderManagerGL2D::drawSponsorFills(const std::vector<sponsors::Fill>& fills)
+{
+	glDisable(GL_TEXTURE_2D);
+	for (const auto& fill : fills)
+	{
+		switch (fill.blend)
+		{
+			case sponsors::Blend::SOLID:
+				glDisable(GL_BLEND);
+				break;
+			case sponsors::Blend::ALPHA:
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glEnable(GL_BLEND);
+				break;
+			case sponsors::Blend::MULTIPLY:
+				glBlendFunc(GL_DST_COLOR, GL_ZERO);
+				glEnable(GL_BLEND);
+				break;
+		}
+		glColor4ub(fill.r, fill.g, fill.b, fill.a);
+		drawTexturedRect(fill.x, fill.y, fill.w, fill.h, 0, 0, 0, 0);
+	}
+	glDisable(GL_BLEND);
+	glEnable(GL_TEXTURE_2D);
+}
+
+void RenderManagerGL2D::drawBackgroundPart(int srcX, int srcY, int w, int h, int dstX, int dstY)
+{
+	// the 800x600 background sits in the middle of its power of two texture
+	const BufferedImage* background = mImageMap["background"];
+	const float texW = background->w;
+	const float texH = background->h;
+	const float offsetX = (texW - 800.f) / 2.f;
+	const float offsetY = (texH - 600.f) / 2.f;
+	glBindTexture(mBackground);
+	drawTexturedRect(dstX, dstY, w, h,
+	                 (offsetX + srcX) / texW, (offsetY + srcY) / texH,
+	                 (offsetX + srcX + w) / texW, (offsetY + srcY + h) / texH);
+}
+
 void RenderManagerGL2D::drawSponsorBoard()
 {
 	if (!sponsorBoardActive())
@@ -487,20 +527,8 @@ void RenderManagerGL2D::drawSponsorBoard()
 	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_BLEND);
 
-	// shadow, legs, frame and panel
-	glDisable(GL_TEXTURE_2D);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	for (const auto& fill : boardBody())
-	{
-		if (fill.a < 255)
-			glEnable(GL_BLEND);
-		else
-			glDisable(GL_BLEND);
-		glColor4ub(fill.r, fill.g, fill.b, fill.a);
-		drawTexturedRect(fill.x, fill.y, fill.w, fill.h, 0, 0, 0, 0);
-	}
-	glDisable(GL_BLEND);
-	glEnable(GL_TEXTURE_2D);
+	// shadow, frame and panel
+	drawSponsorFills(boardBody());
 
 	// logos, cut off at the panel edges
 	glColor4f(1.0, 1.0, 1.0, 1.0);
@@ -521,33 +549,25 @@ void RenderManagerGL2D::drawSponsorBoard()
 	}
 
 	// LED grid on top
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 	glBindTexture(mSponsorMask);
 	drawTexturedRect(PANEL_LEFT, PANEL_TOP, PANEL_WIDTH, PANEL_HEIGHT,
 	                 0.f, 0.f, PANEL_WIDTH / 2.f, PANEL_HEIGHT / 2.f);
+
+	// sand drifting over the bottom edge
+	for (const auto& copy : sandDrift())
+	{
+		glColor4ub(255, 255, 255, copy.alpha);
+		drawBackgroundPart(copy.srcX, copy.srcY, copy.w, copy.h, copy.dstX, copy.dstY);
+	}
 	glDisable(GL_BLEND);
 
-	// gaps between the panels
-	glDisable(GL_TEXTURE_2D);
-	for (const auto& fill : boardSeams())
-	{
-		glColor4ub(fill.r, fill.g, fill.b, fill.a);
-		drawTexturedRect(fill.x, fill.y, fill.w, fill.h, 0, 0, 0, 0);
-	}
-	glEnable(GL_TEXTURE_2D);
-	glColor4f(1.0, 1.0, 1.0, 1.0);
+	drawSponsorFills(contactLine());
 
-	// the net pole stands in front of the board, so draw that strip of the background again.
-	// The 800x600 background sits in the middle of its power of two texture.
-	const BufferedImage* background = mImageMap["background"];
-	const float texW = background->w;
-	const float texH = background->h;
-	const float offsetX = (texW - 800.f) / 2.f;
-	const float offsetY = (texH - 600.f) / 2.f;
-	glBindTexture(mBackground);
-	drawTexturedRect(ROD_LEFT, BOARD_TOP, ROD_WIDTH, AREA_HEIGHT,
-	                 (offsetX + ROD_LEFT) / texW, (offsetY + BOARD_TOP) / texH,
-	                 (offsetX + ROD_LEFT + ROD_WIDTH) / texW, (offsetY + BOARD_TOP + AREA_HEIGHT) / texH);
+	// the net pole stands in front of the board, so draw that strip of the background again
+	glColor4f(1.0, 1.0, 1.0, 1.0);
+	drawBackgroundPart(ROD_LEFT, BOARD_TOP, ROD_WIDTH, AREA_HEIGHT, ROD_LEFT, BOARD_TOP);
 }
 
 void RenderManagerGL2D::showShadow(bool shadow)

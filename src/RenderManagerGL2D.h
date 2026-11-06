@@ -112,6 +112,8 @@ class RenderManagerGL2D : public RenderManager
 		int getNextPOT(int npot);
 		void deleteSponsorLogos();
 		void drawSponsorBoard();
+		void drawSponsorFills(const std::vector<sponsors::Fill>& fills);
+		void drawBackgroundPart(int srcX, int srcY, int w, int h, int dstX, int dstY);
 		void drawTexturedRect(float x, float y, float w, float h, float u0, float v0, float u1, float v1);
 
 		void glEnable(unsigned int flag);

@@ -154,57 +154,81 @@ const std::vector<Fill>& boardBody()
 {
 	static const std::vector<Fill> body = [] {
 		std::vector<Fill> fills;
-		const int bottom = BOARD_TOP + BOARD_HEIGHT;
+		const int left = BOARD_LEFT;
+		const int width = BOARD_WIDTH;
+		const int bottom = BOARD_BOTTOM;
+		const int top = BOARD_TOP;
 
-		// soft shadow on the sand, falling slightly to the left like the palm shadows
-		for(int row = 0; row < SHADOW_HEIGHT; ++row)
+		// Cast shadow, a sheared strip from the base going right and slightly back,
+		// 1.1 x the height sideways and 0.1 x the height back. Most of it lies behind the board.
+		const int shadowDx = BOARD_HEIGHT * 11 / 10;
+		const int shadowDy = std::max(2, BOARD_HEIGHT / 10);
+		for(int r = 0; r < shadowDy; ++r)
 		{
-			const auto alpha = std::uint8_t(80 - row * 9);
-			fills.push_back(Fill{BOARD_LEFT - 2 - row * 2, bottom + row, BOARD_WIDTH + 2, 1, 40, 30, 10, alpha});
+			const int x0 = left + shadowDx * r / shadowDy;
+			const int x1 = BOARD_RIGHT + shadowDx * (r + 1) / shadowDy;
+			fills.push_back(Fill{x0, bottom - 1 - r, x1 - x0, 1, 80, 84, 78, 255, Blend::MULTIPLY});
+			// slightly soft outer edge like the palm shadows
+			fills.push_back(Fill{x1, bottom - 1 - r, 2, 1, 150, 152, 148, 255, Blend::MULTIPLY});
 		}
 
-		// short legs at both ends and under every seam
-		for(int k = 0; k <= SEGMENTS; ++k)
+		// contact darkening in front of the base, small because the front is sunlit
+		fills.push_back(Fill{left - 2, bottom, width + 4, 1, 120, 122, 118, 255, Blend::MULTIPLY});
+		fills.push_back(Fill{left - 3, bottom + 1, width + 6, 1, 190, 190, 186, 255, Blend::MULTIPLY});
+		fills.push_back(Fill{left - 3, bottom + 2, width + 6, 1, 225, 225, 222, 255, Blend::MULTIPLY});
+
+		// top face, seen from slightly above
+		for(int row = 0; row < TOP_FACE; ++row)
 		{
-			const int x = std::min(BOARD_LEFT + k * SEGMENT_WIDTH - 2, BOARD_LEFT + BOARD_WIDTH - 4);
-			const int legX = std::max(x, BOARD_LEFT);
-			fills.push_back(Fill{legX, bottom, 4, LEG_HEIGHT, 58, 60, 66, 255});
-			fills.push_back(Fill{legX + 3, bottom, 1, LEG_HEIGHT, 30, 31, 35, 255});
+			const auto shade = std::uint8_t(150 - row * 10);
+			fills.push_back(Fill{left + 2 - row, top + row, width - 4 + 2 * row, 1,
+				shade, std::uint8_t(shade + 2), std::uint8_t(shade + 10), 255, Blend::SOLID});
 		}
 
-		// metal frame, lit from above
-		for(int row = 0; row < BOARD_HEIGHT; ++row)
+		// metal front, a little wider towards the bottom, lit from above
+		for(int row = TOP_FACE; row < BOARD_HEIGHT; ++row)
 		{
-			const int shade = row == 0 ? 170 : 112 - row * 3;
-			fills.push_back(Fill{BOARD_LEFT, BOARD_TOP + row, BOARD_WIDTH, 1,
-				std::uint8_t(shade), std::uint8_t(shade + 3), std::uint8_t(shade + 10), 255});
+			const int grow = (row - TOP_FACE) / 6;
+			const auto shade = std::uint8_t(92 - row * 2);
+			fills.push_back(Fill{left - grow, top + row, width + 2 * grow, 1,
+				shade, std::uint8_t(shade + 3), std::uint8_t(shade + 9), 255, Blend::SOLID});
 		}
 
-		// dark panel, a little lighter at the top
+		// dark LED panel, a little lighter at the top
 		for(int row = 0; row < PANEL_HEIGHT; ++row)
 		{
-			const int shade = 14 - row / 2;
+			const auto shade = std::uint8_t(14 - row / 2);
 			fills.push_back(Fill{PANEL_LEFT, PANEL_TOP + row, PANEL_WIDTH, 1,
-				std::uint8_t(shade), std::uint8_t(shade + 1), std::uint8_t(shade + 3), 255});
+				shade, std::uint8_t(shade + 1), std::uint8_t(shade + 3), 255, Blend::SOLID});
 		}
 		return fills;
 	}();
 	return body;
 }
 
-const std::vector<Fill>& boardSeams()
+const std::vector<BackgroundCopy>& sandDrift()
 {
-	static const std::vector<Fill> seams = [] {
-		std::vector<Fill> fills;
-		for(int k = 1; k < SEGMENTS; ++k)
+	static const std::vector<BackgroundCopy> drift = [] {
+		std::vector<BackgroundCopy> copies;
+		for(int x = BOARD_LEFT - 4; x < BOARD_RIGHT; x += 5)
 		{
-			const int x = BOARD_LEFT + k * SEGMENT_WIDTH - SEAM_WIDTH / 2;
-			fills.push_back(Fill{x, PANEL_TOP, SEAM_WIDTH, PANEL_HEIGHT, 52, 54, 60, 255});
-			fills.push_back(Fill{x, PANEL_TOP, 1, PANEL_HEIGHT, 92, 95, 104, 255});
+			// a fixed pseudo random depth of 2 to 5 rows per strip
+			const unsigned hash = unsigned(x) * 2654435761u;
+			const int depth = 2 + int((hash >> 13) % 4);
+			for(int k = 0; k < depth; ++k)
+				copies.push_back(BackgroundCopy{x, BOARD_BOTTOM + 3 + k, 5, 1, x, BOARD_BOTTOM - 1 - k, std::uint8_t(230 - k * 50)});
 		}
-		return fills;
+		return copies;
 	}();
-	return seams;
+	return drift;
+}
+
+const std::vector<Fill>& contactLine()
+{
+	static const std::vector<Fill> line = {
+		Fill{BOARD_LEFT - 1, BOARD_BOTTOM - 1, BOARD_WIDTH + 2, 1, 30, 26, 12, 150, Blend::ALPHA}
+	};
+	return line;
 }
 
 int scaledWidth(int width, int height)

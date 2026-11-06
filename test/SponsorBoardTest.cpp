@@ -161,4 +161,46 @@ BOOST_AUTO_TEST_CASE( sponsor_logo_clipping_and_scaling )
 	BOOST_CHECK(sponsors::LOGO_HEIGHT <= sponsors::PANEL_HEIGHT);
 }
 
+BOOST_AUTO_TEST_CASE( sponsor_board_hides_without_logos )
+{
+	sponsors::BoardState board;
+	board.setVisible(true);
+	BOOST_CHECK(!board.active());
+	BOOST_CHECK(board.placements(1000).empty());
+
+	board.setLogoWidths({60, 80});
+	BOOST_CHECK(board.active());
+	BOOST_CHECK(!board.placements(1000).empty());
+
+	// the server sends an empty list when the board is switched off for an event
+	board.setLogoWidths({});
+	BOOST_CHECK(!board.active());
+	BOOST_CHECK_EQUAL(board.logoCount(), 0u);
+	BOOST_CHECK(board.placements(1000).empty());
+
+	// logos sent again bring it back, the option still hides it
+	board.setLogoWidths({60});
+	BOOST_CHECK(board.active());
+	board.setVisible(false);
+	BOOST_CHECK(!board.active());
+	BOOST_CHECK(board.placements(1000).empty());
+}
+
+BOOST_AUTO_TEST_CASE( sponsor_board_stays_in_its_band )
+{
+	// everything the board draws stays between the waterline band and the players
+	for(const auto& fill : sponsors::boardBody())
+	{
+		BOOST_CHECK(fill.y >= sponsors::BOARD_TOP);
+		BOOST_CHECK(fill.y + fill.h <= sponsors::BOARD_TOP + sponsors::AREA_HEIGHT);
+	}
+	for(const auto& copy : sponsors::sandDrift())
+	{
+		BOOST_CHECK(copy.dstY >= sponsors::BOARD_TOP);
+		BOOST_CHECK(copy.dstY + copy.h <= sponsors::BOARD_BOTTOM);
+	}
+	BOOST_CHECK(sponsors::BOARD_TOP + sponsors::AREA_HEIGHT < 400);
+	BOOST_CHECK(sponsors::BOARD_TOP > 24 + 24);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
