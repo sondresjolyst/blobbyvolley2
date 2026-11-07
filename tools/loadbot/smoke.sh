@@ -8,23 +8,25 @@ SERVER_IMAGE=${1:?server image}
 BOT_IMAGE=${2:?bot image}
 TIMEOUT=${SMOKE_TIMEOUT:-300}
 PREFIX=blobby-smoke-$$
-DATA=$(mktemp -d)
+PLAYERS=$(mktemp)
 
 cleanup() {
-	docker rm -f "$PREFIX-server" "$PREFIX-bot1" "$PREFIX-bot2" >/dev/null 2>&1 || true
+	# -v also removes the data volume of the server
+	docker rm -f -v "$PREFIX-server" "$PREFIX-bot1" "$PREFIX-bot2" >/dev/null 2>&1 || true
 	docker network rm "$PREFIX" >/dev/null 2>&1 || true
-	rm -rf "$DATA"
+	rm -f "$PLAYERS"
 }
 trap cleanup EXIT
 
-# Git Bash on Windows needs a Windows path for the volume
-MOUNT=$DATA
-if command -v cygpath >/dev/null 2>&1; then
-	MOUNT=$(cygpath -m "$DATA")
-	export MSYS_NO_PATHCONV=1
+# keeps Git Bash on Windows from changing the paths in the docker commands
+export MSYS_NO_PATHCONV=1
+SOURCE=$PLAYERS
+if command -v cygpath >/dev/null 2>&1
+then
+	SOURCE=$(cygpath -w "$PLAYERS")
 fi
 
-cat > "$DATA/tournament_players.xml" <<'XML'
+cat > "$PLAYERS" <<'XML'
 <?xml version="1.0" encoding="utf-8"?>
 <tournament>
 	<player id="1" nickname="Bot1" code="SMKAAAAAA2"/>
@@ -32,26 +34,28 @@ cat > "$DATA/tournament_players.xml" <<'XML'
 	<match id="1" player1="1" player2="2" scoreToWin="3" bestOf="3" nextGameDelay="3"/>
 </tournament>
 XML
-# the server runs as uid 999 and writes its results next to the players file
-chmod 777 "$DATA"
+# docker cp keeps the owner of the file, and the server reads it as another user
+chmod 644 "$PLAYERS"
 
 docker network create "$PREFIX" >/dev/null
-docker run -d --name "$PREFIX-server" --network "$PREFIX" -v "$MOUNT:/data" \
+# the players file goes into the data volume of the server, where it also writes its results
+docker create --name "$PREFIX-server" --network "$PREFIX" \
 	-e BLOBBY_TOURNAMENT=1 -e BLOBBY_DATA_DIR=/data "$SERVER_IMAGE" >/dev/null
+docker cp "$SOURCE" "$PREFIX-server:/data/tournament_players.xml" >/dev/null
+docker start "$PREFIX-server" >/dev/null
 sleep 2
 docker run -d --name "$PREFIX-bot1" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKAAAAAA2 >/dev/null
 docker run -d --name "$PREFIX-bot2" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKBBBBBB3 >/dev/null
 
-results=$DATA/tournament_results.jsonl
 for _ in $(seq 1 "$TIMEOUT"); do
-	if [ -f "$results" ] && grep -q '"event":"series"' "$results"; then
-		cat "$results"
-		games=$(grep -c '"event":"game"' "$results")
-		if grep -q '"status":"abandoned"' "$results"; then
+	results=$(docker exec "$PREFIX-server" cat /data/tournament_results.jsonl 2>/dev/null || true)
+	if grep -q '"event":"series"' <<< "$results"; then
+		echo "$results"
+		if grep -q '"status":"abandoned"' <<< "$results"; then
 			echo "smoke failed: a game was abandoned"
 			exit 1
 		fi
-		echo "smoke passed: the series was decided after $games games"
+		echo "smoke passed: the series was decided after $(grep -c '"event":"game"' <<< "$results") games"
 		exit 0
 	fi
 	sleep 1

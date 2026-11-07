@@ -36,7 +36,7 @@ The server only starts the games of matches in its players file, or in the sync 
 
 ## Smoke test
 
-`smoke.sh` starts a tournament server without a site, with a players file of two players and one best of 3 match to 3 points. It starts two bots and passes when the results file of the server holds the decided series. It removes its containers, its network and its folder when it ends.
+`smoke.sh` starts a tournament server without a site, with a players file of two players and one best of 3 match to 3 points. It starts two bots and passes when the results file of the server holds the decided series. It removes its containers, the data volume and its network when it ends.
 
     docker build -t blobby-server .
     docker build -f tools/loadbot/Dockerfile -t blobby-loadbot .
