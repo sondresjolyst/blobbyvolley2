@@ -204,9 +204,7 @@ int main(int argc, char** argv)
 		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
 		server.setJoinCodeGate(std::move(gate));
 
-		auto logLine = [](bool problem, const std::string& message){
-			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
-		};
+		const ServerLog logLine = logToSyslog;
 		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
 		std::shared_ptr<TournamentEvents> events = std::make_shared<TournamentLog>(tournamentResultsFile, logLine);
 

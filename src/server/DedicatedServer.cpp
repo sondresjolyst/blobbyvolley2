@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkGame.h"
 #include "GenericIO.h"
 #include "FileExceptions.h"
+#include "ServerLog.h"
 
 #ifndef WIN32
 #ifndef __ANDROID__
@@ -68,6 +69,11 @@ namespace
 extern "C"
 #endif
 void syslog(int pri, const char* format, ...);
+
+void logToSyslog(bool problem, const std::string& message)
+{
+	syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
+}
 
 DedicatedServer::DedicatedServer(ServerInfo info,
 								const std::vector<std::string>& rulefiles,
@@ -351,9 +357,7 @@ void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
 	mJoinCodes = std::move(gate);
 	if( mJoinCodes )
 	{
-		mJoinCodes->setLogFunction([](bool problem, const std::string& message){
-			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
-		});
+		mJoinCodes->setLogFunction(logToSyslog);
 	}
 }
 

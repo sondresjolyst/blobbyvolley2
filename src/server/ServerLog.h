@@ -25,3 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /// Writes a message to the server log. problem is true for a message that needs attention.
 typedef std::function<void(bool problem, const std::string& message)> ServerLog;
+
+/// A ServerLog that writes to syslog, as LOG_ERR for a problem and LOG_NOTICE otherwise.
+void logToSyslog(bool problem, const std::string& message);
