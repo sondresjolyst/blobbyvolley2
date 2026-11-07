@@ -2338,10 +2338,8 @@ bool ReliabilityLayer::IsExpiredTime(unsigned int input, unsigned int currentTim
 	if (IsReceivedPacketHole(input, currentTime))
 		input -= TIMEOUT_TIME*100;
 
-	if (input < currentTime - TIMEOUT_TIME)
-		return true;
-
-	return false;
+	// the clock starts at 0 on some systems and wraps, so compare the difference
+	return static_cast<int>(currentTime - input) > static_cast<int>(TIMEOUT_TIME);
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -2349,7 +2347,7 @@ bool ReliabilityLayer::IsExpiredTime(unsigned int input, unsigned int currentTim
 //-------------------------------------------------------------------------------------------------------
 unsigned int ReliabilityLayer::IsReceivedPacketHole(unsigned int input, unsigned int currentTime) const
 {
-	return input > currentTime+TIMEOUT_TIME;
+	return static_cast<int>(input - currentTime) > static_cast<int>(TIMEOUT_TIME);
 }
 
 //-------------------------------------------------------------------------------------------------------

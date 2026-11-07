@@ -257,4 +257,48 @@ BOOST_FIXTURE_TEST_CASE( reliable_split_parts_within_expiry_reassemble, Reliabil
 	BOOST_CHECK(result[0] == whole);
 }
 
+BOOST_FIXTURE_TEST_CASE( late_packet_right_after_the_clock_starts_is_delivered, ReliabilityLayerFixture )
+{
+	// on some systems the clock starts at 0 when the program starts
+	now = 1000;
+	Part first{UNRELIABLE, 0, 0, 0, makeBytes(4, 47)};
+	Part second{UNRELIABLE, 0, 0, 0, makeBytes(4, 53)};
+	packetNumber = 1;
+	receive(second);
+	packetNumber = 0;
+	receive(first);
+
+	auto result = delivered();
+	BOOST_REQUIRE_EQUAL(result.size(), 2u);
+	BOOST_CHECK(result[0] == second.bytes);
+	BOOST_CHECK(result[1] == first.bytes);
+}
+
+BOOST_FIXTURE_TEST_CASE( late_packet_across_the_clock_wrap_is_delivered, ReliabilityLayerFixture )
+{
+	now = 0xFFFFFFFFu - 2000;
+	Part first{UNRELIABLE, 0, 0, 0, makeBytes(4, 59)};
+	Part second{UNRELIABLE, 0, 0, 0, makeBytes(4, 61)};
+	packetNumber = 1;
+	receive(second);
+	now = 3000;
+	packetNumber = 0;
+	receive(first);
+
+	auto result = delivered();
+	BOOST_REQUIRE_EQUAL(result.size(), 2u);
+	BOOST_CHECK(result[1] == first.bytes);
+}
+
+BOOST_FIXTURE_TEST_CASE( a_packet_seen_before_is_still_dropped, ReliabilityLayerFixture )
+{
+	now = 1000;
+	Part part{UNRELIABLE, 0, 0, 0, makeBytes(4, 67)};
+	packetNumber = 0;
+	receive(part);
+	packetNumber = 0;
+	receive(part);
+	BOOST_CHECK_EQUAL(delivered().size(), 1u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
