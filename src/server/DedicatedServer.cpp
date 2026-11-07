@@ -278,7 +278,8 @@ void DedicatedServer::updateGames()
 		auto game = it.second->getGame();
 		if(game && !game->isGameValid())
 		{
-			game->processPackets();
+			// the game thread is stopped first, so only this thread handles the packets
+			game->finish();
 		}
 	}
 
@@ -709,6 +710,8 @@ void DedicatedServer::createGame(NetworkPlayer& left,
 								switchSide, rules, scoreToWin, gamespeed);
 	left.setGame( newgame );
 	right.setGame( newgame );
+	// the players know the game now, so their answer to the checksum reaches it
+	newgame->start();
 
 	SWLS_Games++;
 
@@ -795,6 +798,13 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 				mTournament->gameFinished( entry.matchId, winner == LEFT_PLAYER ? 1 : 2,
 							entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER),
 							entry.startedAt, std::chrono::system_clock::now(), now_ms );
+			}
+			else if( !entry.game->isGameValid() && entry.game->didNotStart() )
+			{
+				// a player never answered the checksum, the match waits for the organizer
+				entry.reported = true;
+				syslog(LOG_ERR, "Match %d: a player did not answer, the game did not start", entry.matchId);
+				mTournament->gameNotStarted( entry.matchId );
 			}
 			else if( !entry.game->isGameValid() )
 			{
@@ -894,13 +904,39 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	bool switchRight = right.getDesiredSide() == LEFT_PLAYER;
 
 	std::shared_ptr<NetworkGame> game;
+	// the players are detached again when the game cannot start
+	auto detach = [&]()
+	{
+		std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+		if( left.getGame() == game )
+			left.setGame( nullptr );
+		if( right.getGame() == game )
+			right.setGame( nullptr );
+	};
 	try
 	{
 		game = std::make_shared<NetworkGame>( mServer.get(), left, right, switchLeft, switchRight,
 							match.ruleFile, match.scoreToWin, (float)match.speed );
+
+		// a tournament game cannot be paused, so one player cannot freeze a match
+		game->setPauseAllowed( false );
+
+		// a late replay request reaches the new game, which answers with the old replay
+		game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
+		game->setPreviousReplay( RIGHT_PLAYER, std::move(replayRight) );
+
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			left.setGame( game );
+			right.setGame( game );
+		}
+		// the players know the game now, so their answer to the checksum reaches it
+		game->start();
 	}
 	catch( const std::exception& error )
 	{
+		if( game )
+			detach();
 		syslog(LOG_ERR, "Match %d: could not create game %d with rules %s: %s",
 			   match.matchId, order.game, match.ruleFile.c_str(), error.what());
 		mTournament->gameNotStarted( match.matchId );
@@ -908,23 +944,12 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	}
 	catch( ... )
 	{
+		if( game )
+			detach();
 		syslog(LOG_ERR, "Match %d: could not create game %d with rules %s",
 			   match.matchId, order.game, match.ruleFile.c_str());
 		mTournament->gameNotStarted( match.matchId );
 		return;
-	}
-
-	// a tournament game cannot be paused, so one player cannot freeze a match
-	game->setPauseAllowed( false );
-
-	// a late replay request reaches the new game, which answers with the old replay
-	game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
-	game->setPreviousReplay( RIGHT_PLAYER, std::move(replayRight) );
-
-	{
-		std::lock_guard<std::mutex> lock( mPlayerMapMutex );
-		left.setGame( game );
-		right.setGame( game );
 	}
 
 	SWLS_Games++;

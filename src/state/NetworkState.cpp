@@ -128,8 +128,14 @@ void NetworkGameState::init()
 	if (haveRules)
 		mMatch->setRules(TEMP_RULES_NAME);
 
+	mNeedRules = mRulesChecksum != 0 && !haveRules;
+	sendRulesAnswer();
+}
+
+void NetworkGameState::sendRulesAnswer()
+{
 	RakNet::BitStream stream2;
-	makeRulesAnswerPacket(stream2, mRulesChecksum != 0 && !haveRules);
+	makeRulesAnswerPacket(stream2, mNeedRules);
 	mClient->Send(&stream2, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
 }
 
@@ -286,6 +292,12 @@ void NetworkGameState::step_impl()
 			}
 			case ID_RULES_CHECKSUM:
 			{
+				// a server that did not get the answer to its checksum asks again
+				if (mNetworkState == WAITING_FOR_OPPONENT)
+				{
+					sendRulesAnswer();
+					break;
+				}
 				// only a tournament server sends this during a game. It starts the next
 				// game of the match on the same connection.
 				if (mNetworkState != PLAYER_WON && mNetworkState != OPPONENT_DISCONNECTED)
