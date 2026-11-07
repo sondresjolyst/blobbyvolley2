@@ -26,6 +26,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "TournamentProtocol.h"
 
+namespace tinyxml2
+{
+	class XMLDocument;
+	class XMLElement;
+}
+
 /// A match that the tournament site assigned to two players.
 /// The fields have the names and meanings of a match in the sync of the site.
 struct MatchAssignment
@@ -64,6 +70,14 @@ int clampNextGameDelay(int seconds);
 /// True if name is a plain rules file name such as default.lua, without a folder.
 bool isValidRuleFileName(const std::string& name);
 
+/// Reads an optional whole number attribute of an XML element. Returns false when it is there
+/// but not a number from min to max. value only changes when the attribute is read.
+bool readIntAttribute(const tinyxml2::XMLElement* element, const char* name, int min, int max, int& value);
+
+/// Parses the text of a players file into doc and returns its <tournament> root element.
+/// Returns nullptr and sets error when the text is not a players file.
+const tinyxml2::XMLElement* parsePlayersFile(tinyxml2::XMLDocument& doc, const std::string& xml, std::string& error);
+
 /*! Reads the match elements of a players file.
 	\details The file looks like this:
 	\code
@@ -82,3 +96,7 @@ bool isValidRuleFileName(const std::string& name);
 bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPlayers,
 						std::vector<MatchAssignment>& matches, std::vector<std::string>& warnings,
 						std::string& error);
+
+/// The same for the root element of a players file that is already parsed.
+void parseMatchAssignments(const tinyxml2::XMLElement* root, const std::set<int>& knownPlayers,
+						std::vector<MatchAssignment>& matches, std::vector<std::string>& warnings);

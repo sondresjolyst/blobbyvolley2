@@ -71,6 +71,8 @@ class JoinCodeTable
 		/// Parses the XML text. Returns false and sets error when the text is not a players file.
 		/// Problems with single entries are added to warnings.
 		bool parse(const std::string& xml, std::vector<std::string>& warnings, std::string& error);
+		/// The same for the root element of a players file that is already parsed.
+		void parse(const tinyxml2::XMLElement* root, std::vector<std::string>& warnings);
 
 		/// Looks up a normalized code. Returns nullptr for an unknown code.
 		const JoinCodeEntry* find(const std::string& code) const;

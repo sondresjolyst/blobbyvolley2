@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "JoinCodes.h"
 
-#include <cstring>
 #include <set>
 #include <utility>
 
@@ -54,19 +53,15 @@ std::string joinCodeLogPrefix(const std::string& raw)
 bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warnings, std::string& error)
 {
 	tinyxml2::XMLDocument doc;
-	if (doc.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
-	{
-		error = std::string("the players file is not valid XML: ") + doc.ErrorName();
+	const tinyxml2::XMLElement* root = parsePlayersFile(doc, xml, error);
+	if (!root)
 		return false;
-	}
+	parse(root, warnings);
+	return true;
+}
 
-	const tinyxml2::XMLElement* root = doc.RootElement();
-	if (!root || std::strcmp(root->Name(), "tournament") != 0)
-	{
-		error = "the players file has no <tournament> root element";
-		return false;
-	}
-
+void JoinCodeTable::parse(const tinyxml2::XMLElement* root, std::vector<std::string>& warnings)
+{
 	std::vector<JoinCodeEntry> entries;
 	int index = 0;
 	for (const tinyxml2::XMLElement* player = root->FirstChildElement("player"); player;
@@ -98,13 +93,10 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 		}
 
 		int id = 0;
-		if (player->Attribute("id"))
+		if (!readIntAttribute(player, "id", 1, 2147483647, id))
 		{
-			if (player->QueryIntAttribute("id", &id) != tinyxml2::XML_SUCCESS || id < 1)
-			{
-				warnings.push_back(where + " has an invalid id, skipped");
-				continue;
-			}
+			warnings.push_back(where + " has an invalid id, skipped");
+			continue;
 		}
 
 		JoinCodeEntry entry;
@@ -155,7 +147,6 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 	}
 
 	mEntries.swap(result);
-	return true;
 }
 
 const JoinCodeEntry* JoinCodeTable::find(const std::string& code) const
@@ -267,21 +258,21 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 	mLastContent = xml;
 	mHasContent = true;
 
-	JoinCodeTable table;
-	std::vector<std::string> warnings;
+	// the players and the matches come from the same parsed file
+	tinyxml2::XMLDocument doc;
 	std::string error;
-	if (!table.parse(xml, warnings, error))
+	const tinyxml2::XMLElement* root = parsePlayersFile(doc, xml, error);
+	if (!root)
 	{
 		log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
 		return false;
 	}
 
+	JoinCodeTable table;
+	std::vector<std::string> warnings;
+	table.parse(root, warnings);
 	std::vector<MatchAssignment> matches;
-	if (!parseMatchAssignments(xml, table.playerIds(), matches, warnings, error))
-	{
-		log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
-		return false;
-	}
+	parseMatchAssignments(root, table.playerIds(), matches, warnings);
 
 	for (const auto& w : warnings)
 		log(true, "players file: " + w);
