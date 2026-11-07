@@ -8,8 +8,6 @@ on:
   # but pushes and uploads nothing.
   workflow_dispatch:
 
-permissions: {}
-
 concurrency:
   group: release
   cancel-in-progress: false

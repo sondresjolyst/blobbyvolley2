@@ -16,15 +16,14 @@ on:
       - "AUTHORS"
       - "ChangeLog"
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   Build:
+    permissions:
+      contents: read
     name: ${{ matrix.compiler.name }}
     runs-on: ${{ matrix.compiler.os }}
 

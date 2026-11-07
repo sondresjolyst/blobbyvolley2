@@ -17,8 +17,6 @@ on:
       - "AUTHORS"
       - "ChangeLog"
   workflow_dispatch:
-permissions:
-  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,6 +24,8 @@ concurrency:
 
 jobs:
   Build:
+    permissions:
+      contents: read
     runs-on: ubuntu-22.04
     env:
       CMAKE_VERSION: 3.11.0

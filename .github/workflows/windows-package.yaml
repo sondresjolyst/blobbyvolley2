@@ -27,8 +27,6 @@ on:
         required: false
         default: ""
 
-permissions: {}
-
 # github.workflow is the caller's name in a called run, so the prefix keeps
 # this group apart from the caller's group.
 concurrency:
