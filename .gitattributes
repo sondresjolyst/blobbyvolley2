@@ -3,3 +3,4 @@
 *.cmd text eol=crlf
 linux/*.sh text eol=lf
 scripts/*.sh text eol=lf
+tools/loadbot/*.sh text eol=lf

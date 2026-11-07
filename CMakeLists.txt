@@ -6,6 +6,7 @@ include(cmake/ForkVersion.cmake)
 
 option(BUILD_TESTS "Build test programs" OFF)
 option(BUILD_MACOS_BUNDLE "Create a self-containing MacOS bundle" OFF)
+option(BUILD_LOADBOT "Build the headless load test client in tools/loadbot" OFF)
 
 # use FindBoost.cmake instead of BoostConfig.cmake
 if(POLICY CMP0167)
