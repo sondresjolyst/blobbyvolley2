@@ -1,5 +1,3 @@
-enable_testing()
-
 set(CMAKE_CXX_STANDARD 11)
 
 set(SRC
@@ -62,16 +60,12 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp TestDir.cpp TestDir.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
-find_package(nlohmann_json 3.10 CONFIG QUIET)
-if (nlohmann_json_FOUND)
-	target_sources(blobbytest PRIVATE SiteSyncTest.cpp ../src/server/SiteSync.cpp ../src/server/SiteSync.h)
-	target_link_libraries(blobbytest nlohmann_json::nlohmann_json)
-else ()
-	message(STATUS "nlohmann_json not found, the tests of the tournament site client are left out")
-endif ()
+find_package(nlohmann_json 3.10 CONFIG REQUIRED)
+target_sources(blobbytest PRIVATE SiteSyncTest.cpp ../src/server/SiteSync.cpp ../src/server/SiteSync.h)
+target_link_libraries(blobbytest nlohmann_json::nlohmann_json)
 
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"" "BLOBBY_TEST_VERSION_FILE=\"${PROJECT_SOURCE_DIR}/version.txt\"")
@@ -80,3 +74,6 @@ target_link_libraries(blobbytest ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY} ${PHYSFS_L
 if (MSVC)
 	target_compile_options(blobbytest PRIVATE /utf-8)
 endif ()
+
+# The tests write their files to a folder of their own below the temporary folder of the system.
+add_test(NAME blobbytest COMMAND blobbytest WORKING_DIRECTORY ${PROJECT_BINARY_DIR})

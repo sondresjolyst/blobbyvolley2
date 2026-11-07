@@ -18,6 +18,7 @@
 #include "InputSource.h"
 #include "PlayerInput.h"
 #include "base64.h"
+#include "TestDir.h"
 #include "replays/IReplayLoader.h"
 #include "replays/ReplayPlayer.h"
 #include "replays/ReplayRecorder.h"
@@ -37,8 +38,7 @@ namespace
 	{
 		ReplayFixture() : mFS("./test")
 		{
-			mFS.setWriteDir(".");
-			mFS.addToSearchPath(".");
+			mFS.setWriteDir(testDir());
 			mFS.addToSearchPath(BLOBBY_TEST_DATA_DIR);
 		}
 

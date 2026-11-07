@@ -1,3 +1,6 @@
+These are the build notes of upstream Blobby Volley 2. For this fork, see the build
+sections of README.md.
+
 You must have CMake installed.
 Then execute:
 

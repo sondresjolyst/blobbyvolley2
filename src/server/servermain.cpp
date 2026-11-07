@@ -258,7 +258,7 @@ int main(int argc, char** argv)
 			syslog(LOG_NOTICE, "Game results are added to %s", tournamentResultsFile.c_str());
 	}
 
-	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server version %i.%i started", BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
+	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server %s (%s %s), protocol version %i.%i, started", BLOBBY_UPSTREAM_VERSION, BLOBBY_FORK_NAME, BLOBBY_FORK_VERSION, BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
 
 #ifdef BLOBBY_SITE_SYNC
 	if(siteReporter)

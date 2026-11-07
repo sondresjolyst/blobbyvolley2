@@ -41,8 +41,6 @@ concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-permissions: {}
-
 jobs:
   build:
     name: Build image
@@ -102,3 +100,4 @@ jobs:
       repository: sondresjo/blobby-server
       tag: ${{ needs.tag.outputs.tag }}
       tag_latest: ${{ needs.tag.outputs.latest == 'true' }}
+      build_args: ${{ format('{{"BLOBBY_VERSION":"{0}"}}', needs.tag.outputs.tag) }}

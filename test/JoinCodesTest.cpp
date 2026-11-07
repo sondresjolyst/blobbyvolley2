@@ -9,6 +9,7 @@
 #include "server/EntryDeadlines.h"
 #include "server/JoinCodes.h"
 #include "server/NetworkPlayer.h"
+#include "TestDir.h"
 
 namespace
 {
@@ -45,10 +46,10 @@ namespace
 		}
 	};
 
-	// a players file in the working directory that is removed after the test
+	// a players file in the test folder that is removed after the test
 	struct TempFile
 	{
-		explicit TempFile(const std::string& name) : path(name) { std::remove(path.c_str()); }
+		explicit TempFile(const std::string& name) : path(testPath(name)) { std::remove(path.c_str()); }
 		~TempFile() { std::remove(path.c_str()); }
 		void write(const std::string& content) const
 		{
@@ -213,7 +214,7 @@ BOOST_AUTO_TEST_CASE( read_file_reports_missing_file )
 {
 	std::string content = "old";
 	std::string error;
-	BOOST_CHECK(!readJoinCodeFile("does_not_exist_players.xml", content, error));
+	BOOST_CHECK(!readJoinCodeFile(testPath("does_not_exist_players.xml"), content, error));
 	BOOST_CHECK(!error.empty());
 	BOOST_CHECK_EQUAL(content, "old");
 	BOOST_CHECK(!readJoinCodeFile("", content, error));

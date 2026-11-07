@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include "GenericIO.h"
+#include "TestDir.h"
 #include "InputSource.h"
 #include "DuelMatchState.h"
 #include "raknet/BitStream.h"
@@ -24,7 +25,7 @@
 
 struct FSFixture {
 	FSFixture() : mFS(TEST_EXECUTION_PATH) {
-		mFS.setWriteDir(".");
+		mFS.setWriteDir(testDir());
 	}
 	FileSystem mFS;
 };

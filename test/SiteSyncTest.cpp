@@ -13,15 +13,16 @@
 #include "server/JoinCodes.h"
 #include "server/MatchAssignments.h"
 #include "base64.h"
+#include "TestDir.h"
 
 namespace
 {
-	const std::string FOLDER = "bt_site";
-
+	// all files of these tests go below the test folder of the run
 	std::string inFolder(const std::string& name)
 	{
-		makeFolder(FOLDER);
-		return FOLDER + "/" + name;
+		const std::string folder = testPath("site");
+		makeFolder(folder);
+		return folder + "/" + name;
 	}
 
 	std::string readFile(const std::string& path)
