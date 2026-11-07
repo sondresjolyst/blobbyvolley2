@@ -101,8 +101,19 @@ LobbyState::LobbyState(ServerInfo info, PreviousState previous, std::string join
 {
 }
 
+LobbyState::LobbyState(ServerInfo info, std::shared_ptr<RakClient> client, const TournamentStatusData& status) :
+		mClient(std::move(client)), mInfo(std::move(info)), mPrevious( PreviousState::MAIN ),
+		mLobbyState(ConnectionState::CONNECTED), mTournament(true), mOwnName(status.ownName)
+{
+	mSubState = std::make_shared<LobbyTournamentSubstate>(status);
+}
+
 void LobbyState::init()
 {
+	// back from a tournament game, the connection is still open
+	if (mClient)
+		return;
+
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
@@ -287,7 +298,13 @@ void LobbyState::step_impl()
 				if (!isValidScoreToWin(scoreToWin))
 					break;
 
-				switchState( new NetworkGameState( mClient, serverChecksum, scoreToWin, mOwnName ) );
+				{
+					auto game = new NetworkGameState( mClient, serverChecksum, scoreToWin, mOwnName );
+					// a tournament player goes back to this lobby after the match
+					if (mTournament)
+						game->setTournamentLobby(mInfo);
+					switchState( game );
+				}
 				}
 				break;
 			default:
@@ -388,7 +405,9 @@ std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const Tour
 			lines.push_back(imgui.getText(TextManager::TNM_WAITING_SLOT));
 			break;
 		case TournamentStatus::WAITING_FOR_ORGANIZER:
-			lines.push_back(imgui.getText(TextManager::TNM_WAITING_ORGANIZER));
+			// a game was abandoned, or the organizer holds the match
+			lines.push_back(imgui.getText(TextManager::TNM_GAME_STOPPED));
+			lines.push_back(imgui.getText(TextManager::TNM_ORGANIZER_DECIDES));
 			break;
 		case TournamentStatus::PLAYING:
 			lines.push_back(imgui.getText(TextManager::TNM_PLAYING));

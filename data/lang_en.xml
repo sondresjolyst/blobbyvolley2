@@ -61,9 +61,11 @@
 	<string english = "no match for you yet" translation = "no match for you yet" />
 	<string english = "waiting for your opponent" translation = "waiting for your opponent" />
 	<string english = "waiting for a free slot" translation = "waiting for a free slot" />
-	<string english = "waiting for the organizer" translation = "waiting for the organizer" />
+	<string english = "game stopped. an organizer" translation = "game stopped. an organizer" />
+	<string english = "decides how it continues" translation = "decides how it continues" />
 	<string english = "your game is starting" translation = "your game is starting" />
 	<string english = "the next game starts soon" translation = "the next game starts soon" />
+	<string english = "next game in " translation = "next game in " />
 	<string english = "your match is over" translation = "your match is over" />
 	<string english = "opponent: " translation = "opponent: " />
 	<string english = "best of " translation = "best of " />

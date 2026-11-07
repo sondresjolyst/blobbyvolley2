@@ -54,6 +54,9 @@ public:
 	void init() override;
 	const char* getStateName() const override;
 
+	/// On a tournament server, OK goes back to this server's lobby and keeps the connection.
+	void setTournamentLobby(const ServerInfo& info);
+
 private:
 	enum
 	{
@@ -102,4 +105,9 @@ private:
 	TournamentStatusData mTournamentStatus;
 	// nickname from a tournament server, the saved config is not changed
 	std::string mOwnName;
+	// the tournament server, to go back to its lobby, empty on a casual server
+	std::shared_ptr<ServerInfo> mTournamentLobby;
+	// SDL ticks when the next game of the series starts
+	unsigned mNextGameTicks = 0;
+	void backToTournamentLobby();
 };

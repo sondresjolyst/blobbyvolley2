@@ -54,6 +54,22 @@
 	<string english = "server full" translation = "Server plný" />
 	<string english = " by " translation = " od " />
 	<string english = "challenger: " translation = "Vyzyvatel: " />
+	<string english = "the server refused to let you in" translation = "server tě nepustil dovnitř" />
+	<string english = "unknown join code" translation = "neznámý kód" />
+	<string english = "join code already in use" translation = "kód už někdo používá" />
+	<string english = "please update your game" translation = "aktualizuj svou hru" />
+	<string english = "no match for you yet" translation = "zatím pro tebe není zápas" />
+	<string english = "waiting for your opponent" translation = "čekání na soupeře" />
+	<string english = "waiting for a free slot" translation = "čekání na volné místo" />
+	<string english = "game stopped. an organizer" translation = "hra zastavena. organizátor" />
+	<string english = "decides how it continues" translation = "rozhodne, jak bude pokračovat" />
+	<string english = "your game is starting" translation = "tvoje hra začíná" />
+	<string english = "the next game starts soon" translation = "další hra brzy začne" />
+	<string english = "next game in " translation = "další hra za " />
+	<string english = "your match is over" translation = "tvůj zápas skončil" />
+	<string english = "opponent: " translation = "soupeř: " />
+	<string english = "best of " translation = "nejlepší z " />
+	<string english = "games won: " translation = "vyhrané hry: " />
 	<string english = "games: " translation = "Hry: " />
 	<string english = "random" translation = "Náhodná" />
 	<string english = "rules: " translation = "Pravidla: " />

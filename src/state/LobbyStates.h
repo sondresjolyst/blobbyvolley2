@@ -71,6 +71,8 @@ class LobbyState : public State
 		/// \param join_code when not empty, it is sent as player name instead of the name in the config.
 		///		This is how a join link enters a tournament server.
 		LobbyState(ServerInfo info, PreviousState previous, std::string join_code = std::string());
+		/// Goes back to the lobby of a tournament server on a connection that is still open.
+		LobbyState(ServerInfo info, std::shared_ptr<RakClient> client, const TournamentStatusData& status);
 		~LobbyState() override;
 
 		void step_impl() override;

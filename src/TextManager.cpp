@@ -221,9 +221,11 @@ void TextManager::setDefault()
 	mStrings[TNM_NO_MATCH] = "no match for you yet";
 	mStrings[TNM_WAITING_OPPONENT] = "waiting for your opponent";
 	mStrings[TNM_WAITING_SLOT] = "waiting for a free slot";
-	mStrings[TNM_WAITING_ORGANIZER] = "waiting for the organizer";
+	mStrings[TNM_GAME_STOPPED] = "game stopped. an organizer";
+	mStrings[TNM_ORGANIZER_DECIDES] = "decides how it continues";
 	mStrings[TNM_PLAYING] = "your game is starting";
 	mStrings[TNM_NEXT_GAME] = "the next game starts soon";
+	mStrings[TNM_NEXT_GAME_IN] = "next game in ";
 	mStrings[TNM_MATCH_OVER] = "your match is over";
 	mStrings[TNM_OPPONENT] = "opponent: ";
 	mStrings[TNM_BEST_OF] = "best of ";

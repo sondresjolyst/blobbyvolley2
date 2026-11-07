@@ -137,7 +137,26 @@ void NetworkGameState::startNextGame()
 {
 	mNextGamePending = false;
 	mKeepConnection = true;
-	switchState(new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin, mOwnName));
+	auto game = new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin, mOwnName);
+	if (mTournamentLobby)
+		game->setTournamentLobby(*mTournamentLobby);
+	switchState(game);
+}
+
+void NetworkGameState::setTournamentLobby(const ServerInfo& info)
+{
+	mTournamentLobby = std::make_shared<ServerInfo>(info);
+}
+
+void NetworkGameState::backToTournamentLobby()
+{
+	if (!mTournamentLobby)
+	{
+		switchState(new MainMenuState());
+		return;
+	}
+	mKeepConnection = true;
+	switchState(new LobbyState(*mTournamentLobby, mClient, mTournamentStatus));
 }
 
 NetworkGameState::~NetworkGameState()
@@ -325,6 +344,7 @@ void NetworkGameState::step_impl()
 						mOwnName = mTournamentStatus.ownName;
 						mLocalPlayer->setName(mOwnName);
 					}
+					mNextGameTicks = SDL_GetTicks() + mTournamentStatus.nextGameInMs;
 				}
 				break;
 			}
@@ -509,7 +529,7 @@ void NetworkGameState::step_impl()
 
 			displayQueryPrompt(200,
 				TextManager::GAME_OPP_LEFT,
-				std::make_tuple(TextManager::LBL_OK, [&](){ switchState(new MainMenuState); }),
+				std::make_tuple(TextManager::LBL_OK, [&](){ if (mTournamentLobby) backToTournamentLobby(); else switchState(new MainMenuState); }),
 				std::make_tuple(TextManager::RP_SAVE, [&](){ mSaveReplay = true; imgui.resetSelection(); }),
 				std::make_tuple(TextManager::NET_STAY_ON_SERVER, [&](){
 					// Send a blobby server connection request
@@ -575,16 +595,28 @@ void NetworkGameState::step_impl()
 		{
 			mMatch->updateEvents(); // so the last whistle will be sounded
 			displayWinningPlayerScreen(mWinningPlayer);
+			// between two games of a series there is no OK, so nobody leaves the server by mistake
+			const bool seriesGoesOn = mHasTournamentStatus &&
+				(mTournamentStatus.status == TournamentStatus::NEXT_GAME || mTournamentStatus.status == TournamentStatus::PLAYING);
 			if (mHasTournamentStatus && mTournamentStatus.status != TournamentStatus::PLAYING)
 			{
 				auto lines = describeTournamentStatus(imgui, mTournamentStatus);
+				if (mTournamentStatus.status == TournamentStatus::NEXT_GAME)
+				{
+					unsigned now = SDL_GetTicks();
+					unsigned left = mNextGameTicks > now ? (mNextGameTicks - now + 999) / 1000 : 0;
+					lines.front() = imgui.getText(TextManager::TNM_NEXT_GAME_IN) + std::to_string(left);
+				}
 				// centred under the winner text, so the lines stay clear of the trophy
 				for (unsigned i = 0; i < lines.size(); ++i)
 					imgui.doText(GEN_ID, Vector2(500, 400 + 18 * i), lines[i], TF_ALIGN_CENTER | TF_SMALL_FONT);
 			}
-			if (imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
+			if (!seriesGoesOn && imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
 			{
-				switchState(new MainMenuState());
+				if (mTournamentLobby)
+					backToTournamentLobby();
+				else
+					switchState(new MainMenuState());
 			}
 			if (imgui.doButton(GEN_ID, Vector2(380, 360), TextManager::RP_SAVE))
 			{
