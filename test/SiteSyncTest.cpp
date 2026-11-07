@@ -467,6 +467,71 @@ BOOST_AUTO_TEST_CASE( sponsors_are_stored_by_hash )
 	std::remove((folder + "/board.json").c_str());
 }
 
+BOOST_AUTO_TEST_CASE( the_stored_board_is_read_for_the_players )
+{
+	const std::string folder = inFolder("sb");
+	const std::string bmp = makeBmp(2, 1);
+	const std::string hash = sha256Hex(bmp);
+	const std::string other = makeBmp(3, 1);
+	const std::string otherHash = sha256Hex(other);
+	const std::string json = "{\"eventId\":1,\"gameBoard\":\"padded\",\"sponsorsVersion\":\"s1\",\"sponsors\":["
+		"{\"sponsorId\":3,\"name\":\"Acme\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + hash + "\",\"data\":\""
+		+ encode(bmp.data(), bmp.data() + bmp.size()) + "\"}},"
+		"{\"sponsorId\":4,\"name\":\"Beta\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + otherHash + "\",\"data\":\""
+		+ encode(other.data(), other.data() + other.size()) + "\"}}]}";
+	std::string version, error;
+	std::vector<std::string> warnings;
+	BOOST_REQUIRE_MESSAGE(storeSponsors(folder, json, version, warnings, error), error);
+
+	sponsors::Board board;
+	BOOST_REQUIRE_MESSAGE(loadStoredSponsors(folder, board, warnings, error), error);
+	BOOST_CHECK(board.style == sponsors::BoardStyle::PADDED);
+	BOOST_REQUIRE_EQUAL(board.logos.size(), 2u);
+	BOOST_CHECK_EQUAL(board.logos[0].hash, hash);
+	BOOST_CHECK(board.logos[0].data == bmp);
+	BOOST_CHECK_EQUAL(board.logos[1].hash, otherHash);
+
+	// the watcher reports a board once and again when it changes
+	std::vector<std::string> problems;
+	StoredSponsorBoard watcher(folder, [&](bool problem, const std::string& m){ if (problem) problems.push_back(m); });
+	sponsors::Board polled;
+	BOOST_CHECK(watcher.poll(polled));
+	BOOST_CHECK_EQUAL(polled.logos.size(), 2u);
+	BOOST_CHECK(!watcher.poll(polled));
+
+	// a logo that is gone for a moment makes the watcher try again
+	const std::string otherFile = folder + "/logos/" + otherHash + ".bmp";
+	std::remove(otherFile.c_str());
+	BOOST_REQUIRE(writeFileAtomically(folder + "/board.json", readFile(folder + "/board.json") + " ", error));
+	BOOST_CHECK(!loadStoredSponsors(folder, board, warnings, error));
+	BOOST_CHECK(!watcher.poll(polled));
+	BOOST_CHECK(!watcher.poll(polled));
+	BOOST_CHECK_EQUAL(problems.size(), 1u);
+	BOOST_REQUIRE(writeFileAtomically(otherFile, other, error));
+	BOOST_CHECK(watcher.poll(polled));
+
+	// a hand written board: a path outside logos and a logo that does not match its name are skipped
+	BOOST_REQUIRE(writeFileAtomically(folder + "/logos/" + std::string(64, 'd') + ".bmp", bmp, error));
+	BOOST_REQUIRE(writeFileAtomically(folder + "/board.json",
+		"{\"gameBoard\":\"off\",\"sponsors\":[{\"logo\":\"../board.json\"},{\"logo\":\"logos/" + std::string(64, 'd') + ".bmp\"},"
+		"{\"logo\":\"logos/" + hash + ".bmp\"}]}", error));
+	warnings.clear();
+	BOOST_REQUIRE_MESSAGE(loadStoredSponsors(folder, board, warnings, error), error);
+	BOOST_CHECK(board.style == sponsors::BoardStyle::OFF);
+	BOOST_REQUIRE_EQUAL(board.logos.size(), 1u);
+	BOOST_CHECK_EQUAL(board.logos[0].hash, hash);
+	BOOST_CHECK_EQUAL(warnings.size(), 2u);
+
+	// not JSON
+	BOOST_REQUIRE(writeFileAtomically(folder + "/board.json", "nope", error));
+	BOOST_CHECK(!loadStoredSponsors(folder, board, warnings, error));
+
+	std::remove((folder + "/logos/" + hash + ".bmp").c_str());
+	std::remove(otherFile.c_str());
+	std::remove((folder + "/logos/" + std::string(64, 'd') + ".bmp").c_str());
+	std::remove((folder + "/board.json").c_str());
+}
+
 BOOST_AUTO_TEST_CASE( sync_writes_the_players_file_only_for_a_new_version )
 {
 	FakeSite site;

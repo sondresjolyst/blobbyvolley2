@@ -48,7 +48,8 @@ enum MessageType
 	ID_RULES_CHECKSUM,
 	ID_RULES,
 	ID_SERVER_STATUS,
-	ID_LOBBY
+	ID_LOBBY,
+	ID_SPONSORS
 };
 
 // General Information:
@@ -211,6 +212,30 @@ enum MessageType
 // ID_RULES_CHECKSUM
 //	In tournament mode the server also sends this to a player in a finished game,
 //	when the next game of a best-of series starts.
+//
+// ID_SPONSORS
+//	Description:
+//		Only a server in tournament mode sends this, and only to players with the
+//		tournament feature. It brings the sponsor board, see SponsorSync.h.
+//		The packets use ordering channel 1, so logos do not hold up the game.
+//		The server announces the board when a player enters and when it changes:
+//		ID_SPONSORS
+//		BOARD (SponsorPacketType as unsigned char)
+//		version (64 hex characters)
+//		style name length (unsigned char), style name
+//		logo count (unsigned char, at most 32)
+//		per logo: hash (64 hex characters), size (uint32)
+//	The player asks for the logos it has not cached:
+//		ID_SPONSORS
+//		REQUEST
+//		version (64 hex characters)
+//		count (unsigned char), hashes (64 hex characters each)
+//	The server sends each asked logo once:
+//		ID_SPONSORS
+//		LOGO
+//		hash (64 hex characters)
+//		size (uint32)
+//		data
 //
 
 enum class LobbyPacketType : unsigned char

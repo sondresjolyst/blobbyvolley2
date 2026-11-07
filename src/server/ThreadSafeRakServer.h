@@ -49,6 +49,12 @@ public:
 		access([&](RakServer& server){ server.Send(&stream, priority, reliability, 0, target, broadcast); });
 	}
 
+	/// Sends on another ordering channel, so the packet does not wait for those of channel 0.
+	void SendOnChannel(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability,
+					   char channel, PlayerID target) {
+		access([&](RakServer& server){ server.Send(&stream, priority, reliability, channel, target, false); });
+	}
+
 private:
 	std::mutex mMutex;
 	std::unique_ptr<RakServer> mServer;

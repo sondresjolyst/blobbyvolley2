@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkState.h"
 #include "replays/ReplayRecorder.h"
 #include "DuelMatch.h"
+#include "BlobbyApp.h"
 #include "IMGUI.h"
 #include "SoundManager.h"
 #include "LocalInputSource.h"
@@ -373,6 +374,9 @@ void NetworkGameState::step_impl()
 
 				break;
 			}
+			case ID_SPONSORS:
+				getApp().handleSponsorPacket(packet->data, packet->length, mClient);
+				break;
 			// status messages we don't care about
 			case ID_REMOTE_DISCONNECTION_NOTIFICATION:
 			case ID_REMOTE_CONNECTION_LOST:

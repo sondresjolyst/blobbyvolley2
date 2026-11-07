@@ -122,6 +122,7 @@ void DedicatedServer::queuePackets()
 			case ID_ENTER_SERVER:
 			case ID_LOBBY:
 			case ID_BLOBBY_SERVER_PRESENT:
+			case ID_SPONSORS:
 			{
 				std::lock_guard<std::mutex> lock( mPacketQueueMutex );
 				mPacketQueue.push_back( packet );
@@ -208,6 +209,9 @@ void DedicatedServer::processPackets()
 				mActiveConnections.erase(packet->playerId);
 				mRefusedConnections.erase(packet->playerId);
 				mSentStatus.erase(packet->playerId);
+				mSponsorPlayers.erase(packet->playerId);
+				mSentSponsorVersion.erase(packet->playerId);
+				mSentLogos.erase(packet->playerId);
 				if( mJoinCodes )
 				{
 					if( mTournament )
@@ -244,6 +248,7 @@ void DedicatedServer::processPackets()
 			case ID_ENTER_SERVER:
 			case ID_LOBBY:
 			case ID_BLOBBY_SERVER_PRESENT:
+			case ID_SPONSORS:
 				try {
 					RakNet::BitStream stream(packet->data, packet->length, false);
 					stream.IgnoreBytes(1);	// ignore the message id
@@ -345,6 +350,13 @@ void DedicatedServer::setTournamentDirector( std::unique_ptr<TournamentDirector>
 	mTournamentGeneration = 0;
 	// no casual games on a tournament server
 	mMatchMaker.setAllowNewGames( !mTournament );
+}
+
+void DedicatedServer::setSponsorSource( SponsorSource source, unsigned interval_ms )
+{
+	mSponsorSource = std::move(source);
+	mSponsorInterval = interval_ms;
+	mNextSponsorPoll = 0;
 }
 
 void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
@@ -478,6 +490,9 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	if( isTournament() )
 	{
 		mTournament->playerConnected( mJoinCodes->playerIdOf(source) );
+		// only a game that knows tournaments gets the sponsor board
+		if( (features & CLIENT_FEATURE_TOURNAMENT) != 0 )
+			mSponsorPlayers.insert( source );
 	}
 
 	syslog(LOG_DEBUG, "Player added (%d) from %s (%s), %d players available",
@@ -568,6 +583,11 @@ void DedicatedServer::processSingleMessage(MessageType message_id, PlayerID sour
 			processBlobbyServerPresent( source, data );
 			break;
 		}
+		case ID_SPONSORS:
+		{
+			processSponsorRequest( source, data );
+			break;
+		}
 		default:
 			syslog(LOG_ERR, "Invalid message type (%d) passed into `processSingleMessage` function.", message_id);
 			throw std::logic_error("Invalid packet type passed into `processSingleMessage`");
@@ -641,6 +661,7 @@ void DedicatedServer::updateTournament()
 	}
 
 	sendTournamentStatus( now );
+	updateSponsors( now );
 }
 
 void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
@@ -833,5 +854,59 @@ void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
 		unsigned nextGameIn = status.nextGameAt > now_ms ? (unsigned)(status.nextGameAt - now_ms) : 0;
 		writeTournamentStatus( stream, status, opponent, p.second->getName(), nextGameIn );
 		mServer->Send( stream, LOW_PRIORITY, RELIABLE_ORDERED, p.first );
+	}
+}
+
+// - - - - - - - - - - - - - - - - - -
+// 			sponsor board
+// - - - - - - - - - - - - - - - - - -
+
+void DedicatedServer::updateSponsors(unsigned long long now_ms)
+{
+	if( mSponsorSource && now_ms >= mNextSponsorPoll )
+	{
+		mNextSponsorPoll = now_ms + mSponsorInterval;
+		sponsors::Board board;
+		if( mSponsorSource( board ) )
+		{
+			mSponsors.setBoard( std::move(board) );
+			syslog(LOG_NOTICE, "Sponsor board %s with %d logos is sent to the players",
+				   sponsors::boardStyleName(mSponsors.board().style), (int)mSponsors.board().logos.size());
+		}
+	}
+
+	if( !mSponsors.hasBoard() )
+		return;
+
+	// each player gets the announcement once per board version
+	for( const auto& player : mSponsorPlayers )
+	{
+		std::string& sent = mSentSponsorVersion[player];
+		if( sent == mSponsors.version() )
+			continue;
+		sent = mSponsors.version();
+		mSentLogos[player].clear();
+
+		RakNet::BitStream stream;
+		mSponsors.writeAnnouncement( stream );
+		mServer->SendOnChannel( stream, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL, player );
+	}
+}
+
+void DedicatedServer::processSponsorRequest(PlayerID source, RakNet::BitStream& stream)
+{
+	if( !isTournament() || mSponsorPlayers.count(source) == 0 )
+		return;
+
+	sponsors::SponsorPacketType type;
+	if( !sponsors::readPacketType( stream, type ) || type != sponsors::SponsorPacketType::REQUEST )
+		return;
+
+	// a player gets each logo once, so a request cannot make the server send the same data again and again
+	for( const sponsors::LogoFile* logo : mSponsors.answer( stream, mSentLogos[source] ) )
+	{
+		RakNet::BitStream answer;
+		sponsors::writeLogo( answer, *logo );
+		mServer->SendOnChannel( answer, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL, source );
 	}
 }
