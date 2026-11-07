@@ -37,6 +37,20 @@ namespace RakNet
 	 * @return The number of seconds from 1970 january the 1st.  
 	 */
 	unsigned int GetTime( void );
+
+	/// Milliseconds from since to now on the clock of GetTime, negative when since is later.
+	/// The clock starts at 0 on some systems and wraps after 2^32 ms, so this compares the
+	/// difference. It is right while the two times are less than 2^31 ms apart.
+	inline int TimeElapsed( unsigned int since, unsigned int now )
+	{
+		return static_cast<int>( now - since );
+	}
+
+	/// True if later comes after earlier on the clock of GetTime, see TimeElapsed.
+	inline bool TimeIsAfter( unsigned int later, unsigned int earlier )
+	{
+		return TimeElapsed( earlier, later ) > 0;
+	}
 }
 
 #endif
