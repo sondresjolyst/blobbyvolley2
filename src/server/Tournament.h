@@ -91,6 +91,8 @@ class TournamentEvents
 		virtual void gameEnded(const GameReport& report) = 0;
 		/// A player has won the series.
 		virtual void seriesEnded(const SeriesResult& result) = 0;
+		/// The score of a running game changed. Player 1 plays on the left. Does nothing by default.
+		virtual void liveScore(int matchId, int game, int player1, int points1, int player2, int points2);
 };
 
 /*! \class TournamentLog
@@ -216,6 +218,8 @@ class TournamentDirector
 		/// When the players of a match change, its series starts over.
 		/// When the wins of a match in the file change, they replace the local series score,
 		/// since the site is the source of truth. A local win stays until then.
+		/// When nextGame in the file changes and no game of the match runs, it replaces the local
+		/// number, also when it is lower, as after a game report the site refused.
 		void setAssignments(const std::vector<MatchAssignment>& matches);
 
 		void playerConnected(int playerId);
@@ -240,6 +244,9 @@ class TournamentDirector
 		/// The match then waits until its assignment brings a new nextGame or awaitingDecision false.
 		void gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt,
 						int leftPlayerId = 0);
+
+		/// The score of the running game of a match changed. points1 is the score of player 1.
+		void reportLiveScore(int matchId, int points1, int points2);
 
 		PlayerTournamentStatus statusOf(int playerId, unsigned long long now_ms) const;
 

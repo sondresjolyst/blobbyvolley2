@@ -160,6 +160,9 @@ class DedicatedServer
 			// player ids on the left and the right
 			int player1;
 			int player2;
+			// score that was sent as live score last, -1 before the first
+			int livePoints1;
+			int livePoints2;
 		};
 		std::vector<TournamentGame> mTournamentGames;
 		// status each player got last

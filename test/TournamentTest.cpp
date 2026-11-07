@@ -630,6 +630,58 @@ BOOST_AUTO_TEST_CASE( local_win_counts_until_the_file_brings_new_wins )
 	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins2, 0);
 }
 
+BOOST_AUTO_TEST_CASE( lower_next_game_from_the_file_is_taken_after_a_refused_report )
+{
+	DirectorFixture f(0, 0);
+	MatchAssignment m = makeMatch(7, 12, 17, 5);
+	m.wins1 = 0;
+	m.wins2 = 0;
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->nextGame, 2);
+
+	// the file counts the game while its report waits
+	m.nextGame = 2;
+	m.wins1 = 1;
+	f.director.setAssignments({ m });
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->nextGame, 2);
+
+	// the site refused the report, so the file goes back and the server follows
+	m.nextGame = 1;
+	m.wins1 = 0;
+	f.director.setAssignments({ m });
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->nextGame, 1);
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1, 0);
+	auto orders = f.director.takeGamesToStart(1);
+	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
+	BOOST_CHECK_EQUAL(orders[0].game, 1);
+
+	// a lower number does not change a running game
+	m.nextGame = 5;
+	f.director.setAssignments({ m });
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->nextGame, 1);
+}
+
+BOOST_AUTO_TEST_CASE( lower_next_game_does_not_release_an_abandoned_game )
+{
+	DirectorFixture f;
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	m.nextGame = 2;
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameAbandoned(7, 0, 0, f.start, f.end);
+
+	m.nextGame = 1;
+	f.director.setAssignments({ m });
+	BOOST_CHECK(f.startedIds(0).empty());
+	BOOST_CHECK(f.director.statusOf(12, 0).status == TournamentStatus::WAITING_FOR_ORGANIZER);
+}
+
 BOOST_AUTO_TEST_CASE( corrected_score_lowers_the_local_count )
 {
 	DirectorFixture f(0, 0);

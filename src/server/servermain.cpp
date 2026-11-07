@@ -28,6 +28,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cstdio>
 #include <ctime>
 #include <future>
+#include <csignal>
+#include <functional>
+#include <thread>
 
 #include <cerrno>
 
@@ -37,6 +40,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <SDL.h>
 
 #include "DedicatedServer.h"
+#include "SiteConfig.h"
+#ifdef BLOBBY_SITE_SYNC
+#include "SiteSync.h"
+#include "CurlHttpClient.h"
+#endif
 #include "SpeedController.h"
 #include "FileSystem.h"
 #include "UserConfig.h"
@@ -83,6 +91,13 @@ std::atomic<int> SWLS_RunningTime{0};
 const int UPDATE_FREQUENCY = 10;
 
 void main_loop(DedicatedServer& server);
+void read_commands(DedicatedServer& server);
+
+// docker stop and Ctrl+C end the main loop, so the server shuts down cleanly
+extern "C" void stop_on_signal(int)
+{
+	g_run_server = false;
+}
 
 int main(int argc, char** argv)
 {
@@ -111,6 +126,7 @@ int main(int argc, char** argv)
 	std::string tournamentResultsFile;
 	int tournamentMaxMatches = 0;
 	int tournamentNextGameDelay = DEFAULT_NEXT_GAME_DELAY;
+	SiteConfigFile siteFile;
 
 	UserConfig config;
 	try
@@ -119,22 +135,10 @@ int main(int argc, char** argv)
 		maxClients = config.getInteger("maximum_clients");
 		rulesFile  = config.getString("rules", DEFAULT_RULES_FILE);
 		gameSpeeds = config.getString("speeds", gameSpeeds);
-		tournamentMode = config.getBool("tournament_mode", false);
-		if(tournamentMode)
-		{
-			tournamentPlayersFile = config.getString("tournament_players_file");
-			tournamentResultsFile = config.getString("tournament_results_file");
-			tournamentMaxMatches = config.getInteger("tournament_max_matches", 0);
-			if(tournamentMaxMatches < 0)
-				tournamentMaxMatches = 0;
-			tournamentNextGameDelay = config.getInteger("tournament_next_game_delay", DEFAULT_NEXT_GAME_DELAY);
-			if(tournamentNextGameDelay != clampNextGameDelay(tournamentNextGameDelay))
-			{
-				syslog(LOG_ERR, "tournament_next_game_delay must be %d to %d seconds, using %d",
-					   MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, clampNextGameDelay(tournamentNextGameDelay));
-				tournamentNextGameDelay = clampNextGameDelay(tournamentNextGameDelay);
-			}
-		}
+		siteFile.tournamentMode = config.getBool("tournament_mode", false);
+		siteFile.siteUrl = config.getString("tournament_site_url");
+		siteFile.siteToken = config.getString("tournament_site_token");
+		siteFile.dataDir = config.getString("tournament_data_dir");
 
 		// bring that value into a sane range
 		if(maxClients <= 0 || maxClients > 150)
@@ -143,6 +147,37 @@ int main(int argc, char** argv)
 	catch (std::exception& e)
 	{
 		syslog(LOG_ERR, "server.xml not found. Falling back to default values.");
+	}
+
+	// the environment comes before the config file, so a container needs no config file
+	SiteConfig site;
+	{
+		std::vector<std::string> errors;
+		if(!loadSiteConfig(siteFile, [](const char* name){ return std::getenv(name); }, site, errors))
+		{
+			for(const auto& error : errors)
+				syslog(LOG_ERR, "%s", error.c_str());
+			syslog(LOG_ERR, "The tournament settings are not valid, the server stops");
+			return 1;
+		}
+	}
+	tournamentMode = site.tournamentMode;
+	if(tournamentMode)
+	{
+		if(!site.dataDir.empty() && !makeFolder(site.dataDir))
+			syslog(LOG_ERR, "Cannot make the data folder %s", site.dataDir.c_str());
+		tournamentPlayersFile = pathInDataDir(site.dataDir, config.getString("tournament_players_file", "tournament_players.xml"));
+		tournamentResultsFile = pathInDataDir(site.dataDir, config.getString("tournament_results_file", "tournament_results.jsonl"));
+		tournamentMaxMatches = config.getInteger("tournament_max_matches", 0);
+		if(tournamentMaxMatches < 0)
+			tournamentMaxMatches = 0;
+		tournamentNextGameDelay = config.getInteger("tournament_next_game_delay", DEFAULT_NEXT_GAME_DELAY);
+		if(tournamentNextGameDelay != clampNextGameDelay(tournamentNextGameDelay))
+		{
+			syslog(LOG_ERR, "tournament_next_game_delay must be %d to %d seconds, using %d",
+				   MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, clampNextGameDelay(tournamentNextGameDelay));
+			tournamentNextGameDelay = clampNextGameDelay(tournamentNextGameDelay);
+		}
 	}
 
 	ServerInfo myinfo(config);
@@ -156,16 +191,51 @@ int main(int argc, char** argv)
 	std::transform(speed_vec_str.begin(), speed_vec_str.end(), std::back_inserter(speed_vec), [](const std::string& v ){ return std::stof(v);});
 
 	DedicatedServer server(myinfo, rule_vec, speed_vec, maxClients);
+#ifdef BLOBBY_SITE_SYNC
+	std::shared_ptr<SiteReporter> siteReporter;
+#endif
 
 	if(tournamentMode)
 	{
 		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
 		server.setJoinCodeGate(std::move(gate));
 
-		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
-		director->setEvents(std::make_shared<TournamentLog>(tournamentResultsFile, [](bool problem, const std::string& message){
+		auto logLine = [](bool problem, const std::string& message){
 			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
-		}));
+		};
+		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
+		std::shared_ptr<TournamentEvents> events = std::make_shared<TournamentLog>(tournamentResultsFile, logLine);
+
+		if(site.usesSite())
+		{
+#ifdef BLOBBY_SITE_SYNC
+			if(!CurlHttpClient::globalInit())
+			{
+				syslog(LOG_ERR, "libcurl could not be set up, the server stops");
+				return 1;
+			}
+			const std::string outboxFile = pathInDataDir(site.dataDir, "tournament_outbox.jsonl");
+			std::unique_ptr<Outbox> outbox(new Outbox(outboxFile, logLine));
+			outbox->load();
+			SitePaths paths;
+			paths.playersFile = tournamentPlayersFile;
+			paths.syncFile = pathInDataDir(site.dataDir, "tournament_sync.json");
+			paths.refusedFile = pathInDataDir(site.dataDir, "tournament_refused.jsonl");
+			paths.sponsorsFolder = pathInDataDir(site.dataDir, "sponsors");
+			std::unique_ptr<HttpClient> http(new CurlHttpClient(site.siteUrl, site.siteToken, site.caFile, site.allowHttpLocalhost));
+			siteReporter = std::make_shared<SiteReporter>(events, std::move(http), std::move(outbox), paths, logLine);
+			events = siteReporter;
+			syslog(LOG_NOTICE, "Tournament site %s: the sync is written to %s, reports wait in %s until the site has them",
+				   site.siteUrl.c_str(), tournamentPlayersFile.c_str(), outboxFile.c_str());
+			if(site.allowHttpLocalhost)
+				syslog(LOG_ERR, "BLOBBY_SITE_ALLOW_HTTP is set, it is only meant for tests");
+#else
+			syslog(LOG_ERR, "This server was built without the tournament site client, so it cannot use BLOBBY_SITE_URL. Build it with libcurl and nlohmann_json.");
+			return 1;
+#endif
+		}
+
+		director->setEvents(events);
 		server.setTournamentDirector(std::move(director));
 
 		syslog(LOG_NOTICE, "Tournament mode is on, players join with codes from %s", tournamentPlayersFile.c_str());
@@ -179,10 +249,38 @@ int main(int argc, char** argv)
 
 	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server version %i.%i started", BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
 
+#ifdef BLOBBY_SITE_SYNC
+	if(siteReporter)
+		siteReporter->start();
+#endif
+
+	std::signal(SIGTERM, stop_on_signal);
+	std::signal(SIGINT, stop_on_signal);
+
 	// main loop
 	auto serverthread = std::async(std::launch::async, [&](){main_loop(server);});
 
-	while(true)
+	// commands are read on their own thread, so a signal can end the server while it waits for input
+	std::thread(read_commands, std::ref(server)).detach();
+
+	// We wait until the dedicated server is shut down
+	serverthread.wait();
+#ifdef BLOBBY_SITE_SYNC
+	if(siteReporter)
+		siteReporter->stop();
+#endif
+
+	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server shutting down");
+	#ifndef WIN32
+	closelog();
+	#endif
+
+	return 0;
+}
+
+void read_commands(DedicatedServer& server)
+{
+	while(g_run_server)
 	{
 		std::string command;
 
@@ -215,16 +313,6 @@ int main(int argc, char** argv)
 		}
 
 	}
-
-	// We wait until the dedicated server is shut down
-	serverthread.wait();
-
-	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server shutting down");
-	#ifndef WIN32
-	closelog();
-	#endif
-
-	return 0;
 }
 
 // -----------------------------------------------------------------------------------------

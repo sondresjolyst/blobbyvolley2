@@ -44,10 +44,12 @@ jobs:
             mingw-w64-ucrt-x86_64-SDL2
             mingw-w64-ucrt-x86_64-physfs
             mingw-w64-ucrt-x86_64-boost
+            mingw-w64-ucrt-x86_64-curl
+            mingw-w64-ucrt-x86_64-nlohmann-json
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Build in Release mode
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=ON
           cmake --build build
       - name: Package
         run: |

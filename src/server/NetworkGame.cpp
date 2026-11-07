@@ -260,6 +260,9 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 
 		case ID_PAUSE:
 		{
+			// the client only pauses when the server sends this back, so ignoring it keeps both playing
+			if (!mPauseAllowed)
+				break;
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_PAUSE);
 			broadcastBitstream(stream);

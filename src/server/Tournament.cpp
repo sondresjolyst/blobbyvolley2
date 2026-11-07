@@ -137,6 +137,10 @@ TournamentStatusData readTournamentStatus(GenericIn& in)
 
 TournamentEvents::~TournamentEvents() = default;
 
+void TournamentEvents::liveScore(int, int, int, int, int, int)
+{
+}
+
 TournamentLog::TournamentLog(std::string resultsPath, LogFunction log)
 : mPath(std::move(resultsPath))
 , mLog(std::move(log))
@@ -275,7 +279,7 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 		if (returning)
 		{
 			// the file is the truth for a match that comes back
-			if (!series.running && m.nextGame > series.nextGame)
+			if (!series.running)
 				series.nextGame = m.nextGame;
 			series.match = m;
 			takeWins(series, m);
@@ -288,10 +292,11 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 			// a changed assignment may fix a game that could not be created
 			series.failed = false;
 			// the organizer decided about an abandoned game
-			if (m.nextGame != old.nextGame || (old.awaitingDecision && !m.awaitingDecision))
+			if (m.nextGame > old.nextGame || (old.awaitingDecision && !m.awaitingDecision))
 				series.held = false;
-			// the site moves the next game on when the organizer restarts a game
-			if (!series.running && m.nextGame > series.nextGame)
+			// the site moves the next game on when the organizer restarts a game. A lower number
+			// means the site refused a game the server played, so the file is the truth then too.
+			if (!series.running && m.nextGame != old.nextGame)
 				series.nextGame = m.nextGame;
 			series.match = m;
 			// new numbers from the site replace the local count
@@ -507,6 +512,15 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	// but only once the organizer decided
 	++s.nextGame;
 	s.held = true;
+}
+
+void TournamentDirector::reportLiveScore(int matchId, int points1, int points2)
+{
+	auto found = mSeries.find(matchId);
+	if (found == mSeries.end() || !found->second.running || !mEvents)
+		return;
+	const Series& s = found->second;
+	mEvents->liveScore(matchId, s.playingGame, s.playing.player1, points1, s.playing.player2, points2);
 }
 
 PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long long now_ms) const

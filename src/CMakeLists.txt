@@ -86,7 +86,25 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 
 set (blobby-server_SRC ${common_SRC}
 	server/servermain.cpp
+	server/SiteConfig.cpp server/SiteConfig.h
 	)
+
+# The tournament site client of the server needs libcurl and nlohmann_json. Only the server uses them.
+# AUTO builds the client when both are found, ON fails without them and OFF leaves the client out.
+set(BLOBBY_SITE_SYNC AUTO CACHE STRING "Build the tournament site client into the server: AUTO, ON or OFF")
+set(BLOBBY_SITE_SYNC_ENABLED OFF)
+if (NOT BLOBBY_SITE_SYNC STREQUAL "OFF" AND NOT SWITCH AND NOT ANDROID)
+	find_package(CURL QUIET)
+	find_package(nlohmann_json 3.10 CONFIG QUIET)
+	if (CURL_FOUND AND nlohmann_json_FOUND)
+		set(BLOBBY_SITE_SYNC_ENABLED ON)
+		message(STATUS "The server is built with the tournament site client")
+	elseif (BLOBBY_SITE_SYNC STREQUAL "ON")
+		message(FATAL_ERROR "BLOBBY_SITE_SYNC is ON, but libcurl or nlohmann_json was not found")
+	else ()
+		message(STATUS "libcurl or nlohmann_json not found, the server is built without the tournament site client")
+	endif ()
+endif ()
 
 find_package(Boost REQUIRED)
 find_package(OpenGL)
@@ -142,6 +160,20 @@ target_link_libraries(blobby ${BLOBBY_COMMON_LIBS} ${OPENGL_LIBRARIES})
 if (UNIX AND (NOT ANDROID) OR WIN32)
 	add_executable(blobby-server ${blobby-server_SRC})
 	target_link_libraries(blobby-server ${BLOBBY_COMMON_LIBS})
+	if (BLOBBY_SITE_SYNC_ENABLED)
+		target_sources(blobby-server PRIVATE
+			server/SiteSync.cpp server/SiteSync.h
+			server/CurlHttpClient.cpp server/CurlHttpClient.h
+			SponsorBoard.cpp SponsorBoard.h)
+		target_compile_definitions(blobby-server PRIVATE BLOBBY_SITE_SYNC)
+		target_link_libraries(blobby-server nlohmann_json::nlohmann_json)
+		if (TARGET CURL::libcurl)
+			target_link_libraries(blobby-server CURL::libcurl)
+		else ()
+			target_include_directories(blobby-server PRIVATE ${CURL_INCLUDE_DIRS})
+			target_link_libraries(blobby-server ${CURL_LIBRARIES})
+		endif ()
+	endif ()
 endif ()
 if (UNIX AND (NOT ANDROID))
 	add_executable(blobby-runtest EXCLUDE_FROM_ALL runtest.cpp ${blobby_SRC})
