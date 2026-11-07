@@ -129,8 +129,7 @@ void NetworkGameState::init()
 		mMatch->setRules(TEMP_RULES_NAME);
 
 	RakNet::BitStream stream2;
-	stream2.Write((unsigned char)ID_RULES);
-	stream2.Write(bool(mRulesChecksum != 0 && !haveRules));
+	makeRulesAnswerPacket(stream2, mRulesChecksum != 0 && !haveRules);
 	mClient->Send(&stream2, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
 }
 
@@ -180,15 +179,10 @@ void NetworkGameState::step_impl()
 			case ID_GAME_UPDATE:
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
-				stream.IgnoreBytes(1);	//ID_GAME_UPDATE
 				unsigned timeBack = 0;
-				stream.Read(timeBack);
-				CURRENT_NETWORK_LAG = SDL_GetTicks() - timeBack;
 				DuelMatchState ms;
-				/// \todo this is a performance nightmare: we create a new reader for every packet!
-				///			there should be a better way to do that
-				std::shared_ptr<GenericIn> in = createGenericReader(&stream);
-				in->generic<DuelMatchState> (ms);
+				readGameUpdate(stream, timeBack, ms);
+				CURRENT_NETWORK_LAG = SDL_GetTicks() - timeBack;
 				// inject network data into game
 				mMatch->setState( ms );
 				break;
@@ -229,9 +223,8 @@ void NetworkGameState::step_impl()
 			case ID_WIN_NOTIFICATION:
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
-				stream.IgnoreBytes(1);	//ID_WIN_NOTIFICATION
 				int winner = NO_PLAYER;
-				if(!stream.Read(winner) || !isPlayerSide((PlayerSide)winner))
+				if(!readWinNotification(stream, winner))
 					break;
 				mWinningPlayer = (PlayerSide)winner;
 
@@ -268,28 +261,12 @@ void NetworkGameState::step_impl()
 				break;
 			case ID_GAME_READY:
 			{
-				char charName[16] = {0};
 				RakNet::BitStream stream(packet->data, packet->length, false);
+				GameReadyData ready = readGameReady(stream);
+				SpeedController::getMainInstance()->setGameSpeed(ready.speed);
+				auto ncolor = Color(ready.color);
 
-				stream.IgnoreBytes(1);	// ignore ID_GAME_READY
-
-				// read gamespeed
-				int speed = 0;
-				stream.Read(speed);
-				SpeedController::getMainInstance()->setGameSpeed(speed);
-
-				// read playername
-				stream.Read(charName, sizeof(charName));
-
-				// ensures that charName is null terminated
-				charName[sizeof(charName)-1] = '\0';
-
-				// read colors
-				int temp = 0;
-				stream.Read(temp);
-				auto ncolor = Color(temp);
-
-				mRemotePlayer->setName(charName);
+				mRemotePlayer->setName(ready.opponent);
 
 				setDefaultReplayName(mLocalPlayer->getName(), mRemotePlayer->getName());
 
@@ -314,16 +291,12 @@ void NetworkGameState::step_impl()
 				if (mNetworkState != PLAYER_WON && mNetworkState != OPPONENT_DISCONNECTED)
 					break;
 				RakNet::BitStream stream(packet->data, packet->length, false);
-				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
-				int serverChecksum = 0;
-				int scoreToWin = 0;
-				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
-					break;
-				if (!isValidScoreToWin(scoreToWin))
+				RulesChecksumData rules;
+				if (!readRulesChecksum(stream, rules))
 					break;
 				mNextGamePending = true;
-				mNextGameChecksum = serverChecksum;
-				mNextGameScoreToWin = scoreToWin;
+				mNextGameChecksum = rules.checksum;
+				mNextGameScoreToWin = rules.scoreToWin;
 				// a replay that is asked for or on its way is saved first
 				if (!mSaveReplay && !mWaitingForReplay)
 					startNextGame();

@@ -312,6 +312,36 @@ void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& play
 /// Reads the features at the end of an ID_ENTER_SERVER packet whose other fields were read. 0 when there are none.
 uint32_t readClientFeatures(RakNet::BitStream& stream);
 
+// Readers of the packets a client gets during a game. Each takes the whole packet, from the packet type on.
+struct DuelMatchState;
+
+/// The fields of an ID_RULES_CHECKSUM packet
+struct RulesChecksumData
+{
+	int checksum = 0;
+	int scoreToWin = 0;
+};
+/// False when a field is missing or the points to win are not valid.
+bool readRulesChecksum(RakNet::BitStream& stream, RulesChecksumData& data);
+/// The answer of a client to ID_RULES_CHECKSUM. needRules asks the server to send the rules file.
+void makeRulesAnswerPacket(RakNet::BitStream& stream, bool needRules);
+
+/// The fields of an ID_GAME_READY packet. A missing field stays at its default.
+struct GameReadyData
+{
+	int speed = 0;
+	std::string opponent;
+	int color = 0;
+};
+GameReadyData readGameReady(RakNet::BitStream& stream);
+
+/// Reads an ID_GAME_UPDATE packet into the time of the last input the server got from this client
+/// and the state of the game.
+void readGameUpdate(RakNet::BitStream& stream, unsigned& inputTime, DuelMatchState& state);
+
+/// Reads the winning side of an ID_WIN_NOTIFICATION packet. False when it is not a side.
+bool readWinNotification(RakNet::BitStream& stream, int& winner);
+
 /// The lists of a SERVER_STATUS lobby packet, after the waiting player count
 struct ServerStatusLists
 {

@@ -29,6 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "UserConfig.h"
 #include "PlayerIdentity.h"
 #include "GenericIO.h"
+#include "DuelMatchState.h"
+#include "Global.h"
+#include "server/MatchAssignments.h"
 
 /* implementation */
 ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
@@ -138,6 +141,52 @@ uint32_t readClientFeatures(RakNet::BitStream& stream)
 	if (!stream.Read(features))
 		return 0;
 	return features;
+}
+
+bool readRulesChecksum(RakNet::BitStream& stream, RulesChecksumData& data)
+{
+	stream.IgnoreBytes(1);	// ID_RULES_CHECKSUM
+	if (!stream.Read(data.checksum) || !stream.Read(data.scoreToWin))
+		return false;
+	return isValidScoreToWin(data.scoreToWin);
+}
+
+void makeRulesAnswerPacket(RakNet::BitStream& stream, bool needRules)
+{
+	stream.Write((unsigned char)ID_RULES);
+	stream.Write(needRules);
+}
+
+GameReadyData readGameReady(RakNet::BitStream& stream)
+{
+	GameReadyData data;
+	stream.IgnoreBytes(1);	// ID_GAME_READY
+	stream.Read(data.speed);
+
+	char name[16] = {0};
+	stream.Read(name, sizeof(name));
+	// ensures that the name is null terminated
+	name[sizeof(name) - 1] = '\0';
+	data.opponent = name;
+
+	stream.Read(data.color);
+	return data;
+}
+
+void readGameUpdate(RakNet::BitStream& stream, unsigned& inputTime, DuelMatchState& state)
+{
+	stream.IgnoreBytes(1);	// ID_GAME_UPDATE
+	inputTime = 0;
+	stream.Read(inputTime);
+	auto in = createGenericReader(&stream);
+	in->generic<DuelMatchState>(state);
+}
+
+bool readWinNotification(RakNet::BitStream& stream, int& winner)
+{
+	stream.IgnoreBytes(1);	// ID_WIN_NOTIFICATION
+	winner = NO_PLAYER;
+	return stream.Read(winner) && isPlayerSide((PlayerSide)winner);
 }
 
 
