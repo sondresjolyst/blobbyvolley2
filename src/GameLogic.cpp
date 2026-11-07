@@ -508,7 +508,7 @@ PlayerSide LuaGameLogic::checkWin() const
 
 	lua_pushnumber(mState, getScore(LEFT_PLAYER) );
 	lua_pushnumber(mState, getScore(RIGHT_PLAYER) );
-	if( lua_pcall(mState, 2, 1, 0) )
+	if( protectedCall(2, 1) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -541,7 +541,7 @@ PlayerInput LuaGameLogic::handleInput(PlayerInput ip, PlayerSide player)
 	lua_pushboolean(mState, ip.left);
 	lua_pushboolean(mState, ip.right);
 	lua_pushboolean(mState, ip.up);
-	if(lua_pcall(mState, 4, 3, 0))
+	if(protectedCall(4, 3))
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -568,7 +568,7 @@ void LuaGameLogic::OnBallHitsPlayerHandler(PlayerSide side)
 		return;
 	}
 	lua_pushnumber(mState, side);
-	if( lua_pcall(mState, 1, 0, 0) )
+	if( protectedCall(1, 0) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -586,7 +586,7 @@ void LuaGameLogic::OnBallHitsWallHandler(PlayerSide side)
 	}
 
 	lua_pushnumber(mState, side);
-	if( lua_pcall(mState, 1, 0, 0) )
+	if( protectedCall(1, 0) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -605,7 +605,7 @@ void LuaGameLogic::OnBallHitsNetHandler(PlayerSide side)
 
 	lua_pushnumber(mState, side);
 
-	if( lua_pcall(mState, 1, 0, 0) )
+	if( protectedCall(1, 0) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -624,7 +624,7 @@ void LuaGameLogic::OnBallHitsGroundHandler(PlayerSide side)
 
 	lua_pushnumber(mState, side);
 
-	if( lua_pcall(mState, 1, 0, 0) )
+	if( protectedCall(1, 0) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;
@@ -639,7 +639,7 @@ void LuaGameLogic::OnGameHandler( const DuelMatchState& state )
 		FallbackGameLogic::OnGameHandler( state );
 		return;
 	}
-	if( lua_pcall(mState, 0, 0, 0) )
+	if( protectedCall(0, 0) )
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;

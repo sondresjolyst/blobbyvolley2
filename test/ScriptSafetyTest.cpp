@@ -115,4 +115,45 @@ BOOST_FIXTURE_TEST_CASE( set_state_restores_winning_player, ScriptFixture )
 	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), RIGHT_PLAYER );
 }
 
+BOOST_FIXTURE_TEST_CASE( endless_rules_script_is_stopped, ScriptFixture )
+{
+	writeRules("while true do end\n");
+
+	// the script is stopped and the fallback rules are used
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_REQUIRE( logic );
+	BOOST_CHECK( logic->getSourceFile().empty() );
+}
+
+BOOST_FIXTURE_TEST_CASE( endless_rules_function_is_stopped, ScriptFixture )
+{
+	writeRules("function IsWinning(l, r)\nwhile true do end\nend\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_REQUIRE_EQUAL( logic->getSourceFile(), RULES_FILE );
+
+	// a point runs IsWinning, which is stopped, and the game goes on
+	logic->onBallHitsGround(LEFT_PLAYER);
+	BOOST_CHECK_EQUAL( logic->getScore(LEFT_PLAYER) + logic->getScore(RIGHT_PLAYER), 1 );
+	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), NO_PLAYER );
+}
+
+BOOST_FIXTURE_TEST_CASE( nested_calls_share_the_limit, ScriptFixture )
+{
+	// each score() runs IsWinning, which must not give the outer loop a new limit
+	writeRules("function IsWinning(l, r)\nreturn false\nend\nwhile true do score(0, 1) end\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_CHECK( logic->getSourceFile().empty() );
+}
+
+BOOST_FIXTURE_TEST_CASE( scripts_cannot_catch_the_stop, ScriptFixture )
+{
+	// with pcall a script could catch the error that stops it and keep running
+	writeRules("assert(pcall == nil and xpcall == nil)\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_CHECK_EQUAL( logic->getSourceFile(), RULES_FILE );
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -87,6 +87,9 @@ public:
 	~MainMenuState() override;
 	void step_impl() override;
 	const char* getStateName() const override;
+private:
+	/// Reads a join link from the clipboard and, after the player agrees, goes to its server.
+	void pasteJoinLink();
 };
 
 /*! \class CreditsState

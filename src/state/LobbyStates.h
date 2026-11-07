@@ -27,6 +27,8 @@ TournamentStatusData readTournamentStatus(GenericIn& in);
 
 /// The lines of text that describe a tournament status to the player.
 std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data);
+struct JoinLink;
+struct SDL_Window;
 
 enum class ConnectionState
 {
@@ -78,7 +80,9 @@ class LobbySubstate
 class LobbyState : public State
 {
 	public:
-		LobbyState(ServerInfo info, PreviousState previous);
+		/// \param join_code when not empty, it is sent as player name instead of the name in the config.
+		///		This is how a join link enters a tournament server.
+		LobbyState(ServerInfo info, PreviousState previous, std::string join_code = std::string());
 		~LobbyState() override;
 
 		void step_impl() override;
@@ -90,6 +94,7 @@ class LobbyState : public State
 		PlayerIdentity mLocalPlayer;
 		ServerInfo mInfo;
 		PreviousState mPrevious;
+		std::string mJoinCode;
 
 		ConnectionState mLobbyState;
 		// why a tournament server refused us, an EntryRefusedReason
@@ -161,5 +166,9 @@ private:
 	std::vector<PlayerID> mOtherPlayers;
 	std::vector<std::string> mOtherPlayerNames;
 };
+
+/// Asks the player whether to join the server of a join link, since any web page or clipboard can hold one.
+/// Returns a new lobby state for that server on Yes, and nullptr on No. parent may be nullptr.
+LobbyState* joinFromLink(const JoinLink& link, SDL_Window* parent);
 
 #endif // LOBBYSTATES_H_INCLUDED

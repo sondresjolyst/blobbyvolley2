@@ -39,6 +39,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "SpeedController.h"
 #include "InputManager.h"
 #include "IScriptableComponent.h"
+#include "LobbyStates.h"
+#include "JoinLink.h"
+#include "Global.h"
+
+#include <SDL.h>
 
 /* implementation */
 
@@ -102,15 +107,20 @@ void MainMenuState::step_impl()
 	imgui.doImage(GEN_ID, Vector2(400.0, 300.0), "background");
 	imgui.doOverlay(GEN_ID, Vector2(0.0, 0.0), Vector2(800.0, 600.0));
 	imgui.doImage(GEN_ID, Vector2(400.0, 175.0), "gfx/titel.bmp");
-	if (imgui.doButton(GEN_ID, Vector2(34, 300.0), TextManager::MNU_LABEL_ONLINE))
+	// eight buttons 36 apart fit between the title, which ends at 298, and the bottom of the screen
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 300.0), TextManager::MNU_LABEL_JOIN_LINK))
+	{
+		pasteJoinLink();
+	}
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 336.0), TextManager::MNU_LABEL_ONLINE))
 	{
 		switchState( new OnlineSearchState() );
 	}
-	if (imgui.doButton(GEN_ID, Vector2(34, 340.0), TextManager::MNU_LABEL_LAN))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 372.0), TextManager::MNU_LABEL_LAN))
 	{
 		switchState( new LANSearchState() );
 	}
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 380.0), TextManager::MNU_LABEL_START))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 408.0), TextManager::MNU_LABEL_START))
 	{
 		try
 		{
@@ -125,25 +135,51 @@ void MainMenuState::step_impl()
 		}
 	}
 
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 420.0), TextManager::MNU_LABEL_OPTIONS))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 444.0), TextManager::MNU_LABEL_OPTIONS))
 	{
 		switchState(new OptionState());
 	}
 
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 460.0), TextManager::MNU_LABEL_REPLAY))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 480.0), TextManager::MNU_LABEL_REPLAY))
 	{
 		switchState(new ReplaySelectionState());
 	}
 
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 500.0), TextManager::MNU_LABEL_CREDITS))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 516.0), TextManager::MNU_LABEL_CREDITS))
 	{
 		switchState(new CreditsState());
 	}
 
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 540.0), TextManager::MNU_LABEL_EXIT))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 552.0), TextManager::MNU_LABEL_EXIT))
 	{
 		getInputMgr().setEndBlobby();
 	}
+}
+
+void MainMenuState::pasteJoinLink()
+{
+	std::string text;
+	char* clipboard = SDL_GetClipboardText();
+	if (clipboard)
+	{
+		text = clipboard;
+		SDL_free(clipboard);
+	}
+
+	JoinLink link;
+	JoinLinkError error = joinLinkFromText(text, link);
+	if (error != JoinLinkError::NONE)
+	{
+		std::string message = getIMGUI().getText(TextManager::MNU_NO_JOIN_LINK);
+		if (error != JoinLinkError::NO_LINK)
+			message = describeJoinLinkError(error);
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, AppTitle, message.c_str(), getApp().getWindow());
+		return;
+	}
+
+	LobbyState* lobby = joinFromLink(link, getApp().getWindow());
+	if (lobby)
+		switchState(lobby);
 }
 
 const char* MainMenuState::getStateName() const

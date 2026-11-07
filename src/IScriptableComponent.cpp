@@ -10,6 +10,24 @@
 
 #include <iostream>
 
+namespace
+{
+	// the hook runs every INSTRUCTION_BLOCK instructions, and a call may run MAX_INSTRUCTION_BLOCKS of them
+	const int INSTRUCTION_BLOCK = 1000;
+	const unsigned long MAX_INSTRUCTION_BLOCKS = 20000;
+	const char* const COMPONENT_KEY = "__C++_ScriptComponent__";
+}
+
+void scriptInstructionHook(lua_State* state, lua_Debug*)
+{
+	lua_pushstring(state, COMPONENT_KEY);
+	lua_gettable(state, LUA_REGISTRYINDEX);
+	auto component = static_cast<IScriptableComponent*>(lua_touserdata(state, -1));
+	lua_pop(state, 1);
+	if (component && ++component->mInstructionBlocks > MAX_INSTRUCTION_BLOCKS)
+		luaL_error(state, "script ran too long and was stopped");
+}
+
 IScriptableComponent::IScriptableComponent() :
 		mState(luaL_newstate()), mDummyWorld(new PhysicWorld())
 {
@@ -24,11 +42,26 @@ IScriptableComponent::IScriptableComponent() :
 
 	// disable potentially unsafe functions from base library
 	const char* hide_fns[] = {"dofile", "collectgarbage", "getmetatable", "loadfile", "load", "loadstring",
-							  "rawlen", "rawget", "rawset", "setmetatable"};
+							  "rawlen", "rawget", "rawset", "setmetatable",
+							  // a script could catch the error that stops a script that runs too long
+							  "pcall", "xpcall"};
 	for(auto& fn : hide_fns) {
 		lua_pushnil(mState);
 		lua_setglobal(mState, fn);
 	}
+
+	lua_sethook(mState, scriptInstructionHook, LUA_MASKCOUNT, INSTRUCTION_BLOCK);
+}
+
+int IScriptableComponent::protectedCall(int arg_count, int result_count) const
+{
+	// a call from inside a script, such as score() calling IsWinning, shares the limit of the outer call
+	if (mCallDepth == 0)
+		mInstructionBlocks = 0;
+	++mCallDepth;
+	int result = lua_pcall(mState, arg_count, result_count, 0);
+	--mCallDepth;
+	return result;
 }
 
 IScriptableComponent::~IScriptableComponent()
@@ -40,7 +73,7 @@ void IScriptableComponent::openScript(const std::string& file)
 {
 	int error = FileRead::readLuaScript(file, mState);
 	if (error == 0)
-		error = lua_pcall(mState, 0, 0, 0);
+		error = protectedCall(0, 0);
 
 	if (error)
 	{
@@ -75,7 +108,7 @@ bool IScriptableComponent::getLuaFunction(const char* fname) const
 
 void IScriptableComponent::callLuaFunction(int arg_count)
 {
-	if (lua_pcall(mState, arg_count, 0, 0))
+	if (protectedCall(arg_count, 0))
 	{
 		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
 		std::cerr << std::endl;

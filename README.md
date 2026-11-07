@@ -71,6 +71,30 @@ In tournament mode players cannot open or join games in the lobby. The lobby sho
 ```
 The server logs each started match and each game result, and adds them as lines of JSON to `tournament_results.jsonl`. A game line holds the report body that the game server API of the site expects. Set `tournament_results_file` to an empty value to only log them.
 
+#### Join links
+The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. It works the same on Windows and Linux.
+
+To join a match:
+1. Copy your join link on the tournament site.
+2. Open Blobby Volley.
+3. Click "join link" at the top of the main menu.
+4. Answer Yes when the game asks whether to join the server.
+
+The game then connects and sends the code as player name. If the clipboard holds no join link, or the link is not valid, the game says so and stays in the main menu.
+
+The game checks the link strictly before it uses it. The host is a host name or an IPv4 address of at most 63 bytes. A host that starts with a digit must be an IPv4 address of four decimal parts. The port is 1 to 65535 and the code has 10 characters from the join code alphabet. The link may hold only `server` and `code`. The game never opens or runs anything else from a link.
+
+##### Open links with a click (optional)
+You can also let a click on the link open the game. The game then asks the same question before it joins. Each click starts a new copy of the game, even when one is already running. A link given on the command line must be the only argument. A bad link shows a message, and the game opens the main menu.
+
+On Windows, run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
+
+On Linux, run `linux/register-join-links.sh` once, with the path of the game as argument if `blobby` is not on your `PATH`:
+```bash
+sh linux/register-join-links.sh /path/to/blobby
+```
+It writes `~/.local/share/applications/blobby-join.desktop` for the scheme `x-scheme-handler/blobby` and makes it the default with `xdg-mime`. It needs no root rights. Add `--print` to see the file without writing it. `linux/unregister-join-links.sh` removes the handler.
+
 ### Source Code
 Clone the git repository:
 ```bash
@@ -133,6 +157,7 @@ Open the workflow run on the Actions page of the fork, download the artifact and
 Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
 Start the game from its own folder, as Explorer and shortcuts do.
+To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.

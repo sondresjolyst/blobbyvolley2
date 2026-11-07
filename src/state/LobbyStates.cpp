@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <utility>
 #include <cstring>
 
+#include <SDL.h>
+
 #include "raknet/RakClient.h"
 
 #include "IMGUI.h"
@@ -39,12 +41,62 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GenericIO.h"
 #include "GameLogic.h"
 #include "server/MatchAssignments.h"
+#include "Global.h"
+#include "JoinLink.h"
+
+namespace
+{
+	/// Asks the player before the game connects to the server of a link, since any web page or clipboard can hold one.
+	/// Returns true only when the player picks Yes.
+	bool confirmJoin(const JoinLink& link, SDL_Window* parent)
+	{
+		std::string question = "Join the tournament server " + link.host + ":" + std::to_string(link.port) + "?";
+		const SDL_MessageBoxButtonData buttons[] = {
+			{ SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No" },
+			{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes" },
+		};
+		SDL_MessageBoxData data = {};
+		data.flags = SDL_MESSAGEBOX_INFORMATION;
+		data.window = parent;
+		data.title = AppTitle;
+		data.message = question.c_str();
+		data.numbuttons = 2;
+		data.buttons = buttons;
+		data.colorScheme = nullptr;
+
+		int chosen = 0;
+		if (SDL_ShowMessageBox(&data, &chosen) != 0)
+			return false;
+		return chosen == 1;
+	}
+
+	/// The server a join link points to.
+	ServerInfo serverFromLink(const JoinLink& link)
+	{
+		ServerInfo info(std::string(""));
+		std::memset(info.hostname, 0, sizeof(info.hostname));
+		std::memset(info.name, 0, sizeof(info.name));
+		std::memset(info.description, 0, sizeof(info.description));
+		std::strncpy(info.hostname, link.host.c_str(), sizeof(info.hostname) - 1);
+		info.port = link.port;
+		std::string name = link.host + ":" + std::to_string(link.port);
+		std::strncpy(info.name, name.c_str(), sizeof(info.name) - 1);
+		return info;
+	}
+}
+
+LobbyState* joinFromLink(const JoinLink& link, SDL_Window* parent)
+{
+	if (!confirmJoin(link, parent))
+		return nullptr;
+	return new LobbyState(serverFromLink(link), PreviousState::MAIN, link.code);
+}
 
 LobbySubstate::~LobbySubstate() = default;
 
 
-LobbyState::LobbyState(ServerInfo info, PreviousState previous) :
-		mInfo(std::move(info)), mPrevious( previous ),
+LobbyState::LobbyState(ServerInfo info, PreviousState previous, std::string join_code) :
+		mInfo(std::move(info)), mPrevious( previous ), mJoinCode(std::move(join_code)),
 		mLobbyState(ConnectionState::CONNECTING)
 {
 }
@@ -54,7 +106,13 @@ void LobbyState::init()
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
-		throw( std::runtime_error(std::string("Could not connect to server ") + mInfo.hostname) );
+	{
+		// a join link names a server that may not be reachable, so show that instead of closing the game
+		if (!mJoinCode.empty())
+			mLobbyState = ConnectionState::CONNECTION_FAILED;
+		else
+			throw( std::runtime_error(std::string("Could not connect to server ") + mInfo.hostname) );
+	}
 
 	// send an ENTER_SERVER packet with name and side preference
 
@@ -72,6 +130,10 @@ void LobbyState::init()
 	{
 		mLocalPlayer = config.loadPlayerIdentity(RIGHT_PLAYER, true);
 	}
+
+	// the server swaps the join code for the nickname of the player
+	if (!mJoinCode.empty())
+		mLocalPlayer.setName(mJoinCode);
 }
 
 

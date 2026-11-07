@@ -54,6 +54,7 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	IMGUI.cpp IMGUI.h
 	InputDevice.h
 	InputManager.cpp InputManager.h
+	JoinLink.cpp JoinLink.h
 	LocalInputSource.cpp LocalInputSource.h
 	FontIndex.cpp FontIndex.h
 	RenderManager.cpp RenderManager.h
@@ -157,6 +158,7 @@ endif()
 
 if (WIN32)
 	install(TARGETS blobby blobby-server DESTINATION .)
+	install(FILES ../win/register-join-links.cmd ../win/unregister-join-links.cmd DESTINATION .)
 elseif (ANDROID)
 	install(TARGETS blobby DESTINATION bin)
 elseif (SWITCH)
