@@ -92,6 +92,9 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		/// A replay of the game before this one, sent to a player who asks before this game starts.
 		void setPreviousReplay( PlayerSide side, std::vector<unsigned char> packet );
 
+		/// A game where pausing is not allowed ignores pause requests, so one player cannot hold it up.
+		void setPauseAllowed( bool allowed ) { mPauseAllowed = allowed; }
+
 	private:
 		void broadcastBitstream(const RakNet::BitStream& stream, const RakNet::BitStream& switchedstream);
 		void broadcastBitstream(const RakNet::BitStream& stream);
@@ -109,6 +112,7 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		// a switched player gets mirrored data
 		bool mSwitchLeft;
 		bool mSwitchRight;
+		bool mPauseAllowed = true;
 
 		PacketQueue mPacketQueue;
 		std::mutex mPacketQueueMutex;

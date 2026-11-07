@@ -789,6 +789,9 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 		return;
 	}
 
+	// a tournament game cannot be paused, so one player cannot freeze a match
+	game->setPauseAllowed( false );
+
 	// a late replay request reaches the new game, which answers with the old replay
 	game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
 	game->setPreviousReplay( RIGHT_PLAYER, std::move(replayRight) );
