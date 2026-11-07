@@ -438,8 +438,17 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 
 		// a known code entered again moves to the new connection, the old one is closed
 		PlayerID holder;
-		if( mJoinCodes->findHolder( newplayer->getName(), holder ) && holder != source )
-			handOverJoinCode( holder );
+		switch( mJoinCodes->checkHandover( source, newplayer->getName(), steadyMilliseconds(), holder ) )
+		{
+			case JoinCodeGate::Handover::HAND_OVER:
+				handOverJoinCode( holder );
+				break;
+			case JoinCodeGate::Handover::TOO_SOON:
+				refuseEntry( source, EntryRefusedReason::CODE_IN_USE );
+				return;
+			case JoinCodeGate::Handover::NONE:
+				break;
+		}
 
 		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
 		if( result != JoinCodeGate::Result::ACCEPTED )

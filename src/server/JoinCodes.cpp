@@ -391,6 +391,19 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 
 	mTable = std::move(table);
 	mMatches.swap(matches);
+
+	// a code that left the file no longer belongs to anybody
+	for (auto it = mCodeOwners.begin(); it != mCodeOwners.end(); )
+	{
+		if (mTable.find(it->first))
+		{
+			++it;
+			continue;
+		}
+		mPlayerCodes.erase(it->second);
+		mHandedOverAt.erase(it->first);
+		it = mCodeOwners.erase(it);
+	}
 	++mGeneration;
 	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
 		+ std::to_string(mMatches.size()) + " matches");
@@ -432,13 +445,26 @@ JoinCodeGate::Result JoinCodeGate::admit(NetworkPlayer& player)
 	return result;
 }
 
-bool JoinCodeGate::findHolder(const std::string& name, PlayerID& holder) const
+JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const std::string& name,
+												unsigned long long now_ms, PlayerID& holder)
 {
-	auto owner = mCodeOwners.find(normalizeJoinCode(name));
-	if (owner == mCodeOwners.end())
-		return false;
+	const std::string code = normalizeJoinCode(name);
+	auto owner = mCodeOwners.find(code);
+	// only a code of the current table moves, admit refuses any other
+	if (owner == mCodeOwners.end() || owner->second == player || !mTable.find(code))
+		return Handover::NONE;
+
+	auto last = mHandedOverAt.find(code);
+	if (last != mHandedOverAt.end() && now_ms < last->second + JOIN_CODE_HANDOVER_COOLDOWN_MS)
+	{
+		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
+		return Handover::TOO_SOON;
+	}
+
 	holder = owner->second;
-	return true;
+	mHandedOverAt[code] = now_ms;
+	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
+	return Handover::HAND_OVER;
 }
 
 void JoinCodeGate::release(const PlayerID& player)
