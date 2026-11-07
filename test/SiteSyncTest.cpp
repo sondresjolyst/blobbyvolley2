@@ -433,7 +433,8 @@ BOOST_AUTO_TEST_CASE( sponsors_are_stored_by_hash )
 		"{\"sponsorId\":6,\"name\":\"NotBmp\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + sha256Hex(notBmp) + "\",\"data\":\"aGVsbG8=\"}}]}";
 
 	// a logo that is no longer listed is removed
-	makeFolder(folder + "/logos");
+	BOOST_REQUIRE(makeFolder(folder));
+	BOOST_REQUIRE(makeFolder(folder + "/logos"));
 	const std::string stale = folder + "/logos/" + std::string(64, 'c') + ".bmp";
 	std::string error;
 	BOOST_REQUIRE(writeFileAtomically(stale, "old", error));
