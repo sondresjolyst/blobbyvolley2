@@ -4,13 +4,83 @@ on:
   push:
     branches:
       - main
+  # A manual run is a dry run. It builds the image and the Windows package
+  # but pushes and uploads nothing.
+  workflow_dispatch:
 
 permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release-please:
     name: Release Please
+    if: github.event_name == 'push'
     uses: equinor/ops-actions/.github/workflows/release-please-manifest.yml@def1359ccd977da6f0720b22328ba6ac02b380ae # v9.43.2
     permissions:
       contents: write
       pull-requests: write
+
+  get-version:
+    name: Get release version
+    needs: release-please
+    if: always() && (needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions: {}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - name: Read the tag release-please created
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAMES: ${{ needs.release-please.outputs.path_tag_names }}
+        run: |
+          if [ "$EVENT_NAME" != "push" ]; then
+            {
+              echo "tag="
+              echo "version=dry-run"
+              echo "publish=false"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag=$(echo "$TAG_NAMES" | jq -r '.["."] // empty')
+          if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Unexpected release tag '$tag'"
+            exit 1
+          fi
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "publish=true"
+          } >> "$GITHUB_OUTPUT"
+
+  docker:
+    name: Server image
+    needs: get-version
+    if: always() && needs.get-version.result == 'success'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/docker.yaml
+    secrets:
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    with:
+      tag: ${{ needs.get-version.outputs.version }}
+      tag_latest: true
+      push: ${{ needs.get-version.outputs.publish == 'true' }}
+
+  windows:
+    name: Windows package
+    needs: get-version
+    if: always() && needs.get-version.result == 'success'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows-package.yaml
+    with:
+      version: ${{ needs.get-version.outputs.version }}
+      release_tag: ${{ needs.get-version.outputs.tag }}

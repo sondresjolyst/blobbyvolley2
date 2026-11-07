@@ -15,18 +15,34 @@ on:
       - "**.md"
       - "AUTHORS"
       - "ChangeLog"
+  workflow_call:
+    inputs:
+      version:
+        description: "Version used in the package name, such as 0.1.0"
+        type: string
+        required: true
+      release_tag:
+        description: "Release to attach the zip to, such as v0.1.0. Empty means no upload."
+        type: string
+        required: false
+        default: ""
 
-permissions:
-  contents: read
+permissions: {}
 
+# github.workflow is the caller's name in a called run, so the prefix keeps
+# this group apart from the caller's group.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: windows-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   Package:
     name: Windows (UCRT64)
     runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
 
     defaults:
       run:
@@ -60,14 +76,44 @@ jobs:
       - name: Smoke check the game without MSYS2 on PATH
         continue-on-error: true
         run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby.exe 5
-      - name: Get short commit hash
-        id: sha
+      - name: Pick artifact name
+        id: name
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: echo "short=$(echo "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            echo "artifact=blobby-windows-$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "artifact=blobby-windows-$(echo "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
       - name: Upload package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: blobby-windows-${{ steps.sha.outputs.short }}
+          name: ${{ steps.name.outputs.artifact }}
           path: dist
           if-no-files-found: error
+
+  Release:
+    name: Attach to release
+    needs: Package
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.Package.outputs.artifact }}
+          path: pkg
+      - name: Zip and upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          asset="blobby-volley-2-$VERSION-windows-x64.zip"
+          (cd pkg && zip -r -q "../$asset" blobby-windows)
+          gh release upload "$TAG" "$asset" --repo "$REPO" --clobber

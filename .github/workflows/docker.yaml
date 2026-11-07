@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - "main"
-    tags:
-      - "v*"
     paths-ignore:
       - "**.md"
       - "AUTHORS"
@@ -17,9 +15,30 @@ on:
       - "**.md"
       - "AUTHORS"
       - "ChangeLog"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Image tag for a release, such as 0.1.0"
+        type: string
+        required: true
+      tag_latest:
+        description: "Also push the latest tag"
+        type: boolean
+        required: false
+        default: false
+      push:
+        description: "Push the image. When false the image is only built."
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      DOCKER_PASSWORD:
+        required: true
 
+# github.workflow is the caller's name in a called run, so the prefix keeps
+# this group apart from the caller's group.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: docker-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
@@ -27,7 +46,7 @@ permissions: {}
 jobs:
   build:
     name: Build image
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (inputs.tag != '' && !inputs.push)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -43,7 +62,7 @@ jobs:
 
   tag:
     name: Pick image tag
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request' && (inputs.tag == '' || inputs.push)
     runs-on: ubuntu-24.04
     permissions: {}
     outputs:
@@ -54,13 +73,13 @@ jobs:
       - name: Pick tag and environment
         id: pick
         env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          TAG_LATEST: ${{ inputs.tag_latest }}
         run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            echo "tag=${REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          if [ -n "$RELEASE_TAG" ]; then
+            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
             echo "environment=prod" >> "$GITHUB_OUTPUT"
-            echo "latest=true" >> "$GITHUB_OUTPUT"
+            echo "latest=$TAG_LATEST" >> "$GITHUB_OUTPUT"
           else
             echo "tag=dev" >> "$GITHUB_OUTPUT"
             echo "environment=dev" >> "$GITHUB_OUTPUT"
