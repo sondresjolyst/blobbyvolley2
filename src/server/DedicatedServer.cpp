@@ -648,6 +648,18 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 	for( auto it = mTournamentGames.begin(); it != mTournamentGames.end(); )
 	{
 		TournamentGame& entry = *it;
+		if( !entry.reported && entry.game->getWinner() == NO_PLAYER && entry.game->isGameValid() )
+		{
+			// the site shows the score of running games
+			const int points1 = entry.game->getScore(LEFT_PLAYER);
+			const int points2 = entry.game->getScore(RIGHT_PLAYER);
+			if( points1 != entry.livePoints1 || points2 != entry.livePoints2 )
+			{
+				entry.livePoints1 = points1;
+				entry.livePoints2 = points2;
+				mTournament->reportLiveScore( entry.matchId, points1, points2 );
+			}
+		}
 		if( !entry.reported )
 		{
 			// the winner is checked first, since a player may leave right after the win
@@ -790,7 +802,7 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	SWLS_Games++;
 	mGameList.push_back( game );
 	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
-												match.player1, match.player2 } );
+												match.player1, match.player2, -1, -1 } );
 
 	syslog(LOG_NOTICE, "Match %d game %d started: '%s' vs. '%s', rules %s, %d points, speed %d, best of %d",
 		   match.matchId, order.game, left.getName().c_str(), right.getName().c_str(),

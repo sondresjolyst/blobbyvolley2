@@ -17,4 +17,10 @@
 	<var name="tournament_next_game_delay" value="10"/>
 	<!-- Each finished game and series is added to this file as a line of JSON. Leave it empty to only log them. -->
 	<var name="tournament_results_file" value="tournament_results.jsonl"/>
+	<!-- Folder for the players file, the results and the reports that wait for the site. Empty means the working directory. BLOBBY_DATA_DIR comes first. -->
+	<var name="tournament_data_dir" value=""/>
+	<!-- Address of the tournament site, https only. The server then reads the players file from the site and reports each game. BLOBBY_SITE_URL comes first. -->
+	<var name="tournament_site_url" value=""/>
+	<!-- Game server token from the admin page of the site. Prefer BLOBBY_SITE_TOKEN, which comes first. -->
+	<var name="tournament_site_token" value=""/>
 </userconfig>

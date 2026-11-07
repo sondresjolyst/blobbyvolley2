@@ -35,6 +35,12 @@ docker run -d --name blobby-server -p 1234:1234/udp -v "%cd%\config:/usr/local/s
 ```
 Players on other machines may need a Windows firewall rule that allows inbound UDP on port 1234.
 
+To run a tournament server for the tournament site, pass the settings from the admin page of the site and keep `/data` on a volume:
+```bash
+docker run -d --name blobby-server --restart unless-stopped -p 1234:1234/udp -v blobby-data:/data -e BLOBBY_TOURNAMENT=1 -e BLOBBY_SITE_URL=https://<site> -e BLOBBY_SITE_TOKEN=<token> sondresjo/blobby-server
+```
+See [Connect to the tournament site](#connect-to-the-tournament-site).
+
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
 #### Tournament mode
@@ -70,6 +76,25 @@ In tournament mode players cannot open or join games in the lobby. The lobby sho
 <var name="tournament_max_matches" value="1"/>
 ```
 The server logs each started match and each game result, and adds them as lines of JSON to `tournament_results.jsonl`. A game line holds the report body that the game server API of the site expects. Set `tournament_results_file` to an empty value to only log them.
+
+##### Connect to the tournament site
+With the address and the token of the tournament site, the server reads the players file from the site and reports each game to it. The settings are environment variables, which come before the config file:
+- `BLOBBY_TOURNAMENT=1` turns tournament mode on, and `0` turns it off.
+- `BLOBBY_SITE_URL` is the address of the site. It must start with `https://`.
+- `BLOBBY_SITE_TOKEN` is the game server token from the admin page of the site.
+- `BLOBBY_DATA_DIR` is the folder for the files below. The container image uses `/data`.
+
+The config file can set the same as `tournament_mode`, `tournament_site_url`, `tournament_site_token` and `tournament_data_dir`. The server does not start when the address is not https or the token is missing. It never logs the token.
+
+The server reads the sync of the site every 3 seconds. When it changed, the server writes it as `tournament_players.xml` in the data folder, in the format above. Each report goes to `tournament_outbox.jsonl` before it is sent. The server sends the reports of a match one at a time in game order and removes each one when the site answers it. While the site cannot be reached, matches keep running and the reports wait in the outbox, also across a restart of the server. The server tries again after 1 second, then waits twice as long each time, up to 30 seconds. Until the site has a game, the players file counts it, so a restart does not play it again. The last sync is kept in `tournament_sync.json` for that. A report the site refuses for good is logged and added to `tournament_refused.jsonl`. With a wrong token the reports wait until the token is fixed.
+
+The score of each running game goes to the site at most once a second, for the big screen. It is never queued.
+
+The server also reads the sponsors of the site when they change and keeps them in the `sponsors` folder of the data folder. `board.json` holds the board style and the sponsors in order, and the `logos` folder holds each logo as `<hash>.bmp`. The game does not show these yet.
+
+For a test site, `BLOBBY_SITE_CA_FILE` adds certificates to trust, and `BLOBBY_SITE_ALLOW_HTTP=1` allows plain http to localhost. Do not set them at the LAN.
+
+The site client needs libcurl and nlohmann_json at build time. Without them the server is built without it, and it does not start with `BLOBBY_SITE_URL` set.
 
 #### Join links
 The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. It works the same on Windows and Linux.
@@ -110,12 +135,13 @@ CMake version is 3.11.
 
 Debian-based Distros:
 ```bash
-apt-get install g++ cmake libsdl2-dev libboost-dev libphysfs-dev
+apt-get install g++ cmake libsdl2-dev libboost-dev libphysfs-dev libcurl4-openssl-dev nlohmann-json3-dev
 ```
 Arch-based Distros:
 ```bash
-pacman -S gcc cmake sdl2 boost physfs
+pacman -S gcc cmake sdl2 boost physfs curl nlohmann-json
 ```
+libcurl and nlohmann_json are only needed for the tournament site client of the server.
 2. Compile:
 ```bash
 cmake .
@@ -133,7 +159,7 @@ src/blobby
 
 3. Install dependencies:
 ```bash
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-physfs mingw-w64-ucrt-x86_64-boost
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-physfs mingw-w64-ucrt-x86_64-boost mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-nlohmann-json
 ```
 4. Compile in the project directory:
 ```bash
@@ -180,7 +206,7 @@ https://brew.sh
 
 2. Install dependencies:
 ```bash
-brew install sdl2 physfs boost
+brew install sdl2 physfs boost nlohmann-json
 ```
 3. Compile:
 ```bash

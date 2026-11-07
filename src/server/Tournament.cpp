@@ -137,6 +137,10 @@ TournamentStatusData readTournamentStatus(GenericIn& in)
 
 TournamentEvents::~TournamentEvents() = default;
 
+void TournamentEvents::liveScore(int, int, int, int, int, int)
+{
+}
+
 TournamentLog::TournamentLog(std::string resultsPath, LogFunction log)
 : mPath(std::move(resultsPath))
 , mLog(std::move(log))
@@ -507,6 +511,15 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	// but only once the organizer decided
 	++s.nextGame;
 	s.held = true;
+}
+
+void TournamentDirector::reportLiveScore(int matchId, int points1, int points2)
+{
+	auto found = mSeries.find(matchId);
+	if (found == mSeries.end() || !found->second.running || !mEvents)
+		return;
+	const Series& s = found->second;
+	mEvents->liveScore(matchId, s.playingGame, s.playing.player1, points1, s.playing.player2, points2);
 }
 
 PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long long now_ms) const

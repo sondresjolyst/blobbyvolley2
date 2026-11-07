@@ -52,6 +52,8 @@ jobs:
             ${{ matrix.platform.msys-env }}-SDL2
             ${{ matrix.platform.msys-env }}-physfs
             ${{ matrix.platform.msys-env }}-boost
+            ${{ matrix.platform.msys-env }}-curl
+            ${{ matrix.platform.msys-env }}-nlohmann-json
       - name: Setup Linux
         if: runner.os == 'Linux'
         run: |
@@ -60,19 +62,22 @@ jobs:
             cmake \
             libsdl2-dev \
             libphysfs-dev \
-            libboost-test-dev
+            libboost-test-dev \
+            libcurl4-openssl-dev \
+            nlohmann-json3-dev
       - name: Setup MacOS
         if: runner.os == 'macOS'
         run: |
           brew install \
             sdl2 \
             physfs \
-            boost
+            boost \
+            nlohmann-json
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       # Check that blobby builds
       - name: Configure CMake and Build
         run: |
-          cmake .
+          cmake . -DBLOBBY_SITE_SYNC=ON
           cmake --build .
 
       # On all systems, run the unit tests
