@@ -48,3 +48,13 @@ src/blobby.nacp
 *.zip
 config.h
 test_compile
+
+#test leftovers of older test runs, the tests now write to a temporary folder
+*.tmp
+/bt_site
+/bt_sponsor_cache
+/rules
+/replaytest_*.bvr
+/joincodes_test_*.xml
+/blobbytest_atomic.txt
+/test/blobbytest

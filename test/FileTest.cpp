@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cstring>
 #include <physfs.h>
+#include "TestDir.h"
 
 #define TEST_EXECUTION_PATH "./test/"
 
@@ -15,8 +16,7 @@ struct PhysfsFixture
 {
 	PhysfsFixture() : mFS( TEST_EXECUTION_PATH )
 	{
-		mFS.setWriteDir(".");
-		mFS.addToSearchPath(".", true);
+		mFS.setWriteDir(testDir());
 	}
 	FileSystem mFS;
 };

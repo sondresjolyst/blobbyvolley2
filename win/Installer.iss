@@ -1,3 +1,5 @@
+; Installer of upstream Blobby Volley 2 1.1.1. The release flow of this fork does not use it.
+; The fork ships a zip, see .github/workflows/windows-package.yaml.
 ; Problems: README must have .txt ending, so that it could be opened
 #define FullyQualifiedAppName "Blobby Volley 2 Version 1.1.1"
 
