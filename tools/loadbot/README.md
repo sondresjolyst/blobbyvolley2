@@ -2,9 +2,22 @@
 
 `blobby-loadbot` is a headless client for load tests of a tournament server. It joins with a join code like a player, plays every game the server starts with a simple bot and stays connected for the next match. It opens no window and plays no sound.
 
-It uses the network and game code of the game itself: the enter packet, the tournament status, the game state and the input packets. Like the game, it answers the rules checksum of a new game in the same pass that reads the packet, so it is as fast as a real client on a LAN.
+It uses the network and game code of the game itself to read and write its packets. It answers the rules checksum of a new game at once, like the real client.
 
-Each event is one line of JSON on stdout, with the time `t` in seconds and the join code. The events are `connecting`, `connected`, `refused`, `status`, `game_offered`, `game_start`, `game_end` and `disconnected`. A `game_end` line holds whether the bot won, the length of the game, the number of state updates, the largest gap between two updates, the round trip of the input and the score.
+## Output
+
+Each event is one line of JSON on stdout. Every line has the time `t` in seconds, `code` with the first 3 characters of the join code, `name` with the nickname the server sent (empty until the first status) and `event`:
+
+- `connecting`: the bot starts a connection.
+- `connect_failed`: the server could not be reached or had no free slot. The bot tries again after 2 seconds, and waits twice as long after each failure, up to 30 seconds.
+- `connected`: the connection is up and the bot sent its join code.
+- `refused`: the server refused the join code, with the reason in `reason`. The bot stops with exit code 3.
+- `status`: the tournament status the server sent, such as the opponent and the series score.
+- `game_offered`: the server starts a game and sent the rules checksum.
+- `game_start`: the game runs, with the game speed and the opponent.
+- `game_end`: the game is over. `why` is `won_notification` for a game played out, `opponent_disconnected` when the opponent left, `disconnected` when the bot lost its connection and `stopped` when the bot was stopped. `won` is 1 or 0 for a game played out, -1 otherwise. The line also holds the length of the game, the number of state updates, the largest gap between two updates, the round trip of the input and the score.
+- `disconnected`: the connection was lost. The bot connects again after 2 seconds.
+- `stopped`: the bot got SIGTERM or SIGINT and ends with exit code 0, so `docker stop` returns at once.
 
 ## Build
 
@@ -21,7 +34,7 @@ Or build the container image from the root of the repository:
 
     blobby-loadbot <host> <port> <join code> [skill]
 
-The skill is 0 to 100 and sets how often the bot moves wrong. It is 70 by default. A lost connection is tried again after 2 seconds.
+The skill is 0 to 100 and sets how often the bot moves wrong. Values outside are clamped. It is 70 by default.
 
 To run one bot per player against a server on the Docker network `lan`, with a file `codes.txt` that has one join code per line:
 
@@ -36,7 +49,7 @@ The server only starts the games of matches in its players file, or in the sync 
 
 ## Smoke test
 
-`smoke.sh` starts a tournament server without a site, with a players file of two players and one best of 3 match to 3 points. It starts two bots and passes when the results file of the server holds the decided series. It removes its containers, the data volume and its network when it ends.
+`smoke.sh` starts a tournament server without a site, with a players file of two players and one best of 3 match to 3 points. It starts two bots and passes when the results file of the server holds the decided series. It fails as soon as the server or a bot stops, and removes its containers, the data volume and its network when it ends.
 
     docker build -t blobby-server .
     docker build -f tools/loadbot/Dockerfile -t blobby-loadbot .

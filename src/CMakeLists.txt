@@ -180,7 +180,32 @@ endif ()
 
 # headless client for load tests of a tournament server, see tools/loadbot/README.md
 if (BUILD_LOADBOT)
-	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp ${common_SRC})
+	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp
+		BlobbyDebug.cpp
+		Clock.cpp
+		Color.cpp
+		DuelMatch.cpp
+		DuelMatchState.cpp
+		File.cpp
+		FileRead.cpp
+		FileSystem.cpp
+		FileWrite.cpp
+		GameLogic.cpp
+		GameLogicState.cpp
+		GenericIO.cpp
+		InputSource.cpp
+		IScriptableComponent.cpp
+		NetworkMessage.cpp
+		PhysicState.cpp
+		PhysicWorld.cpp
+		PlayerIdentity.cpp
+		PlayerInput.cpp
+		UserConfig.cpp
+		server/JoinCodes.cpp
+		server/MatchAssignments.cpp
+		server/NetworkPlayer.cpp
+		server/Tournament.cpp
+		)
 	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
 endif ()
 

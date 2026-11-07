@@ -47,7 +47,18 @@ sleep 2
 docker run -d --name "$PREFIX-bot1" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKAAAAAA2 >/dev/null
 docker run -d --name "$PREFIX-bot2" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKBBBBBB3 >/dev/null
 
+running() {
+	[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
+}
+
 for _ in $(seq 1 "$TIMEOUT"); do
+	for container in "$PREFIX-server" "$PREFIX-bot1" "$PREFIX-bot2"; do
+		if ! running "$container"; then
+			echo "smoke failed: $container stopped"
+			docker logs "$container" 2>&1 | tail -n 40
+			exit 1
+		fi
+	done
 	results=$(docker exec "$PREFIX-server" cat /data/tournament_results.jsonl 2>/dev/null || true)
 	if grep -q '"event":"series"' <<< "$results"; then
 		echo "$results"
