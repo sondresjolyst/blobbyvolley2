@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "raknet/RakClient.h"
 
+#include "BlobbyApp.h"
 #include "IMGUI.h"
 #include "NetworkState.h"
 #include "NetworkSearchState.h"
@@ -282,6 +283,9 @@ void LobbyState::step_impl()
 					mSubState = std::make_shared<LobbyMainSubstate>(mClient, mPreferedSpeed, mPreferedRules, mPreferedScore);
 				}
 				}
+				break;
+			case ID_SPONSORS:
+				getApp().handleSponsorPacket(packet->data, packet->length, mClient);
 				break;
 			case ID_RULES_CHECKSUM: // this packet is sent when a game was created, so we probably are joining a game here.
 				// in a casual lobby we are in the lobby game substate here. A tournament server

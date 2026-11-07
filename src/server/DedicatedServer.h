@@ -29,12 +29,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <memory>
 #include <set>
 #include <chrono>
+#include <functional>
 
 #include "NetworkPlayer.h"
 #include "NetworkMessage.h"
 #include "server/MatchMaker.h"
 #include "server/JoinCodes.h"
 #include "server/Tournament.h"
+#include "SponsorSync.h"
 
 class ThreadSafeRakServer;
 
@@ -90,6 +92,11 @@ class DedicatedServer
 		/// Casual games are not possible then.
 		void setTournamentDirector( std::unique_ptr<TournamentDirector> director );
 
+		/// Gives the sponsor board to send to the players in tournament mode. It returns true and the board
+		/// when the board changed. It is called on the main loop, at most once per interval.
+		typedef std::function<bool(sponsors::Board&)> SponsorSource;
+		void setSponsorSource( SponsorSource source, unsigned interval_ms = 1000 );
+
 	private:
 		// creates a new game with those players
 		// does not add the game to the active game list
@@ -113,6 +120,12 @@ class DedicatedServer
 		// stops a finished game and returns its replay packet, empty without a game
 		std::vector<unsigned char> finishForNextGame(const std::shared_ptr<NetworkGame>& game);
 		void sendTournamentStatus(unsigned long long now_ms);
+
+		// sponsor board
+		void updateSponsors(unsigned long long now_ms);
+		void processSponsorRequest(PlayerID source, RakNet::BitStream& stream);
+		// true while the player plays a game that has no winner yet
+		bool inRunningGame(PlayerID player) const;
 
 		// raknet server used
 		const std::unique_ptr<ThreadSafeRakServer> mServer;
@@ -169,4 +182,16 @@ class DedicatedServer
 		std::map<PlayerID, PlayerTournamentStatus> mSentStatus;
 		// matches whose missing player was logged already
 		std::set<int> mMissingPlayerLogged;
+
+		// sponsor board of a tournament server and what each player got
+		SponsorSource mSponsorSource;
+		unsigned mSponsorInterval = 1000;
+		unsigned long long mNextSponsorPoll = 0;
+		sponsors::BoardSender mSponsors;
+		// players that announced tournament support, only they get the board
+		std::set<PlayerID> mSponsorPlayers;
+		std::map<PlayerID, std::string> mSentSponsorVersion;
+		std::map<PlayerID, std::set<std::string>> mSentLogos;
+		// logos a player asked for during a game, sent when the game is over
+		std::map<PlayerID, std::vector<const sponsors::LogoFile*>> mHeldLogos;
 };

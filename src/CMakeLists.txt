@@ -37,6 +37,9 @@ set(common_SRC
 	PlayerInput.h PlayerInput.cpp
 	IScriptableComponent.cpp IScriptableComponent.h
 	PlayerIdentity.cpp PlayerIdentity.h
+	Sha256.cpp Sha256.h
+	SponsorBoard.cpp SponsorBoard.h
+	SponsorSync.cpp SponsorSync.h
 	server/DedicatedServer.cpp server/DedicatedServer.h
 	server/NetworkPlayer.cpp server/NetworkPlayer.h
 	server/NetworkGame.cpp server/NetworkGame.h
@@ -61,7 +64,6 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	RenderManagerGL2D.cpp RenderManagerGL2D.h
 	RenderManagerSDL.cpp RenderManagerSDL.h
 	RenderManagerNull.cpp RenderManagerNull.h
-	SponsorBoard.cpp SponsorBoard.h
 	ScriptedInputSource.cpp ScriptedInputSource.h
 	SoundManager.cpp SoundManager.h
 	Vector.h
@@ -163,8 +165,7 @@ if (UNIX AND (NOT ANDROID) OR WIN32)
 	if (BLOBBY_SITE_SYNC_ENABLED)
 		target_sources(blobby-server PRIVATE
 			server/SiteSync.cpp server/SiteSync.h
-			server/CurlHttpClient.cpp server/CurlHttpClient.h
-			SponsorBoard.cpp SponsorBoard.h)
+			server/CurlHttpClient.cpp server/CurlHttpClient.h)
 		target_compile_definitions(blobby-server PRIVATE BLOBBY_SITE_SYNC)
 		target_link_libraries(blobby-server nlohmann_json::nlohmann_json)
 		if (TARGET CURL::libcurl)

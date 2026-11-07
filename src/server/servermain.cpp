@@ -238,6 +238,14 @@ int main(int argc, char** argv)
 		director->setEvents(events);
 		server.setTournamentDirector(std::move(director));
 
+#ifdef BLOBBY_SITE_SYNC
+		// the site sync stores the sponsor board here, and it can also be written by hand
+		const std::string sponsorsFolder = pathInDataDir(site.dataDir, "sponsors");
+		auto storedBoard = std::make_shared<StoredSponsorBoard>(sponsorsFolder, logLine);
+		server.setSponsorSource([storedBoard](sponsors::Board& board){ return storedBoard->poll(board); });
+		syslog(LOG_NOTICE, "The sponsor board in %s is sent to the players", sponsorsFolder.c_str());
+#endif
+
 		syslog(LOG_NOTICE, "Tournament mode is on, players join with codes from %s", tournamentPlayersFile.c_str());
 		if(tournamentMaxMatches == 0)
 			syslog(LOG_NOTICE, "Assigned matches start as soon as both players are connected");

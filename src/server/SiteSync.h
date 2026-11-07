@@ -31,6 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <thread>
 #include <vector>
 
+#include "Sha256.h"
+#include "SponsorSync.h"
 #include "Tournament.h"
 
 /// One request to the tournament site.
@@ -179,21 +181,47 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 /// The nextGame of each match in a sync.
 std::map<int, int> syncNextGames(const std::string& syncJson);
 
-/// SHA-256 of data as 64 lower case hex characters.
-std::string sha256Hex(const std::string& data);
-
 /*! Stores the sponsors of the site below a folder, so they survive an outage.
 	\details Logos go to logos/<hash>.bmp and the list to board.json, which is written last.
 	board.json holds sponsorsVersion, gameBoard and the sponsors in order with name and logo file.
 	A logo whose SHA-256 differs from its hash, or that the game could not show, is skipped.
 	Logo files that board.json no longer names are removed.
-	Showing them in the game is a separate step that reads these files.
+	The server reads these files with loadStoredSponsors and sends them to the players.
 */
 bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, std::string& version,
 				std::vector<std::string>& warnings, std::string& error);
 
 /// The sponsorsVersion of a stored board.json, empty when there is none.
 std::string storedSponsorsVersion(const std::string& folder);
+
+/*! Reads a board that storeSponsors stored, or a board.json written by hand in the same format.
+	\details Each sponsor names its logo as logos/<hash>.bmp. A logo that does not match its hash,
+	that the game could not show or that goes past the limits of sponsors::limitBoard is skipped
+	and added to warnings. Returns false and sets error when board.json cannot be read or a logo
+	it names is missing, which happens for a moment while the sync replaces the board.
+*/
+bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
+						std::vector<std::string>& warnings, std::string& error);
+
+/// Reads the stored board again when board.json changes, for DedicatedServer::setSponsorSource.
+class StoredSponsorBoard
+{
+	public:
+		typedef std::function<void(bool problem, const std::string&)> LogFunction;
+
+		explicit StoredSponsorBoard(std::string folder, LogFunction log = LogFunction());
+
+		/// True and the board when board.json changed and was read. A board that could not be read
+		/// is tried again on the next call.
+		bool poll(sponsors::Board& board);
+
+	private:
+		std::string mFolder;
+		LogFunction mLog;
+		std::string mContent;
+		bool mLoaded = false;
+		std::string mLastError;
+};
 
 /// Live score of a running game.
 struct LiveScore

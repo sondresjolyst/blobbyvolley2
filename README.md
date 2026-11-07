@@ -17,6 +17,8 @@ Put the logos in a folder named `sponsors`. The game reads it from the `data` fo
 
 Each logo must be a BMP file up to 160 pixels wide and 40 pixels high. 32 pixels high looks best. Opaque logos can be uncompressed 24-bit BMPs. Logos with transparency must be 32-bit BMPs with an alpha channel, saved with a V4 or V5 header and BI_BITFIELDS, so the board shows through. The logos scroll in file name order. Files that do not match are skipped with a warning.
 
+On a tournament server the board comes from the server instead. The server sends the board style and the logos when a player joins and again when they change. The game keeps the logos in `sponsors/cache` in the user folder, so after a restart it only gets the logos it does not have. When the style is `off` the board is hidden. Back from the tournament server, the game shows the logos of the `sponsors` folder again.
+
 ### Dedicated Server
 The dedicated server is built as `src/blobby-server`. It runs at 100% game speed by default, which is 75 FPS.
 
@@ -103,7 +105,13 @@ The server reads the sync of the site every 3 seconds. When it changed, the serv
 
 The score of each running game goes to the site at most once a second, for the big screen. It is never queued.
 
-The server also reads the sponsors of the site once a minute and keeps them in the `sponsors` folder of the data folder when they changed. `board.json` holds the board style and the sponsors in order, and the `logos` folder holds each logo as `<hash>.bmp`. A logo that does not match its hash, or that the game could not show, is skipped. Logos that are no longer listed are removed. The game does not show these yet.
+The server also reads the sponsors of the site once a minute and keeps them in the `sponsors` folder of the data folder when they changed. `board.json` holds the board style and the sponsors in order, and the `logos` folder holds each logo as `<hash>.bmp`. A logo that does not match its hash, or that the game could not show, is skipped. Logos that are no longer listed are removed. The server reads `board.json` again within a second after it changes and sends the board to the players in tournament mode. A board has at most 32 logos and 768 KB of logos together. Each logo follows the rules of the sponsor board above. The server skips a logo that does not match its hash or that goes past these limits and logs it.
+
+Without the site, a `board.json` in the `sponsors` folder of the data folder works too. Put each logo in `logos` named by the SHA-256 of the file, and write `board.json` last:
+```json
+{"gameBoard": "led", "sponsors": [{"logo": "logos/<sha256>.bmp"}]}
+```
+`gameBoard` is `off`, `led`, `printed`, `wood`, `slim` or `padded`. The server needs the site client at build time for this.
 
 For a test site, `BLOBBY_SITE_CA_FILE` adds certificates to trust, and `BLOBBY_SITE_ALLOW_HTTP=1` allows plain http to localhost. Do not set them at the LAN.
 
