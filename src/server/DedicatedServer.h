@@ -111,6 +111,8 @@ class DedicatedServer
 		void processEnterServer(PlayerID source, RakNet::BitStream& stream);
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
+		// tells a client why it cannot enter or why its connection closes
+		void sendEntryRefused(PlayerID target, EntryRefusedReason reason);
 		void closeRefusedConnections();
 		void closeConnectionsThatDidNotEnter();
 		// forgets a connection that closed: lobby, game, tournament and every per connection map

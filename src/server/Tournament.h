@@ -30,7 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "MatchAssignments.h"
 #include "NetworkMessage.h"
-#include "GenericIOFwd.h"
+#include "ServerLog.h"
+#include "TournamentProtocol.h"
 
 typedef std::chrono::system_clock::time_point WallTime;
 
@@ -104,9 +105,7 @@ class TournamentEvents
 class TournamentLog : public TournamentEvents
 {
 	public:
-		typedef std::function<void(bool problem, const std::string&)> LogFunction;
-
-		TournamentLog(std::string resultsPath, LogFunction log);
+		TournamentLog(std::string resultsPath, ServerLog log);
 
 		void matchConnected(int matchId, int player1, int player2) override;
 		void gameEnded(const GameReport& report) override;
@@ -116,7 +115,7 @@ class TournamentLog : public TournamentEvents
 		void append(const std::string& line);
 
 		std::string mPath;
-		LogFunction mLog;
+		ServerLog mLog;
 };
 
 /// What a player of the tournament waits for.
@@ -136,31 +135,9 @@ struct PlayerTournamentStatus
 	bool operator!=(const PlayerTournamentStatus& o) const { return !(*this == o); }
 };
 
-/// What a tournament server tells a player in a TOURNAMENT_STATUS packet.
-struct TournamentStatusData
-{
-	TournamentStatus status = TournamentStatus::NO_MATCH;
-	std::string opponent;
-	unsigned game = 0;
-	unsigned bestOf = 0;
-	unsigned ownWins = 0;
-	unsigned opponentWins = 0;
-	/// The nickname of the player who gets the packet, empty when the server did not send one.
-	std::string ownName;
-	/// Milliseconds until the next game starts, as the server counted when it sent the packet.
-	unsigned nextGameInMs = 0;
-};
-
-/// Longest wait for the next game that a client accepts from a server, the longest next game delay.
-constexpr unsigned MAX_NEXT_GAME_DELAY_MS = MAX_NEXT_GAME_DELAY * 1000;
-
 /// Writes a whole TOURNAMENT_STATUS packet, from ID_LOBBY on.
 void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStatus& status,
 						const std::string& opponent, const std::string& ownName, unsigned nextGameInMs);
-
-/// Reads the body of a TOURNAMENT_STATUS packet, after the packet type.
-/// A name that is not a valid nickname is read as empty.
-TournamentStatusData readTournamentStatus(GenericIn& in);
 
 /*! \class TournamentDirector
 	\brief Decides when assigned matches start and keeps the score of each series.
@@ -260,6 +237,8 @@ class TournamentDirector
 		void updateCooldowns(unsigned long long now_ms);
 		bool isBusy(int playerId) const;
 		static void takeWins(Series& series, const MatchAssignment& match);
+		/// The report of the game the series plays, with a new report id and the fields both outcomes share.
+		GameReport makeReport(int matchId, const Series& s, int points1, int points2, WallTime startedAt, WallTime endedAt);
 
 		unsigned mMaxRunning;
 		unsigned mNextGameDelayMs;

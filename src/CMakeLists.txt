@@ -40,7 +40,11 @@ set(common_SRC
 	Sha256.cpp Sha256.h
 	SponsorBoard.cpp SponsorBoard.h
 	SponsorSync.cpp SponsorSync.h
+	StringUtil.cpp StringUtil.h
+	TournamentLimits.h
+	TournamentProtocol.cpp TournamentProtocol.h
 	server/DedicatedServer.cpp server/DedicatedServer.h
+	server/FileUtil.cpp server/FileUtil.h
 	server/NetworkPlayer.cpp server/NetworkPlayer.h
 	server/NetworkGame.cpp server/NetworkGame.h
 	server/MatchMaker.cpp server/MatchMaker.h
@@ -200,13 +204,14 @@ if (BUILD_LOADBOT)
 		PhysicWorld.cpp
 		PlayerIdentity.cpp
 		PlayerInput.cpp
+		StringUtil.cpp
+		TournamentProtocol.cpp
 		UserConfig.cpp
-		server/JoinCodes.cpp
-		server/MatchAssignments.cpp
-		server/NetworkPlayer.cpp
-		server/Tournament.cpp
 		)
-	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
+	# the bot has its own main and never includes SDL.h, so it must not get the main of SDL2main
+	set(LOADBOT_LIBS ${BLOBBY_COMMON_LIBS})
+	list(REMOVE_ITEM LOADBOT_LIBS SDL2::SDL2main)
+	target_link_libraries(blobby-loadbot ${LOADBOT_LIBS})
 endif ()
 
 if (UNIX AND (NOT ANDROID))

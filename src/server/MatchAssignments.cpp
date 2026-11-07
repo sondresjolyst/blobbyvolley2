@@ -30,18 +30,34 @@ namespace
 {
 	// longest rules file name
 	const std::size_t MAX_RULE_FILE_NAME = 64;
+}
 
-	// reads an optional whole number attribute. Returns false when it is there but not valid.
-	bool readInt(const tinyxml2::XMLElement* element, const char* name, int min, int max, int& value)
-	{
-		if (!element->Attribute(name))
-			return true;
-		int read = 0;
-		if (element->QueryIntAttribute(name, &read) != tinyxml2::XML_SUCCESS || read < min || read > max)
-			return false;
-		value = read;
+bool readIntAttribute(const tinyxml2::XMLElement* element, const char* name, int min, int max, int& value)
+{
+	if (!element->Attribute(name))
 		return true;
+	int read = 0;
+	if (element->QueryIntAttribute(name, &read) != tinyxml2::XML_SUCCESS || read < min || read > max)
+		return false;
+	value = read;
+	return true;
+}
+
+const tinyxml2::XMLElement* parsePlayersFile(tinyxml2::XMLDocument& doc, const std::string& xml, std::string& error)
+{
+	if (doc.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
+	{
+		error = std::string("the players file is not valid XML: ") + doc.ErrorName();
+		return nullptr;
 	}
+
+	const tinyxml2::XMLElement* root = doc.RootElement();
+	if (!root || std::strcmp(root->Name(), "tournament") != 0)
+	{
+		error = "the players file has no <tournament> root element";
+		return nullptr;
+	}
+	return root;
 }
 
 bool operator==(const MatchAssignment& a, const MatchAssignment& b)
@@ -55,11 +71,6 @@ bool operator==(const MatchAssignment& a, const MatchAssignment& b)
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
 {
 	return !(a == b);
-}
-
-bool isValidScoreToWin(int scoreToWin)
-{
-	return scoreToWin >= MIN_MATCH_SCORE_TO_WIN && scoreToWin <= MAX_MATCH_SCORE_TO_WIN;
 }
 
 int clampNextGameDelay(int seconds)
@@ -93,19 +104,16 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 						std::string& error)
 {
 	tinyxml2::XMLDocument doc;
-	if (doc.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
-	{
-		error = std::string("the players file is not valid XML: ") + doc.ErrorName();
+	const tinyxml2::XMLElement* root = parsePlayersFile(doc, xml, error);
+	if (!root)
 		return false;
-	}
+	parseMatchAssignments(root, knownPlayers, matches, warnings);
+	return true;
+}
 
-	const tinyxml2::XMLElement* root = doc.RootElement();
-	if (!root || std::strcmp(root->Name(), "tournament") != 0)
-	{
-		error = "the players file has no <tournament> root element";
-		return false;
-	}
-
+void parseMatchAssignments(const tinyxml2::XMLElement* root, const std::set<int>& knownPlayers,
+						std::vector<MatchAssignment>& matches, std::vector<std::string>& warnings)
+{
 	std::vector<MatchAssignment> found;
 	int index = 0;
 	for (const tinyxml2::XMLElement* element = root->FirstChildElement("match"); element;
@@ -121,15 +129,15 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 		}
 
 		MatchAssignment match;
-		if (!readInt(element, "id", 1, 2147483647, match.matchId))
+		if (!readIntAttribute(element, "id", 1, 2147483647, match.matchId))
 		{
 			warnings.push_back(where + " has an invalid id, skipped");
 			continue;
 		}
 		const std::string named = "match " + std::to_string(match.matchId);
 
-		if (!readInt(element, "player1", 1, 2147483647, match.player1)
-			|| !readInt(element, "player2", 1, 2147483647, match.player2)
+		if (!readIntAttribute(element, "player1", 1, 2147483647, match.player1)
+			|| !readIntAttribute(element, "player2", 1, 2147483647, match.player2)
 			|| match.player1 == match.player2)
 		{
 			warnings.push_back(named + " has invalid players, skipped");
@@ -149,22 +157,22 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 			continue;
 		}
 
-		if (!readInt(element, "scoreToWin", MIN_MATCH_SCORE_TO_WIN, MAX_MATCH_SCORE_TO_WIN, match.scoreToWin))
+		if (!readIntAttribute(element, "scoreToWin", MIN_MATCH_SCORE_TO_WIN, MAX_MATCH_SCORE_TO_WIN, match.scoreToWin))
 		{
 			warnings.push_back(named + " has an invalid scoreToWin, skipped");
 			continue;
 		}
-		if (!readInt(element, "speed", MIN_MATCH_SPEED, MAX_MATCH_SPEED, match.speed))
+		if (!readIntAttribute(element, "speed", MIN_MATCH_SPEED, MAX_MATCH_SPEED, match.speed))
 		{
 			warnings.push_back(named + " has an invalid speed, skipped");
 			continue;
 		}
-		if (!readInt(element, "bestOf", 1, MAX_MATCH_BEST_OF, match.bestOf) || match.bestOf % 2 == 0)
+		if (!readIntAttribute(element, "bestOf", 1, MAX_MATCH_BEST_OF, match.bestOf) || match.bestOf % 2 == 0)
 		{
 			warnings.push_back(named + " has an invalid bestOf, it must be odd, skipped");
 			continue;
 		}
-		if (!readInt(element, "nextGame", 1, 2147483647, match.nextGame))
+		if (!readIntAttribute(element, "nextGame", 1, 2147483647, match.nextGame))
 		{
 			warnings.push_back(named + " has an invalid nextGame, skipped");
 			continue;
@@ -176,13 +184,13 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 			continue;
 		}
 
-		if (!readInt(element, "wins1", 0, MAX_MATCH_WINS, match.wins1)
-			|| !readInt(element, "wins2", 0, MAX_MATCH_WINS, match.wins2))
+		if (!readIntAttribute(element, "wins1", 0, MAX_MATCH_WINS, match.wins1)
+			|| !readIntAttribute(element, "wins2", 0, MAX_MATCH_WINS, match.wins2))
 		{
 			warnings.push_back(named + " has invalid wins, skipped");
 			continue;
 		}
-		if (!readInt(element, "nextGameDelay", MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, match.nextGameDelay))
+		if (!readIntAttribute(element, "nextGameDelay", MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, match.nextGameDelay))
 		{
 			warnings.push_back(named + " has an invalid nextGameDelay, skipped");
 			continue;
@@ -218,5 +226,4 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 	std::sort(result.begin(), result.end(),
 			[](const MatchAssignment& a, const MatchAssignment& b){ return a.matchId < b.matchId; });
 	matches.swap(result);
-	return true;
 }

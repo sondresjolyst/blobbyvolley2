@@ -12,6 +12,7 @@
 #include "raknet/BitStream.h"
 
 #include "FileSystem.h"
+#include "TestBmp.h"
 #include "TestDir.h"
 #include "NetworkMessage.h"
 #include "Sha256.h"
@@ -21,12 +22,6 @@ using namespace sponsors;
 
 namespace
 {
-	void putU32(std::string& d, std::size_t at, std::uint32_t v)
-	{
-		for(int i = 0; i < 4; ++i)
-			d[at + i] = char((v >> (8 * i)) & 0xFF);
-	}
-
 	// an uncompressed 24-bit BMP whose pixels all have the given value
 	std::string makeBmp(int width, int height, unsigned char fill = 0x40)
 	{
@@ -34,15 +29,7 @@ namespace
 		const std::uint32_t size = 54 + stride * height;
 		std::string d(size, char(fill));
 		std::fill(d.begin(), d.begin() + 54, char(0));
-		d[0] = 'B';
-		d[1] = 'M';
-		putU32(d, 2, size);
-		putU32(d, 10, 54);
-		putU32(d, 14, 40);
-		putU32(d, 18, width);
-		putU32(d, 22, height);
-		d[26] = 1;
-		d[28] = 24;
+		writeBmpHeader(d, size, 54, 40, width, height, 24, 0);
 		return d;
 	}
 
@@ -53,16 +40,7 @@ namespace
 		const std::uint32_t size = offset + width * 4 * height;
 		std::string d(size, char(fill));
 		std::fill(d.begin(), d.begin() + offset, char(0));
-		d[0] = 'B';
-		d[1] = 'M';
-		putU32(d, 2, size);
-		putU32(d, 10, offset);
-		putU32(d, 14, 124);
-		putU32(d, 18, width);
-		putU32(d, 22, height);
-		d[26] = 1;
-		d[28] = 32;
-		putU32(d, 30, 3);
+		writeBmpHeader(d, size, offset, 124, width, height, 32, 3);
 		putU32(d, 54, 0x00FF0000u);
 		putU32(d, 58, 0x0000FF00u);
 		putU32(d, 62, 0x000000FFu);

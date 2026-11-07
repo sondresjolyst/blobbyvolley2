@@ -71,6 +71,11 @@ namespace sponsors
 	std::string boardVersion(const std::string& styleName, const std::vector<std::string>& hashes);
 	std::string boardVersion(const Board& board);
 
+	/// The file name of a logo, its hash and .bmp.
+	std::string logoFileName(const std::string& hash);
+	/// True if name is a logo file name as logoFileName makes it.
+	bool isLogoFileName(const std::string& name);
+
 	/// True if data is a logo the game can show and its SHA-256 is hash.
 	bool checkLogo(const std::string& hash, const std::string& data, std::string* error = nullptr);
 

@@ -46,7 +46,7 @@ NetworkPlayer::NetworkPlayer(PlayerID id, RakNet::BitStream& stream) : mID(id)
 	stream.Read(playerSide);
 
 	// Read the Playername
-	char charName[16] = {0};
+	char charName[PLAYER_NAME_BUFFER] = {0};
 	stream.Read(charName, sizeof(charName));
 
 	// ensures that charName is null terminated

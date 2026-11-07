@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <SDL.h>
 
 #include "DedicatedServer.h"
+#include "FileUtil.h"
 #include "SiteConfig.h"
 #ifdef BLOBBY_SITE_SYNC
 #include "SiteSync.h"
@@ -203,9 +204,7 @@ int main(int argc, char** argv)
 		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
 		server.setJoinCodeGate(std::move(gate));
 
-		auto logLine = [](bool problem, const std::string& message){
-			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
-		};
+		const ServerLog logLine = logToSyslog;
 		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
 		std::shared_ptr<TournamentEvents> events = std::make_shared<TournamentLog>(tournamentResultsFile, logLine);
 

@@ -85,6 +85,16 @@ std::string boardVersion(const Board& board)
 	return boardVersion(boardStyleName(board.style), hashes);
 }
 
+std::string logoFileName(const std::string& hash)
+{
+	return hash + ".bmp";
+}
+
+bool isLogoFileName(const std::string& name)
+{
+	return name.size() == std::size_t(HASH_LENGTH) + 4 && isSha256Hex(name.substr(0, HASH_LENGTH)) && name.compare(HASH_LENGTH, 4, ".bmp") == 0;
+}
+
 bool checkLogo(const std::string& hash, const std::string& data, std::string* error)
 {
 	if(!isSha256Hex(hash))
@@ -333,7 +343,7 @@ FileLogoCache::FileLogoCache(std::string directory) : mDirectory(std::move(direc
 
 std::string FileLogoCache::path(const std::string& hash) const
 {
-	return mDirectory + "/" + hash + ".bmp";
+	return mDirectory + "/" + logoFileName(hash);
 }
 
 bool FileLogoCache::load(const std::string& hash, std::string& data)

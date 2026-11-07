@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkGame.h"
 #include "GenericIO.h"
 #include "FileExceptions.h"
+#include "ServerLog.h"
 
 #ifndef WIN32
 #ifndef __ANDROID__
@@ -68,6 +69,11 @@ namespace
 extern "C"
 #endif
 void syslog(int pri, const char* format, ...);
+
+void logToSyslog(bool problem, const std::string& message)
+{
+	syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
+}
 
 DedicatedServer::DedicatedServer(ServerInfo info,
 								const std::vector<std::string>& rulefiles,
@@ -351,9 +357,7 @@ void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
 	mJoinCodes = std::move(gate);
 	if( mJoinCodes )
 	{
-		mJoinCodes->setLogFunction([](JoinCodeGate::LogLevel level, const std::string& message){
-			syslog(level == JoinCodeGate::LogLevel::PROBLEM ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
-		});
+		mJoinCodes->setLogFunction(logToSyslog);
 	}
 }
 
@@ -568,13 +572,7 @@ void DedicatedServer::removeConnection(const packet_ptr& packet)
 void DedicatedServer::handOverJoinCode(PlayerID holder)
 {
 	// the old holder learns why it is closed
-	RakNet::BitStream stream;
-	stream.Write((unsigned char)ID_LOBBY);
-	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
-	stream.Write((unsigned char)EntryRefusedReason::CODE_IN_USE);
-	// the same priority as the other lobby packets, so the reason does not wait in the
-	// client behind an earlier packet of this channel that is still on its way
-	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, holder);
+	sendEntryRefused( holder, EntryRefusedReason::CODE_IN_USE );
 
 	// then it leaves like a lost connection, so lobby, game and tournament forget it
 	packet_ptr lost(new Packet(), [](Packet* p){ delete[] p->data; delete p; });
@@ -593,14 +591,20 @@ void DedicatedServer::handOverJoinCode(PlayerID holder)
 
 void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
 {
+	sendEntryRefused( source, reason );
+	mRefusedConnections[source] = std::chrono::steady_clock::now();
+	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+}
+
+void DedicatedServer::sendEntryRefused(PlayerID target, EntryRefusedReason reason)
+{
 	RakNet::BitStream stream;
 	stream.Write((unsigned char)ID_LOBBY);
 	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
 	stream.Write((unsigned char)reason);
-	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, source);
-
-	mRefusedConnections[source] = std::chrono::steady_clock::now();
-	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+	// the same priority as the other lobby packets, so the reason does not wait in the
+	// client behind an earlier packet of this channel that is still on its way
+	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, target);
 }
 
 void DedicatedServer::closeConnectionsThatDidNotEnter()

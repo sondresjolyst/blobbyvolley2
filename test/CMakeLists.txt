@@ -26,11 +26,15 @@ set(SRC
 	../src/SponsorBoard.cpp   ../src/SponsorBoard.h
 	../src/Sha256.cpp         ../src/Sha256.h
 	../src/SponsorSync.cpp    ../src/SponsorSync.h
+	../src/StringUtil.cpp     ../src/StringUtil.h
+	../src/TournamentLimits.h
+	../src/TournamentProtocol.cpp ../src/TournamentProtocol.h
 	../src/server/MatchMaker.cpp    ../src/server/MatchMaker.h
 	../src/server/NetworkPlayer.cpp ../src/server/NetworkPlayer.h
 	../src/server/JoinCodes.cpp     ../src/server/JoinCodes.h
 	../src/server/MatchAssignments.cpp ../src/server/MatchAssignments.h
 	../src/server/Tournament.cpp    ../src/server/Tournament.h
+	../src/server/FileUtil.cpp      ../src/server/FileUtil.h
 	../src/server/SiteConfig.cpp    ../src/server/SiteConfig.h
 	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h
@@ -60,7 +64,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp TestDir.cpp TestDir.h ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestBmp.h TestServer.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
 find_package(nlohmann_json 3.10 CONFIG REQUIRED)

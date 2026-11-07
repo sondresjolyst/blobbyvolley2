@@ -41,7 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "UserConfig.h"
 #include "GenericIO.h"
 #include "GameLogic.h"
-#include "server/MatchAssignments.h"
+#include "TournamentProtocol.h"
 #include "Global.h"
 #include "JoinLink.h"
 
