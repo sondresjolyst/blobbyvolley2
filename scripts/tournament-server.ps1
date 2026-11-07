@@ -3,7 +3,7 @@
 Starts and manages the Blobby Volley tournament server in Docker.
 
 .DESCRIPTION
-Commands: start, stop, restart, logs, status, update, set-token.
+Commands: start, stop, restart, logs, status, update, configure, set-token.
 The first start asks for the address of the tournament site, the game server
 token from the admin page and the port. They are saved in a file that only
 the current user can read. The token is passed to Docker in a temporary env
@@ -17,7 +17,6 @@ file, never on the command line.
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'logs', 'status', 'update', 'set-token', 'help')]
     [string]$Command = 'help'
 )
 
@@ -79,6 +78,23 @@ function Write-PrivateFile([string]$Path, [string]$Text) {
     [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+# The checks match what the server accepts.
+function Test-Site([string]$Value) {
+    return $Value -cmatch '^https://[A-Za-z0-9.-]+(:[0-9]+)?$'
+}
+
+# 16 to 512 printable characters without spaces.
+function Test-Token([string]$Value) {
+    return $Value -cmatch '^[!-~]{16,512}$'
+}
+
+# Returns the port without leading zeros, or an empty string.
+function Get-NormalPort([string]$Value) {
+    if ($Value -cmatch '^[0-9]{1,5}$' -and [int]$Value -ge 1 -and [int]$Value -le 65535) { return "$([int]$Value)" }
+    return ''
+}
+
+# Reads the saved settings. A value that is not valid is left empty, so it is asked for again.
 function Read-Config {
     $config = @{ Site = ''; Token = ''; Port = '' }
     if (Test-Path -LiteralPath $ConfigFile) {
@@ -87,6 +103,19 @@ function Read-Config {
             elseif ($line -match '^SITE_TOKEN=(.*)$') { $config.Token = $Matches[1] }
             elseif ($line -match '^PORT=(.*)$') { $config.Port = $Matches[1] }
         }
+    }
+    if ($config.Site -and -not (Test-Site $config.Site)) {
+        Write-Host "The saved site address in $ConfigFile is not valid."
+        $config.Site = ''
+    }
+    if ($config.Token -and -not (Test-Token $config.Token)) {
+        Write-Host "The saved token in $ConfigFile is not valid."
+        $config.Token = ''
+    }
+    if ($config.Port) {
+        $port = Get-NormalPort $config.Port
+        if (-not $port) { Write-Host "The saved port in $ConfigFile is not valid." }
+        $config.Port = $port
     }
     return $config
 }
@@ -100,12 +129,14 @@ function Save-Config($Config) {
     Write-PrivateFile $ConfigFile $text
 }
 
-function Read-Site {
+# Asks for the site. Enter keeps the given value.
+function Read-Site([string]$Default = '') {
+    if (-not $Default) { $Default = $DefaultSite }
     while ($true) {
-        $answer = Read-Host "Address of the tournament site [$DefaultSite]"
-        if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $DefaultSite }
+        $answer = Read-Host "Address of the tournament site [$Default]"
+        if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $Default }
         $answer = $answer.Trim().TrimEnd('/')
-        if ($answer -match '^https://[A-Za-z0-9.-]+(:[0-9]+)?$') { return $answer }
+        if (Test-Site $answer) { return $answer }
         Write-Host 'The address must start with https:// and hold only the host, for example https://julalan.no or https://dev.julalan.no.'
     }
 }
@@ -121,17 +152,19 @@ function Read-Token {
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
         }
         $token = $token.Trim()
-        if ($token -match '^[A-Za-z0-9_-]{43}$') { return $token }
-        Write-Host 'That is not a game server token. Copy all 43 characters from the admin page of the site.'
+        if (Test-Token $token) { return $token }
+        Write-Host 'That is not a game server token. Copy the whole token from the admin page of the site.'
     }
 }
 
-function Read-Port {
+# Asks for the port. Enter keeps the given value.
+function Read-Port([string]$Default = '') {
+    if (-not $Default) { $Default = "$DefaultPort" }
     while ($true) {
-        $answer = Read-Host "UDP port for the players [$DefaultPort]"
-        if ([string]::IsNullOrWhiteSpace($answer)) { return "$DefaultPort" }
-        $answer = $answer.Trim()
-        if ($answer -match '^[0-9]{1,5}$' -and [int]$answer -ge 1 -and [int]$answer -le 65535) { return $answer }
+        $answer = Read-Host "UDP port for the players [$Default]"
+        if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $Default }
+        $port = Get-NormalPort $answer.Trim()
+        if ($port) { return $port }
         Write-Host 'The port must be a number from 1 to 65535.'
     }
 }
@@ -164,7 +197,10 @@ function Write-FirewallHint($Port) {
     Write-Host "  New-NetFirewallRule -DisplayName 'Blobby Volley server' -Direction Inbound -Protocol UDP -LocalPort $Port -Action Allow"
 }
 
-function New-ServerContainer($Config) {
+$RetryHint = 'The old server container is removed. Fix the problem and run start again. Reports that wait stay in the data volume.'
+
+# The optional hint is shown when Docker cannot start the server.
+function New-ServerContainer($Config, [string]$Hint = '') {
     $envFile = Join-Path ([System.IO.Path]::GetTempPath()) ("blobby-server-" + [System.Guid]::NewGuid().ToString('N') + '.env')
     try {
         Write-PrivateFile $envFile "BLOBBY_TOURNAMENT=1`nBLOBBY_SITE_URL=$($Config.Site)`nBLOBBY_SITE_TOKEN=$($Config.Token)`n"
@@ -174,7 +210,10 @@ function New-ServerContainer($Config) {
     finally {
         Remove-Item -LiteralPath $envFile -Force -ErrorAction SilentlyContinue
     }
-    if ($code -ne 0) { Write-Fail 'Docker could not start the server. See the message above.' }
+    if ($code -ne 0) {
+        if ($Hint) { Write-Host $Hint }
+        Write-Fail 'Docker could not start the server. See the message above.'
+    }
     Write-Host "The tournament server runs on UDP port $($Config.Port) and reports to $($Config.Site)."
     Write-FirewallHint $Config.Port
 }
@@ -189,6 +228,14 @@ function Remove-ServerContainer {
 function Invoke-Pull {
     & docker pull $Image
     if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not download the server image. See the message above and check the internet connection.' }
+}
+
+# Makes the container again with the saved settings, for example after they changed.
+function Reset-ServerContainer($Config) {
+    & docker image inspect $Image *> $null
+    if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+    Remove-ServerContainer
+    New-ServerContainer $Config $RetryHint
 }
 
 function Invoke-Start {
@@ -211,7 +258,7 @@ function Invoke-Start {
 }
 
 function Show-Help {
-    Write-Host 'Usage: .\scripts\tournament-server.ps1 <command>'
+    Write-Host 'Usage: powershell -ExecutionPolicy Bypass -File tournament-server.ps1 <command>'
     Write-Host ''
     Write-Host '  start      Start the tournament server. Asks for the site and token the first time.'
     Write-Host '  stop       Stop the server. Reports that wait stay in the data volume.'
@@ -219,6 +266,7 @@ function Show-Help {
     Write-Host '  logs       Follow the server log. Press Ctrl+C to stop following.'
     Write-Host '  status     Show whether the server runs and which site it uses.'
     Write-Host '  update     Download the newest server image and start the server on it.'
+    Write-Host '  configure  Change the address of the site and the port.'
     Write-Host '  set-token  Replace the game server token and start the server with it.'
     Write-Host ''
     Write-Host "Settings are kept in $ConfigFile"
@@ -266,9 +314,21 @@ switch ($Command) {
     'update' {
         Test-Docker
         $config = Get-Config
+        # The old server keeps running if the download fails.
         Invoke-Pull
         Remove-ServerContainer
-        New-ServerContainer $config
+        New-ServerContainer $config $RetryHint
+    }
+    'configure' {
+        Test-Docker
+        $config = Read-Config
+        $config.Site = Read-Site $config.Site
+        $config.Port = Read-Port $config.Port
+        if (-not $config.Token) { $config.Token = Read-Token }
+        Save-Config $config
+        Write-Host "Saved the settings in $ConfigFile"
+        if ((Get-ContainerState) -eq 'running') { Reset-ServerContainer $config }
+        else { Write-Host 'The next start uses them.' }
     }
     'set-token' {
         Test-Docker
@@ -278,10 +338,12 @@ switch ($Command) {
         $config.Token = Read-Token
         Save-Config $config
         Write-Host "Saved the new token in $ConfigFile"
-        Remove-ServerContainer
-        & docker image inspect $Image *> $null
-        if ($LASTEXITCODE -ne 0) { Invoke-Pull }
-        New-ServerContainer $config
+        Reset-ServerContainer $config
     }
-    default { Show-Help }
+    'help' { Show-Help }
+    default {
+        Write-Host "Unknown command: $Command"
+        Show-Help
+        exit 1
+    }
 }

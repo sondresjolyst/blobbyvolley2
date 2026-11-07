@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts and manages the Blobby Volley tournament server in Docker.
 #
-# Commands: start, stop, restart, logs, status, update, set-token.
+# Commands: start, stop, restart, logs, status, update, configure, set-token.
 # The first start asks for the address of the tournament site, the game server
 # token from the admin page and the port. They are saved in a file that only
 # the current user can read. The token is passed to Docker in a temporary env
@@ -35,6 +35,24 @@ check_docker() {
 		fail "Docker is not running, or this user may not use it. Start Docker, or add the user to the docker group, and try again."
 }
 
+# The checks match what the server accepts.
+valid_site() {
+	[[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]
+}
+
+# 16 to 512 printable characters without spaces.
+valid_token() {
+	local LC_ALL=C
+	((${#1} >= 16 && ${#1} <= 512)) && [[ "$1" =~ ^[!-~]+$ ]]
+}
+
+# Prints the port without leading zeros, or fails.
+normal_port() {
+	[[ "$1" =~ ^[0-9]{1,5}$ ]] && ((10#$1 >= 1 && 10#$1 <= 65535)) || return 1
+	echo "$((10#$1))"
+}
+
+# Reads the saved settings. A value that is not valid is left empty, so it is asked for again.
 read_config() {
 	SITE=""
 	TOKEN=""
@@ -42,12 +60,25 @@ read_config() {
 	[ -f "$CONFIG_FILE" ] || return 0
 	local line
 	while IFS= read -r line || [ -n "$line" ]; do
+		line="${line%[[:cntrl:]]}"
 		case "$line" in
 		SITE_URL=*) SITE="${line#SITE_URL=}" ;;
 		SITE_TOKEN=*) TOKEN="${line#SITE_TOKEN=}" ;;
 		PORT=*) PORT="${line#PORT=}" ;;
 		esac
 	done <"$CONFIG_FILE"
+	if [ -n "$SITE" ] && ! valid_site "$SITE"; then
+		echo "The saved site address in $CONFIG_FILE is not valid." >&2
+		SITE=""
+	fi
+	if [ -n "$TOKEN" ] && ! valid_token "$TOKEN"; then
+		echo "The saved token in $CONFIG_FILE is not valid." >&2
+		TOKEN=""
+	fi
+	if [ -n "$PORT" ] && ! PORT="$(normal_port "$PORT")"; then
+		echo "The saved port in $CONFIG_FILE is not valid." >&2
+		PORT=""
+	fi
 }
 
 save_config() {
@@ -60,13 +91,14 @@ save_config() {
 	) || fail "Could not save $CONFIG_FILE"
 }
 
+# Asks for the site. The argument is the value that Enter keeps.
 ask_site() {
-	local answer
+	local answer default="${1:-$DEFAULT_SITE}"
 	while true; do
-		read -r -p "Address of the tournament site [$DEFAULT_SITE]: " answer || fail "No answer."
-		answer="${answer:-$DEFAULT_SITE}"
+		read -r -p "Address of the tournament site [$default]: " answer || fail "No answer."
+		answer="${answer:-$default}"
 		answer="${answer%/}"
-		if [[ "$answer" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+		if valid_site "$answer"; then
 			SITE="$answer"
 			return
 		fi
@@ -79,21 +111,21 @@ ask_token() {
 	while true; do
 		read -r -s -p "Game server token from the admin page (hidden): " answer || fail "No answer."
 		echo
-		if [[ "$answer" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+		if valid_token "$answer"; then
 			TOKEN="$answer"
 			return
 		fi
-		echo "That is not a game server token. Copy all 43 characters from the admin page of the site."
+		echo "That is not a game server token. Copy the whole token from the admin page of the site."
 	done
 }
 
+# Asks for the port. The argument is the value that Enter keeps.
 ask_port() {
-	local answer
+	local answer default="${1:-$DEFAULT_PORT}"
 	while true; do
-		read -r -p "UDP port for the players [$DEFAULT_PORT]: " answer || fail "No answer."
-		answer="${answer:-$DEFAULT_PORT}"
-		if [[ "$answer" =~ ^[0-9]{1,5}$ ]] && ((10#$answer >= 1 && 10#$answer <= 65535)); then
-			PORT="$((10#$answer))"
+		read -r -p "UDP port for the players [$default]: " answer || fail "No answer."
+		answer="${answer:-$default}"
+		if PORT="$(normal_port "$answer")"; then
 			return
 		fi
 		echo "The port must be a number from 1 to 65535."
@@ -132,8 +164,9 @@ pull_if_missing() {
 	docker image inspect "$IMAGE" >/dev/null 2>&1 || pull_image
 }
 
+# The optional argument is a hint that is shown when Docker cannot start the server.
 create_container() {
-	local env_file code
+	local env_file code hint="${1:-}"
 	env_file="$(umask 077 && mktemp "${TMPDIR:-/tmp}/blobby-server.XXXXXXXX")" || fail "Could not make a temporary file."
 	trap 'rm -f "$env_file"' EXIT
 	trap 'exit 130' INT TERM
@@ -144,7 +177,10 @@ create_container() {
 	code=$?
 	rm -f "$env_file"
 	trap - EXIT INT TERM
-	[ "$code" = 0 ] || fail "Docker could not start the server. See the message above."
+	if [ "$code" != 0 ]; then
+		[ -z "$hint" ] || echo "$hint" >&2
+		fail "Docker could not start the server. See the message above."
+	fi
 	echo "The tournament server runs on UDP port $PORT and reports to $SITE."
 	echo "Players on other machines need inbound UDP on port $PORT through the firewall of this machine."
 }
@@ -214,12 +250,37 @@ cmd_status() {
 	esac
 }
 
+RETRY_HINT="The old server container is removed. Fix the problem and run start again. Reports that wait stay in the data volume."
+
+# Makes the container again with the saved settings, for example after they changed.
+recreate_container() {
+	pull_if_missing
+	remove_container
+	create_container "$RETRY_HINT"
+}
+
 cmd_update() {
 	check_docker
 	load_config
+	# The old server keeps running if the download fails.
 	pull_image
 	remove_container
-	create_container
+	create_container "$RETRY_HINT"
+}
+
+cmd_configure() {
+	check_docker
+	read_config
+	ask_site "$SITE"
+	ask_port "$PORT"
+	[ -n "$TOKEN" ] || ask_token
+	save_config
+	echo "Saved the settings in $CONFIG_FILE"
+	if [ "$(container_state)" = running ]; then
+		recreate_container
+	else
+		echo "The next start uses them."
+	fi
 }
 
 cmd_set_token() {
@@ -230,9 +291,7 @@ cmd_set_token() {
 	ask_token
 	save_config
 	echo "Saved the new token in $CONFIG_FILE"
-	remove_container
-	pull_if_missing
-	create_container
+	recreate_container
 }
 
 usage() {
@@ -245,6 +304,7 @@ Usage: $0 <command>
   logs       Follow the server log. Press Ctrl+C to stop following.
   status     Show whether the server runs and which site it uses.
   update     Download the newest server image and start the server on it.
+  configure  Change the address of the site and the port.
   set-token  Replace the game server token and start the server with it.
 
 Settings are kept in $CONFIG_FILE
@@ -258,6 +318,12 @@ restart) cmd_restart ;;
 logs) cmd_logs ;;
 status) cmd_status ;;
 update) cmd_update ;;
+configure) cmd_configure ;;
 set-token) cmd_set_token ;;
-*) usage ;;
+help | -h | --help) usage ;;
+*)
+	echo "Unknown command: $1" >&2
+	usage >&2
+	exit 1
+	;;
 esac
