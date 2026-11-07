@@ -27,6 +27,7 @@ set(SRC
 	../src/Sha256.cpp         ../src/Sha256.h
 	../src/SponsorSync.cpp    ../src/SponsorSync.h
 	../src/StringUtil.cpp     ../src/StringUtil.h
+	../src/TournamentProtocol.cpp ../src/TournamentProtocol.h
 	../src/server/MatchMaker.cpp    ../src/server/MatchMaker.h
 	../src/server/NetworkPlayer.cpp ../src/server/NetworkPlayer.h
 	../src/server/JoinCodes.cpp     ../src/server/JoinCodes.h

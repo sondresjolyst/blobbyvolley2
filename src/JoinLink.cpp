@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "JoinLink.h"
 
 /* includes */
-#include "server/JoinCodes.h"
 #include "StringUtil.h"
+#include "TournamentProtocol.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN

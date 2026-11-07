@@ -62,7 +62,7 @@ namespace
 	// writes an ID_ENTER_SERVER body as the client does, without the message id
 	void writeEnterServer(RakNet::BitStream& stream, const char* name, std::size_t name_bytes)
 	{
-		char buffer[16] = {0};
+		char buffer[PLAYER_NAME_BUFFER] = {0};
 		std::memcpy(buffer, name, name_bytes);
 		stream.Write((int)RIGHT_PLAYER);
 		stream.Write(buffer, sizeof(buffer));

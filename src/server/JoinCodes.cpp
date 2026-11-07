@@ -32,80 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 namespace
 {
-	const char JOIN_CODE_ALPHABET[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
 	// characters of a code or name that are shown in the log
 	const std::size_t LOG_PREFIX_LENGTH = 3;
-
-	bool isJoinCodeChar(char c)
-	{
-		return c != '\0' && std::strchr(JOIN_CODE_ALPHABET, c) != nullptr;
-	}
-
-	// checks that text is valid UTF-8 without control characters
-	bool isCleanUtf8(const std::string& text)
-	{
-		std::size_t i = 0;
-		while (i < text.size())
-		{
-			unsigned char c = text[i];
-			std::size_t extra = 0;
-			if (c < 0x20 || c == 0x7F)
-				return false;
-			if (c < 0x80)
-				extra = 0;
-			else if (c >= 0xC2 && c <= 0xDF)
-				extra = 1;
-			else if (c >= 0xE0 && c <= 0xEF)
-				extra = 2;
-			else if (c >= 0xF0 && c <= 0xF4)
-				extra = 3;
-			else
-				return false;
-
-			for (std::size_t k = 1; k <= extra; ++k)
-			{
-				if (i + k >= text.size())
-					return false;
-				unsigned char follow = text[i + k];
-				if ((follow & 0xC0) != 0x80)
-					return false;
-			}
-			i += extra + 1;
-		}
-		return true;
-	}
-}
-
-std::string normalizeJoinCode(const std::string& raw)
-{
-	std::string code = trim(raw, " ");
-	for (auto& c : code)
-	{
-		if (c >= 'a' && c <= 'z')
-			c = static_cast<char>(c - 'a' + 'A');
-	}
-
-	if (!isValidJoinCode(code))
-		return "";
-	return code;
-}
-
-bool isValidJoinCode(const std::string& code)
-{
-	if (code.size() != JOIN_CODE_LENGTH)
-		return false;
-	for (char c : code)
-	{
-		if (!isJoinCodeChar(c))
-			return false;
-	}
-	return true;
-}
-
-bool isValidNickname(const std::string& name)
-{
-	return !name.empty() && name.size() <= MAX_NICKNAME_BYTES && isCleanUtf8(name);
 }
 
 std::string joinCodeLogPrefix(const std::string& raw)

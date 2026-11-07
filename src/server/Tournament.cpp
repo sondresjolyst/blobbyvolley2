@@ -108,29 +108,6 @@ void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStat
 	out->uint32( nextGameInMs );
 }
 
-TournamentStatusData readTournamentStatus(GenericIn& in)
-{
-	TournamentStatusData data;
-	unsigned char status = 0;
-	in.byte(status);
-	if (status <= (unsigned char)TournamentStatus::MATCH_OVER)
-		data.status = (TournamentStatus)status;
-	in.string(data.opponent);
-	in.uint32(data.game);
-	in.uint32(data.bestOf);
-	in.uint32(data.ownWins);
-	in.uint32(data.opponentWins);
-	in.string(data.ownName);
-	in.uint32(data.nextGameInMs);
-	if (data.nextGameInMs > MAX_NEXT_GAME_DELAY_MS)
-		data.nextGameInMs = MAX_NEXT_GAME_DELAY_MS;
-	if (!isValidNickname(data.opponent))
-		data.opponent.clear();
-	if (!isValidNickname(data.ownName))
-		data.ownName.clear();
-	return data;
-}
-
 // - - - - - - - - - - - - - - - - - -
 // 			events
 // - - - - - - - - - - - - - - - - - -

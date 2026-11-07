@@ -41,6 +41,7 @@ set(common_SRC
 	SponsorBoard.cpp SponsorBoard.h
 	SponsorSync.cpp SponsorSync.h
 	StringUtil.cpp StringUtil.h
+	TournamentProtocol.cpp TournamentProtocol.h
 	server/DedicatedServer.cpp server/DedicatedServer.h
 	server/FileUtil.cpp server/FileUtil.h
 	server/NetworkPlayer.cpp server/NetworkPlayer.h

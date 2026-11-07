@@ -891,7 +891,7 @@ BOOST_AUTO_TEST_CASE( enter_server_announces_tournament_support )
 	// an old client sends nothing after the colour
 	RakNet::BitStream old;
 	old.Write((int)RIGHT_PLAYER);
-	char name[16] = "K7QM2XPR4T";
+	char name[PLAYER_NAME_BUFFER] = "K7QM2XPR4T";
 	old.Write(name, sizeof(name));
 	old.Write((int)0xFF0000);
 	RakNet::BitStream oldIn(old.GetData(), old.GetNumberOfBytesUsed(), false);

@@ -30,27 +30,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "raknet/NetworkTypes.h"
 #include "MatchAssignments.h"
 #include "ServerLog.h"
+#include "TournamentProtocol.h"
 
 class NetworkPlayer;
 
-/// Number of characters in a join code.
-constexpr std::size_t JOIN_CODE_LENGTH = 10;
-/// Longest nickname in bytes. The name field on the wire holds 15 bytes and a terminating zero.
-constexpr std::size_t MAX_NICKNAME_BYTES = 15;
 /// Largest players file the loader reads.
 constexpr std::size_t MAX_PLAYERS_FILE_BYTES = 1024 * 1024;
 /// A join code that moved to a new connection stays there at least this long.
 constexpr unsigned long long JOIN_CODE_HANDOVER_COOLDOWN_MS = 10000;
-
-/// Trims spaces and turns lower case letters into upper case.
-/// Returns an empty string when the result is not a valid join code.
-std::string normalizeJoinCode(const std::string& raw);
-
-/// True if code has the right length and only uses the join code alphabet.
-bool isValidJoinCode(const std::string& code);
-
-/// True if name is 1 to MAX_NICKNAME_BYTES bytes of UTF-8 without control characters.
-bool isValidNickname(const std::string& name);
 
 /// A short part of a name or code that is safe to log. It never holds the whole code.
 std::string joinCodeLogPrefix(const std::string& raw);

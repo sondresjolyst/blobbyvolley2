@@ -24,17 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <vector>
 
-/// Limits of the match settings. They are the limits of the tournament site.
-constexpr int MIN_MATCH_SCORE_TO_WIN = 1;
-constexpr int MAX_MATCH_SCORE_TO_WIN = 99;
-constexpr int MIN_MATCH_SPEED = 30;
-constexpr int MAX_MATCH_SPEED = 120;
-constexpr int MAX_MATCH_BEST_OF = 99;
-constexpr int MAX_MATCH_WINS = 99;
-/// Pause between two games of a series, in seconds.
-constexpr int MIN_NEXT_GAME_DELAY = 3;
-constexpr int MAX_NEXT_GAME_DELAY = 120;
-constexpr int DEFAULT_NEXT_GAME_DELAY = 10;
+#include "TournamentProtocol.h"
 
 /// A match that the tournament site assigned to two players.
 /// The fields have the names and meanings of a match in the sync of the site.
@@ -67,9 +57,6 @@ struct MatchAssignment
 
 bool operator==(const MatchAssignment& a, const MatchAssignment& b);
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b);
-
-/// True if a score to win, from a file or from a server, is in the range a match can have.
-bool isValidScoreToWin(int scoreToWin);
 
 /// Brings a pause between two games, in seconds, into the allowed range.
 int clampNextGameDelay(int seconds);
