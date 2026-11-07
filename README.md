@@ -55,6 +55,18 @@ A code has 10 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Players may typ
 
 The server reads the file again within a few seconds after it changes. If the file is missing or is not valid XML, the server keeps the players it read last and logs an error. Write a new file under another name and rename it over the old one, so the server never reads half a file. The log shows only the first 3 characters of a code.
 
+The same file assigns matches. The fields have the names and meanings of a match in the sync of the tournament site:
+```xml
+<match id="7" player1="12" player2="17" ruleFile="default.lua" scoreToWin="15" speed="75" bestOf="3"/>
+```
+`player1` and `player2` are player ids from the `<player>` entries. Only `id`, `player1` and `player2` are required. The others default to `default.lua`, 15 points, speed 75 and best of 1. `scoreToWin` is 1 to 99, `speed` is 30 to 120 frames per second and `bestOf` is an odd number. `ruleFile` names a file in the `rules` folder of the server. `nextGame` sets the number of the next game and `awaitingDecision="true"` holds a match until the organizer decides. The server skips a match with a bad value or an unknown player.
+
+In tournament mode players cannot open or join games in the lobby. The lobby shows what each player waits for. When both players of a match are connected, the server starts the game. Player 1 plays on the left, and each player still sees their own blob on the side they picked in the options. When a game of a series ends, the next game starts 5 seconds later until a player has won more than half of the games. A player who leaves during a game ends that game as abandoned, and it is played again under the next game number when both are back. By default every match starts as soon as its players are connected. To play one match at a time, set:
+```xml
+<var name="tournament_max_matches" value="1"/>
+```
+The server logs each started match and each game result, and adds them as lines of JSON to `tournament_results.jsonl`. A game line holds the report body that the game server API of the site expects. Set `tournament_results_file` to an empty value to only log them.
+
 ### Source Code
 Clone the git repository:
 ```bash
