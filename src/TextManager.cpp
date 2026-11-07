@@ -215,6 +215,7 @@ void TextManager::setDefault()
 	mStrings[NET_ENTRY_REFUSED] = "the server refused to let you in";
 	mStrings[NET_UNKNOWN_CODE] = "unknown join code";
 	mStrings[NET_CODE_IN_USE] = "join code already in use";
+	mStrings[NET_UPDATE_GAME] = "please update your game";
 	mStrings[TNM_NO_MATCH] = "no match for you yet";
 	mStrings[TNM_WAITING_OPPONENT] = "waiting for your opponent";
 	mStrings[TNM_WAITING_SLOT] = "waiting for a free slot";

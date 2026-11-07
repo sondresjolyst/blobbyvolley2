@@ -55,6 +55,7 @@
 	<string english = "the server refused to let you in" translation = "the server refused to let you in" />
 	<string english = "unknown join code" translation = "unknown join code" />
 	<string english = "join code already in use" translation = "join code already in use" />
+	<string english = "please update your game" translation = "please update your game" />
 	<string english = "no match for you yet" translation = "no match for you yet" />
 	<string english = "waiting for your opponent" translation = "waiting for your opponent" />
 	<string english = "waiting for a free slot" translation = "waiting for a free slot" />

@@ -91,6 +91,11 @@ private:
 
 	// a tournament server started the next game, which takes over the connection
 	bool mKeepConnection = false;
+	// the next game waits while a replay of this game is saved
+	bool mNextGamePending = false;
+	int mNextGameChecksum = 0;
+	int mNextGameScoreToWin = 0;
+	void startNextGame();
 	// what a tournament server said about the match
 	bool mHasTournamentStatus = false;
 	TournamentStatusData mTournamentStatus;

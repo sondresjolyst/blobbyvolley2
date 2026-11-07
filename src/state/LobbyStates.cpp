@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "UserConfig.h"
 #include "GenericIO.h"
 #include "GameLogic.h"
+#include "server/MatchAssignments.h"
 
 LobbySubstate::~LobbySubstate() = default;
 
@@ -214,9 +215,12 @@ void LobbyState::step_impl()
 
 				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
 
-				int serverChecksum, scoreToWin;
-				stream.Read(serverChecksum);
-				stream.Read(scoreToWin);
+				int serverChecksum = 0;
+				int scoreToWin = 0;
+				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
+					break;
+				if (!isValidScoreToWin(scoreToWin))
+					break;
 
 				switchState( new NetworkGameState( mClient, serverChecksum, scoreToWin ) );
 				}
@@ -260,6 +264,8 @@ void LobbyState::step_impl()
 				text = TextManager::NET_UNKNOWN_CODE;
 			else if (mRefusedReason == (unsigned char)EntryRefusedReason::CODE_IN_USE)
 				text = TextManager::NET_CODE_IN_USE;
+			else if (mRefusedReason == (unsigned char)EntryRefusedReason::OUTDATED_CLIENT)
+				text = TextManager::NET_UPDATE_GAME;
 			imgui.doText(GEN_ID, Vector2( 100, 55 ), text);
 		}
 

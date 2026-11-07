@@ -105,6 +105,11 @@ enum MessageType
 // 		side (PlayerSide)
 // 		name (char[16])
 //		color (int)
+//		features marker (uint32, CLIENT_FEATURES_MARKER), only from newer clients
+//		features (uint32, ClientFeature bits), only from newer clients
+//	Servers read only the fields they know, so the two trailing fields do not
+//	bother older servers. A tournament server refuses a client without the
+//	tournament feature, since that client cannot play a best-of series.
 //
 // ID_PAUSE
 // 	Description:
@@ -222,7 +227,17 @@ enum class LobbyPacketType : unsigned char
 enum class EntryRefusedReason : unsigned char
 {
 	UNKNOWN_CODE,
-	CODE_IN_USE
+	CODE_IN_USE,
+	OUTDATED_CLIENT
+};
+
+/// Marks the features field at the end of ID_ENTER_SERVER. The bytes spell BTRN.
+constexpr uint32_t CLIENT_FEATURES_MARKER = 0x4E525442;
+
+enum ClientFeature : uint32_t
+{
+	/// The client shows the tournament status and plays the next game of a series.
+	CLIENT_FEATURE_TOURNAMENT = 1
 };
 
 enum class TournamentStatus : unsigned char
@@ -264,6 +279,8 @@ struct ServerInfo : public ObjectCounter<ServerInfo>
 // convenience functions for building packets
 class PlayerIdentity;
 void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& player );
+/// Reads the features at the end of an ID_ENTER_SERVER packet whose other fields were read. 0 when there are none.
+uint32_t readClientFeatures(RakNet::BitStream& stream);
 
 bool operator == (const ServerInfo& lval, const ServerInfo& rval);
 std::ostream& operator<<(std::ostream& stream, const ServerInfo& val);

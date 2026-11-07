@@ -44,6 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "FileWrite.h"
 #include "SpeedController.h"
 #include "LobbyStates.h"
+#include "server/MatchAssignments.h"
 
 // global variable to save the lag
 int CURRENT_NETWORK_LAG = -1;
@@ -127,6 +128,13 @@ void NetworkGameState::init()
 	stream2.Write((unsigned char)ID_RULES);
 	stream2.Write(bool(mRulesChecksum != 0 && !haveRules));
 	mClient->Send(&stream2, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
+}
+
+void NetworkGameState::startNextGame()
+{
+	mNextGamePending = false;
+	mKeepConnection = true;
+	switchState(new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin));
 }
 
 NetworkGameState::~NetworkGameState()
@@ -288,8 +296,14 @@ void NetworkGameState::step_impl()
 				int scoreToWin = 0;
 				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
 					break;
-				mKeepConnection = true;
-				switchState(new NetworkGameState(mClient, serverChecksum, scoreToWin));
+				if (!isValidScoreToWin(scoreToWin))
+					break;
+				mNextGamePending = true;
+				mNextGameChecksum = serverChecksum;
+				mNextGameScoreToWin = scoreToWin;
+				// a replay that is asked for or on its way is saved first
+				if (!mSaveReplay && !mWaitingForReplay)
+					startNextGame();
 				break;
 			}
 			case ID_LOBBY:
@@ -454,6 +468,11 @@ void NetworkGameState::step_impl()
 			mWaitingForReplay = true;
 		}
 	}
+	else if (mNextGamePending && !mWaitingForReplay)
+	{
+		// the replay was saved or the user gave up on it
+		startNextGame();
+	}
 	else if (mWaitingForReplay)
 	{
 		imgui.doOverlay(GEN_ID, Vector2(150, 200), Vector2(650, 400));
@@ -551,9 +570,8 @@ void NetworkGameState::step_impl()
 			if (mHasTournamentStatus && mTournamentStatus.status != TournamentStatus::PLAYING)
 			{
 				auto lines = describeTournamentStatus(imgui, mTournamentStatus);
-				imgui.doText(GEN_ID, Vector2(400, 400), lines.front(), TF_ALIGN_CENTER);
-				if (mTournamentStatus.bestOf > 1)
-					imgui.doText(GEN_ID, Vector2(400, 425), lines.back(), TF_ALIGN_CENTER);
+				for (unsigned i = 0; i < lines.size(); ++i)
+					imgui.doText(GEN_ID, Vector2(400, 400 + 18 * i), lines[i], TF_ALIGN_CENTER | TF_SMALL_FONT);
 			}
 			if (imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
 			{
