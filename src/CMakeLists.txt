@@ -208,7 +208,10 @@ if (BUILD_LOADBOT)
 		TournamentProtocol.cpp
 		UserConfig.cpp
 		)
-	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
+	# the bot has its own main and never includes SDL.h, so it must not get the main of SDL2main
+	set(LOADBOT_LIBS ${BLOBBY_COMMON_LIBS})
+	list(REMOVE_ITEM LOADBOT_LIBS SDL2::SDL2main)
+	target_link_libraries(blobby-loadbot ${LOADBOT_LIBS})
 endif ()
 
 if (UNIX AND (NOT ANDROID))
