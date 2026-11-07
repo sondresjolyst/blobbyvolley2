@@ -95,6 +95,12 @@ HttpResponse CurlHttpClient::send(const HttpRequest& request)
 	}
 	curl_easy_reset(curl);
 
+	// the path always goes below the origin
+	if (!isSitePath(request.path))
+	{
+		response.error = "the request path does not start with /";
+		return response;
+	}
 	const std::string url = mOrigin + request.path;
 	Download download{std::string(), request.maxBytes, false};
 
