@@ -210,6 +210,7 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 			Series series;
 			series.match = m;
 			series.nextGame = m.nextGame;
+			takeWins(series, m);
 			mSeries[m.matchId] = series;
 			continue;
 		}
@@ -218,14 +219,32 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 		series.listed = true;
 		if (series.match != m)
 		{
+			const MatchAssignment old = series.match;
 			// a changed assignment may fix a game that could not be created
 			series.failed = false;
+			// the organizer decided about an abandoned game
+			if (m.nextGame != old.nextGame || (old.awaitingDecision && !m.awaitingDecision))
+				series.held = false;
 			// the site moves the next game on when the organizer restarts a game
 			if (!series.running && m.nextGame > series.nextGame)
 				series.nextGame = m.nextGame;
 			series.match = m;
+			// new numbers from the site replace the local count
+			if (m.wins1 != old.wins1 || m.wins2 != old.wins2)
+				takeWins(series, m);
 		}
 	}
+}
+
+void TournamentDirector::takeWins(Series& series, const MatchAssignment& m)
+{
+	if (m.wins1 >= 0)
+		series.wins1 = m.wins1;
+	if (m.wins2 >= 0)
+		series.wins2 = m.wins2;
+	// a corrected score can open a series again
+	const int needed = series.match.bestOf / 2 + 1;
+	series.decided = series.wins1 >= needed || series.wins2 >= needed;
 }
 
 void TournamentDirector::playerConnected(int playerId)
@@ -286,7 +305,7 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 	for (auto& entry : mSeries)
 	{
 		Series& s = entry.second;
-		if (!s.listed || s.running || s.cooling || s.decided || s.failed || s.match.awaitingDecision)
+		if (!s.listed || s.running || s.cooling || s.decided || s.failed || s.held || s.match.awaitingDecision)
 			continue;
 		if (!isConnected(s.match.player1) || !isConnected(s.match.player2))
 			continue;
@@ -395,8 +414,10 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	report.startedAt = startedAt;
 	report.endedAt = endedAt;
 
-	// the game is played again under the next number, as after a restart on the site
+	// the game is played again under the next number, as after a restart on the site,
+	// but only once the organizer decided
 	++s.nextGame;
+	s.held = true;
 
 	if (mEvents)
 		mEvents->gameEnded(report);
@@ -453,7 +474,7 @@ PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long 
 		if (!s.listed || s.decided || !s.match.hasPlayer(playerId))
 			continue;
 
-		if (s.failed || s.match.awaitingDecision)
+		if (s.failed || s.held || s.match.awaitingDecision)
 			fill(s, TournamentStatus::WAITING_FOR_ORGANIZER);
 		else if (!isConnected(s.match.opponentOf(playerId)))
 			fill(s, TournamentStatus::WAITING_FOR_OPPONENT);

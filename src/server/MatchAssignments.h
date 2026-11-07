@@ -30,6 +30,7 @@ constexpr int MAX_MATCH_SCORE_TO_WIN = 99;
 constexpr int MIN_MATCH_SPEED = 30;
 constexpr int MAX_MATCH_SPEED = 120;
 constexpr int MAX_MATCH_BEST_OF = 99;
+constexpr int MAX_MATCH_WINS = 99;
 
 /// A match that the tournament site assigned to two players.
 /// The fields have the names and meanings of a match in the sync of the site.
@@ -50,6 +51,9 @@ struct MatchAssignment
 	int nextGame = 1;
 	/// True while the organizer has to decide about an abandoned game. No game starts then.
 	bool awaitingDecision = false;
+	/// Games player 1 and player 2 have won so far, as the site counts them. -1 when the file does not say.
+	int wins1 = -1;
+	int wins2 = -1;
 
 	bool hasPlayer(int playerId) const { return playerId == player1 || playerId == player2; }
 	int opponentOf(int playerId) const { return playerId == player1 ? player2 : player1; }
@@ -67,11 +71,12 @@ bool isValidRuleFileName(const std::string& name);
 	<tournament>
 		<player id="12" nickname="Ola" code="K7QM2XPR4T"/>
 		<player id="17" nickname="Kari" code="B9HNZ3WD6F"/>
-		<match id="7" player1="12" player2="17" ruleFile="default.lua" scoreToWin="15" speed="75" bestOf="3"/>
+		<match id="7" player1="12" player2="17" ruleFile="default.lua" scoreToWin="15" speed="75" bestOf="3" wins1="1" wins2="0"/>
 	</tournament>
 	\endcode
 	Only id, player1 and player2 are required. A match with a bad value, or with a player
-	that is not in knownPlayers, is skipped. A match id that appears more than once is
+	that is not in knownPlayers, is skipped. So is a match whose wins already decide the series,
+	since a decided match should have left the file. A match id that appears more than once is
 	dropped for every match that uses it.
 	Returns false and sets error when the text is not a players file.
 */

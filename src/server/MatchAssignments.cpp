@@ -48,7 +48,8 @@ bool operator==(const MatchAssignment& a, const MatchAssignment& b)
 {
 	return a.matchId == b.matchId && a.player1 == b.player1 && a.player2 == b.player2
 		&& a.ruleFile == b.ruleFile && a.scoreToWin == b.scoreToWin && a.speed == b.speed
-		&& a.bestOf == b.bestOf && a.nextGame == b.nextGame && a.awaitingDecision == b.awaitingDecision;
+		&& a.bestOf == b.bestOf && a.nextGame == b.nextGame && a.awaitingDecision == b.awaitingDecision
+		&& a.wins1 == b.wins1 && a.wins2 == b.wins2;
 }
 
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
@@ -158,6 +159,19 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 			&& element->QueryBoolAttribute("awaitingDecision", &match.awaitingDecision) != tinyxml2::XML_SUCCESS)
 		{
 			warnings.push_back(named + " has an invalid awaitingDecision, skipped");
+			continue;
+		}
+
+		if (!readInt(element, "wins1", 0, MAX_MATCH_WINS, match.wins1)
+			|| !readInt(element, "wins2", 0, MAX_MATCH_WINS, match.wins2))
+		{
+			warnings.push_back(named + " has invalid wins, skipped");
+			continue;
+		}
+		const int needed = match.bestOf / 2 + 1;
+		if (match.wins1 >= needed || match.wins2 >= needed)
+		{
+			warnings.push_back(named + " is already decided by its wins, skipped");
 			continue;
 		}
 

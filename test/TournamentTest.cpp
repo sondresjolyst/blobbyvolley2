@@ -512,10 +512,11 @@ BOOST_AUTO_TEST_CASE( best_of_one_is_decided_by_one_game )
 	BOOST_CHECK_EQUAL(f.events->series[0].winnerId, 17);
 }
 
-BOOST_AUTO_TEST_CASE( abandoned_game_is_played_again_under_the_next_number )
+BOOST_AUTO_TEST_CASE( abandoned_game_holds_the_match_until_the_organizer_decides )
 {
 	DirectorFixture f;
-	f.director.setAssignments({ makeMatch(7, 12, 17, 3) });
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	f.director.setAssignments({ m });
 	f.director.playerConnected(12);
 	f.director.playerConnected(17);
 	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
@@ -529,13 +530,148 @@ BOOST_AUTO_TEST_CASE( abandoned_game_is_played_again_under_the_next_number )
 	BOOST_CHECK_EQUAL(r.game, 1);
 	BOOST_CHECK_EQUAL(r.points1, 4);
 	BOOST_CHECK_EQUAL(r.points2, 6);
-	BOOST_CHECK(f.director.statusOf(12, 0).status == TournamentStatus::WAITING_FOR_OPPONENT);
 
+	// both players back, but the match waits for the organizer
 	f.director.playerConnected(17);
+	BOOST_CHECK(f.startedIds(0).empty());
+	BOOST_CHECK(f.director.statusOf(12, 0).status == TournamentStatus::WAITING_FOR_ORGANIZER);
+
+	// the same file again changes nothing
+	f.director.setAssignments({ m });
+	BOOST_CHECK(f.startedIds(0).empty());
+
+	// the site marks the match as awaiting a decision, which still holds it
+	m.awaitingDecision = true;
+	f.director.setAssignments({ m });
+	BOOST_CHECK(f.startedIds(0).empty());
+
+	// the organizer restarts the game
+	m.awaitingDecision = false;
+	f.director.setAssignments({ m });
 	auto orders = f.director.takeGamesToStart(0);
 	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
 	BOOST_CHECK_EQUAL(orders[0].game, 2);
 	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1 + f.director.getSeries(7)->wins2, 0);
+}
+
+BOOST_AUTO_TEST_CASE( abandoned_game_is_released_by_a_new_next_game )
+{
+	DirectorFixture f;
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameAbandoned(7, 0, 0, f.start, f.end);
+	BOOST_CHECK(f.startedIds(0).empty());
+
+	m.nextGame = 2;
+	f.director.setAssignments({ m });
+	auto orders = f.director.takeGamesToStart(0);
+	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
+	BOOST_CHECK_EQUAL(orders[0].game, 2);
+}
+
+BOOST_AUTO_TEST_CASE( restart_takes_the_series_score_from_the_file )
+{
+	// a fresh director, as after a server restart, in the middle of a best of 3
+	DirectorFixture f;
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	m.nextGame = 2;
+	m.wins1 = 1;
+	m.wins2 = 0;
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+
+	PlayerTournamentStatus waiting = f.director.statusOf(17, 0);
+	BOOST_CHECK_EQUAL(waiting.ownWins, 0);
+	BOOST_CHECK_EQUAL(waiting.opponentWins, 1);
+
+	auto orders = f.director.takeGamesToStart(0);
+	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
+	BOOST_CHECK_EQUAL(orders[0].game, 2);
+
+	// one more win for player 1 decides the series
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_REQUIRE_EQUAL(f.events->series.size(), 1u);
+	BOOST_CHECK_EQUAL(f.events->series[0].wins1, 2);
+	BOOST_CHECK_EQUAL(f.events->series[0].wins2, 0);
+	BOOST_CHECK(f.startedIds(100000).empty());
+}
+
+BOOST_AUTO_TEST_CASE( local_win_counts_until_the_file_brings_new_wins )
+{
+	DirectorFixture f(0, 0);
+	MatchAssignment m = makeMatch(7, 12, 17, 5);
+	m.wins1 = 0;
+	m.wins2 = 0;
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1, 1);
+
+	// the old numbers from the file do not wipe the local win
+	f.director.setAssignments({ m });
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1, 1);
+
+	// the site brings its count
+	m.nextGame = 2;
+	m.wins1 = 1;
+	f.director.setAssignments({ m });
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1, 1);
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins2, 0);
+}
+
+BOOST_AUTO_TEST_CASE( corrected_score_lowers_the_local_count )
+{
+	DirectorFixture f(0, 0);
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+
+	// player 1 wins two games and the series locally
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 4, f.start, f.end, 0);
+	BOOST_CHECK(f.director.getSeries(7)->decided);
+	BOOST_CHECK(f.startedIds(0).empty());
+
+	// the organizer corrected one of those games to player 2
+	m.nextGame = 3;
+	m.wins1 = 1;
+	m.wins2 = 1;
+	f.director.setAssignments({ m });
+	const TournamentDirector::Series* s = f.director.getSeries(7);
+	BOOST_CHECK_EQUAL(s->wins1, 1);
+	BOOST_CHECK_EQUAL(s->wins2, 1);
+	BOOST_CHECK(!s->decided);
+
+	auto orders = f.director.takeGamesToStart(0);
+	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
+	BOOST_CHECK_EQUAL(orders[0].game, 3);
+}
+
+BOOST_AUTO_TEST_CASE( parse_reads_wins_and_refuses_decided_matches )
+{
+	std::vector<std::string> warnings;
+	auto matches = parse(
+		"<match id=\"1\" player1=\"12\" player2=\"17\" bestOf=\"3\" wins1=\"1\" wins2=\"1\"/>\n"
+		"<match id=\"2\" player1=\"21\" player2=\"25\" bestOf=\"3\" wins1=\"2\"/>\n"
+		"<match id=\"3\" player1=\"21\" player2=\"25\" wins2=\"-1\"/>\n"
+		"<match id=\"4\" player1=\"21\" player2=\"25\" bestOf=\"99\" wins1=\"100\"/>\n"
+		"<match id=\"5\" player1=\"21\" player2=\"25\"/>\n", warnings);
+	BOOST_REQUIRE_EQUAL(matches.size(), 2u);
+	BOOST_CHECK_EQUAL(matches[0].wins1, 1);
+	BOOST_CHECK_EQUAL(matches[0].wins2, 1);
+	BOOST_CHECK_EQUAL(matches[1].matchId, 5);
+	BOOST_CHECK_EQUAL(matches[1].wins1, -1);
+	BOOST_CHECK_EQUAL(matches[1].wins2, -1);
+	BOOST_CHECK_EQUAL(warnings.size(), 3u);
 }
 
 BOOST_AUTO_TEST_CASE( removed_match_finishes_its_running_game )

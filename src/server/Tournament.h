@@ -158,6 +158,8 @@ class TournamentDirector
 			bool decided = false;
 			// the last game could not be created, wait for a changed assignment
 			bool failed = false;
+			// the last game was abandoned, wait until the organizer decides in the file
+			bool held = false;
 			bool connectedSent = false;
 			// the next game of the series waits until this time
 			bool cooling = false;
@@ -171,6 +173,8 @@ class TournamentDirector
 		void setEvents(std::shared_ptr<TournamentEvents> events);
 
 		/// Replaces the assignments. A match that is no longer assigned plays its running game to the end.
+		/// When the wins of a match in the file change, they replace the local series score,
+		/// since the site is the source of truth. A local win stays until then.
 		void setAssignments(const std::vector<MatchAssignment>& matches);
 
 		void playerConnected(int playerId);
@@ -192,6 +196,7 @@ class TournamentDirector
 						WallTime startedAt, WallTime endedAt, unsigned long long now_ms);
 
 		/// A running game ended without a winner, for example because a player left.
+		/// The match then waits until its assignment brings a new nextGame or awaitingDecision false.
 		void gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt);
 
 		PlayerTournamentStatus statusOf(int playerId, unsigned long long now_ms) const;
@@ -206,6 +211,7 @@ class TournamentDirector
 		void updateCooldowns(unsigned long long now_ms);
 		bool isBusy(int playerId) const;
 		void forgetIfUnlisted(int matchId);
+		static void takeWins(Series& series, const MatchAssignment& match);
 
 		unsigned mMaxRunning;
 		unsigned mNextGameDelayMs;
