@@ -151,8 +151,8 @@ struct TournamentStatusData
 	unsigned nextGameInMs = 0;
 };
 
-/// Longest wait for the next game that a client accepts from a server.
-constexpr unsigned MAX_NEXT_GAME_DELAY_MS = 60000;
+/// Longest wait for the next game that a client accepts from a server, the longest next game delay.
+constexpr unsigned MAX_NEXT_GAME_DELAY_MS = MAX_NEXT_GAME_DELAY * 1000;
 
 /// Writes a whole TOURNAMENT_STATUS packet, from ID_LOBBY on.
 void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStatus& status,

@@ -978,6 +978,12 @@ BOOST_AUTO_TEST_CASE( tournament_status_carries_the_own_nickname )
 	RakNet::BitStream slow;
 	writeTournamentStatus(slow, status, "Ola", "Kari", 3600000);
 	BOOST_CHECK_EQUAL(read(slow).nextGameInMs, MAX_NEXT_GAME_DELAY_MS);
+	BOOST_CHECK_EQUAL(MAX_NEXT_GAME_DELAY_MS, 120000u);
+
+	// the longest delay a server can use still counts down in full
+	RakNet::BitStream longest;
+	writeTournamentStatus(longest, status, "Ola", "Kari", MAX_NEXT_GAME_DELAY * 1000);
+	BOOST_CHECK_EQUAL(read(longest).nextGameInMs, (unsigned)MAX_NEXT_GAME_DELAY * 1000);
 }
 
 BOOST_AUTO_TEST_CASE( next_game_status_tells_when_the_next_game_starts )
