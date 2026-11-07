@@ -1,3 +1,6 @@
+This is the changelog of upstream Blobby Volley 2 up to 1.1.1. The releases of this fork
+are listed in CHANGELOG.md, which release-please writes.
+
 New in 1.1.1 (tag: v1.1.1) since 1.1
 - fix server crash
 - fix ruleset misbehavior (four ball touches possible)

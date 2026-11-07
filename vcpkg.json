@@ -1,5 +1,14 @@
 {
-    "name": "blobby",
-    "version-string": "1.1.1",
-    "dependencies": ["sdl2", "physfs", "boost-smart-ptr", "boost-exception", "boost-crc", "boost-algorithm"]
-  }
+  "name": "blobby",
+  "version": "0.0.0",
+  "dependencies": [
+    "sdl2",
+    "physfs",
+    "boost-smart-ptr",
+    "boost-exception",
+    "boost-crc",
+    "boost-algorithm",
+    "curl",
+    "nlohmann-json"
+  ]
+}
