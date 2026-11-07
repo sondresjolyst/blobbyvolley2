@@ -238,6 +238,8 @@ class TournamentDirector
 		void updateCooldowns(unsigned long long now_ms);
 		bool isBusy(int playerId) const;
 		static void takeWins(Series& series, const MatchAssignment& match);
+		/// The report of the game the series plays, with a new report id and the fields both outcomes share.
+		GameReport makeReport(int matchId, const Series& s, int points1, int points2, WallTime startedAt, WallTime endedAt);
 
 		unsigned mMaxRunning;
 		unsigned mNextGameDelayMs;
