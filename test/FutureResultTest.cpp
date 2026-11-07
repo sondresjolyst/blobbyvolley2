@@ -1,6 +1,10 @@
 #include <boost/test/unit_test.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <future>
+#include <memory>
+#include <thread>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -62,6 +66,57 @@ BOOST_AUTO_TEST_CASE(job_error_is_rethrown_once)
 	int result = 0;
 	BOOST_CHECK_THROW(takeFutureResult(job, result), std::runtime_error);
 	BOOST_CHECK(!takeFutureResult(job, result));
+}
+
+BOOST_AUTO_TEST_CASE(running_future_is_reported)
+{
+	std::future<int> empty;
+	BOOST_CHECK(!isFutureRunning(empty));
+
+	std::promise<int> promise;
+	std::future<int> job = promise.get_future();
+	BOOST_CHECK(isFutureRunning(job));
+	promise.set_value(1);
+	BOOST_CHECK(!isFutureRunning(job));
+}
+
+BOOST_AUTO_TEST_CASE(detached_job_gives_result)
+{
+	std::future<int> job = runDetachedJob<int>([](){ return 42; });
+	job.wait();
+	int result = 0;
+	BOOST_REQUIRE(takeFutureResult(job, result));
+	BOOST_CHECK_EQUAL(result, 42);
+}
+
+BOOST_AUTO_TEST_CASE(detached_job_error_is_kept)
+{
+	std::future<int> job = runDetachedJob<int>([]() -> int { throw std::runtime_error("no list"); });
+	job.wait();
+	int result = 0;
+	BOOST_CHECK_THROW(takeFutureResult(job, result), std::runtime_error);
+}
+
+BOOST_AUTO_TEST_CASE(dropping_detached_job_does_not_wait)
+{
+	auto release = std::make_shared< std::atomic<bool> >(false);
+	auto finished = std::make_shared< std::atomic<bool> >(false);
+	{
+		std::future<int> job = runDetachedJob<int>([release, finished]()
+		{
+			while (!*release)
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			*finished = true;
+			return 1;
+		});
+		BOOST_CHECK(isFutureRunning(job));
+	}
+	// the future is gone while the job still runs
+	BOOST_CHECK(!*finished);
+
+	*release = true;
+	while (!*finished)
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

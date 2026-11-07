@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <vector>
 #include <utility>
+#include <atomic>
 #include <future>
 #include <thread>
 #include <iostream> // debugging
@@ -81,9 +82,11 @@ NetworkSearchState::~NetworkSearchState()
 
 void NetworkSearchState::searchServers()
 {
-	// we need the explicit async launch policy here, because otherwise gcc will always launch deferred and we have no sync point
-	// where we would wait for that.
-	mSearchJob = std::async(std::launch::async, getSearchJob());
+	// a search is still running, so this request is ignored
+	if (isFutureRunning(mSearchJob))
+		return;
+	// the job runs detached, so leaving the screen does not wait for it
+	mSearchJob = runDetachedJob(getSearchJob());
 }
 
 void NetworkSearchState::step_impl()
