@@ -570,8 +570,9 @@ void NetworkGameState::step_impl()
 			if (mHasTournamentStatus && mTournamentStatus.status != TournamentStatus::PLAYING)
 			{
 				auto lines = describeTournamentStatus(imgui, mTournamentStatus);
+				// centred under the winner text, so the lines stay clear of the trophy
 				for (unsigned i = 0; i < lines.size(); ++i)
-					imgui.doText(GEN_ID, Vector2(400, 400 + 18 * i), lines[i], TF_ALIGN_CENTER | TF_SMALL_FONT);
+					imgui.doText(GEN_ID, Vector2(500, 400 + 18 * i), lines[i], TF_ALIGN_CENTER | TF_SMALL_FONT);
 			}
 			if (imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
 			{
