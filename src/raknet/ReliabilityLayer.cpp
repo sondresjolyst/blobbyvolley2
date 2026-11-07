@@ -218,6 +218,11 @@ void ReliabilityLayer::FreeThreadSafeMemory( void )
 //-------------------------------------------------------------------------------------------------------
 bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffer, int length )
 {
+	return HandleSocketReceiveFromConnectedPlayer( buffer, length, RakNet::GetTime() );
+}
+
+bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffer, int length, unsigned int time )
+{
 #ifdef _DEBUG
 	assert( !( length <= 0 || buffer == 0 ) );
 #endif
@@ -236,8 +241,6 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 	statistics.packetsReceived++;
 
 	RakNet::BitStream socketData( (unsigned char*)buffer, length, false ); // Convert the incoming data to a bitstream for easy parsing
-
-	unsigned int time = RakNet::GetTime();
 
 
 	// Parse the bitstream to create an internal packet
@@ -365,7 +368,10 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 
 			// Keep on top of deleting old unreliable split packets so they don't clog the list.
 			if ( internalPacket->splitPacketCount > 0 )
+			{
 				DeleteOldUnreliableSplitPackets( time );
+				DeleteExpiredSplitPackets( time );
+			}
 
 			if ( internalPacket->reliability == RELIABLE_SEQUENCED || internalPacket->reliability == UNRELIABLE_SEQUENCED )
 			{
@@ -421,6 +427,13 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 								internalPacketPool.ReleasePointer( internalPacket );
 								goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
 							}
+						}
+
+						if ( !SplitPacketFitsLimits( internalPacket ) )
+						{
+							delete [] internalPacket->data;
+							internalPacketPool.ReleasePointer( internalPacket );
+							goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
 						}
 
 #ifdef _DEBUG
@@ -516,6 +529,13 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 						goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
 
 					}
+				}
+
+				if ( !SplitPacketFitsLimits( internalPacket ) )
+				{
+					delete [] internalPacket->data;
+					internalPacketPool.ReleasePointer( internalPacket );
+					goto CONTINUE_SOCKET_DATA_PARSE_LOOP;
 				}
 
 #ifdef _DEBUG
@@ -1664,7 +1684,7 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 		//assert( bitStreamSucceeded );
 #endif
 
-		if ( bitStreamSucceeded == false )
+		if ( bitStreamSucceeded == false || internalPacket->splitPacketCount > MAX_SPLIT_PACKET_COUNT )
 		{
 			internalPacketPool.ReleasePointer( internalPacket );
 			return 0;
@@ -1873,6 +1893,87 @@ void ReliabilityLayer::SplitPacket( InternalPacket *internalPacket, int MTUSize 
 void ReliabilityLayer::InsertIntoSplitPacketList( InternalPacket * internalPacket )
 {
 	splitPacketList.insert( internalPacket );
+}
+
+bool ReliabilityLayer::SplitPacketFitsLimits( const InternalPacket *internalPacket )
+{
+	unsigned int ids[ MAX_PENDING_SPLIT_IDS ];
+	unsigned int idCount = 0;
+	bool knownId = false;
+	unsigned long long bytes = BITS_TO_BYTES( internalPacket->dataBitLength );
+
+	for ( unsigned i = 0; i < splitPacketList.size(); i++ )
+	{
+		const InternalPacket *part = splitPacketList[ i ];
+		bytes += BITS_TO_BYTES( part->dataBitLength );
+		if ( part->splitPacketId == internalPacket->splitPacketId )
+			knownId = true;
+
+		bool seen = false;
+		for ( unsigned j = 0; j < idCount && !seen; j++ )
+			seen = ids[ j ] == part->splitPacketId;
+		if ( !seen )
+		{
+			if ( idCount == MAX_PENDING_SPLIT_IDS )
+				return false;
+			ids[ idCount++ ] = part->splitPacketId;
+		}
+	}
+
+	if ( bytes > MAX_PENDING_SPLIT_BYTES )
+		return false;
+	return knownId || idCount < MAX_PENDING_SPLIT_IDS;
+}
+
+void ReliabilityLayer::DeleteExpiredSplitPackets( unsigned int time )
+{
+	unsigned int ids[ MAX_PENDING_SPLIT_IDS ];
+	unsigned int newest[ MAX_PENDING_SPLIT_IDS ];
+	unsigned int idCount = 0;
+
+	for ( unsigned i = 0; i < splitPacketList.size(); i++ )
+	{
+		const InternalPacket *part = splitPacketList[ i ];
+		unsigned j = 0;
+		while ( j < idCount && ids[ j ] != part->splitPacketId )
+			j++;
+		if ( j == idCount )
+		{
+			// SplitPacketFitsLimits keeps the list at MAX_PENDING_SPLIT_IDS ids
+			if ( idCount == MAX_PENDING_SPLIT_IDS )
+				continue;
+			ids[ idCount ] = part->splitPacketId;
+			newest[ idCount ] = part->creationTime;
+			idCount++;
+		}
+		else if ( part->creationTime > newest[ j ] )
+		{
+			newest[ j ] = part->creationTime;
+		}
+	}
+
+	for ( unsigned j = 0; j < idCount; j++ )
+	{
+		if ( time <= newest[ j ] || time - newest[ j ] <= SPLIT_PACKET_EXPIRY_TIME )
+			continue;
+
+		unsigned i = 0;
+		while ( i < splitPacketList.size() )
+		{
+			if ( splitPacketList[ i ]->splitPacketId == ids[ j ] )
+			{
+				InternalPacket *temp = splitPacketList[ i ];
+				splitPacketList[ i ] = splitPacketList[ splitPacketList.size() - 1 ];
+				splitPacketList.del(); // Removes the last element
+				delete [] temp->data;
+				internalPacketPool.ReleasePointer( temp );
+			}
+			else
+			{
+				i++;
+			}
+		}
+	}
 }
 
 //-------------------------------------------------------------------------------------------------------
