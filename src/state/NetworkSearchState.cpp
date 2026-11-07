@@ -82,9 +82,13 @@ NetworkSearchState::~NetworkSearchState()
 
 void NetworkSearchState::searchServers()
 {
-	// a search is still running, so this request is ignored
+	// a search is still running, so this request starts when it is done
 	if (isFutureRunning(mSearchJob))
+	{
+		mSearchRequested = true;
 		return;
+	}
+	mSearchRequested = false;
 	// the job runs detached, so leaving the screen does not wait for it
 	mSearchJob = runDetachedJob(getSearchJob());
 }
@@ -97,11 +101,11 @@ void NetworkSearchState::step_impl()
 	bool doEnterServer = false;
 
 	// a search has finished, so the old list is cleared and the found servers are pinged
-	ServerAddressList foundServers;
+	std::string searchResult;
 	bool searchDone = false;
 	try
 	{
-		searchDone = takeFutureResult(mSearchJob, foundServers);
+		searchDone = takeFutureResult(mSearchJob, searchResult);
 	}
 	catch (const std::exception& e)
 	{
@@ -111,13 +115,20 @@ void NetworkSearchState::step_impl()
 	{
 		std::cerr << "Server search failed after an unknown error." << std::endl;
 	}
-	if (searchDone && !foundServers.empty())
+	if (searchDone)
 	{
-		mScannedServers.clear();
-		mSelectedServer = 0;
-		mDisplayInfo = false;
-		pingServers(foundServers);
+		ServerAddressList foundServers = findServers(searchResult);
+		if (!foundServers.empty())
+		{
+			mScannedServers.clear();
+			mSelectedServer = 0;
+			mDisplayInfo = false;
+			pingServers(foundServers);
+		}
 	}
+	// a search was requested while the last one was running
+	if (mSearchRequested && !isFutureRunning(mSearchJob))
+		searchServers();
 
 	for (auto iter = mQueryClients.begin();
 		iter != mQueryClients.end(); ++iter)
@@ -465,12 +476,12 @@ OnlineSearchState::OnlineSearchState()
 	searchServers();
 }
 
-std::function<NetworkSearchState::ServerAddressList()> OnlineSearchState::getSearchJob() const
+std::function<std::string()> OnlineSearchState::getSearchJob() const
 {
-	return &OnlineSearchState::findServers;
+	return &OnlineSearchState::downloadServerList;
 }
 
-NetworkSearchState::ServerAddressList OnlineSearchState::findServers()
+std::string OnlineSearchState::downloadServerList()
 {
 	// Get the serverlist
 	try
@@ -479,21 +490,33 @@ NetworkSearchState::ServerAddressList OnlineSearchState::findServers()
 
 		std::stringstream serverListXml;
 		http.request("server.php", serverListXml);
-
-		// keep the old file if nothing was received
-		if(!serverListXml.str().empty())
-		{
-			// this trows an exception if the file could not be opened for writing
-			FileWrite file("onlineserver.xml");
-
-			file.write(serverListXml.str());
-
-			file.close();
-		}
+		return serverListXml.str();
 	} catch (std::exception& e) {
 		std::cout << "Can't get onlineserver.xml: " << e.what() << std::endl;
 	} catch (...) {
 		std::cout << "Can't get onlineserver.xml. Unknown error." << std::endl;
+	}
+	return std::string();
+}
+
+NetworkSearchState::ServerAddressList OnlineSearchState::findServers(const std::string& serverListXml) const
+{
+	// keep the old file if nothing was received
+	if(!serverListXml.empty())
+	{
+		try
+		{
+			// this trows an exception if the file could not be opened for writing
+			FileWrite file("onlineserver.xml");
+
+			file.write(serverListXml);
+
+			file.close();
+		} catch (std::exception& e) {
+			std::cout << "Can't get onlineserver.xml: " << e.what() << std::endl;
+		} catch (...) {
+			std::cout << "Can't get onlineserver.xml. Unknown error." << std::endl;
+		}
 	}
 
 	ServerAddressList serverList;
@@ -595,12 +618,18 @@ LANSearchState::LANSearchState()
 	searchServers();
 }
 
-std::function<NetworkSearchState::ServerAddressList()> LANSearchState::getSearchJob() const
+std::function<std::string()> LANSearchState::getSearchJob() const
 {
+	// the broadcast needs nothing from the network first
 	return []()
 	{
-		return ServerAddressList{ std::make_pair(std::string("255.255.255.255"), BLOBBY_PORT) };
+		return std::string();
 	};
+}
+
+NetworkSearchState::ServerAddressList LANSearchState::findServers(const std::string&) const
+{
+	return ServerAddressList{ std::make_pair(std::string("255.255.255.255"), BLOBBY_PORT) };
 }
 
 void LANSearchState::pingServers(const ServerAddressList& serverList)

@@ -38,10 +38,11 @@ class NetworkGame;
 /*! \class NetworkSearchState
 	\brief Base class for search states
 	\details This class provides a search interface.
-			Derived classes provide the job that finds the server
-			addresses and the code that pings them. The job runs
-			on a search thread and must not touch the state. All
-			RakNet calls happen on the main thread.
+			Derived classes provide the job that downloads the
+			server list, and the code that reads and pings the
+			servers. The job runs on a detached search thread and
+			only uses the network. Files, the state and all
+			RakNet calls stay on the main thread.
 */
 class NetworkSearchState : public State
 {
@@ -62,9 +63,11 @@ protected:
 	std::unique_ptr<RakClient> mPingClient;
 
 private:
-	// returns the job that runs on the search thread. An empty result keeps the current server list.
-	virtual std::function<ServerAddressList()> getSearchJob() const = 0;
-	// pings the servers found by the search job, on the main thread
+	// returns the job that runs on the search thread. It must not touch the state, files or other globals.
+	virtual std::function<std::string()> getSearchJob() const = 0;
+	// reads the server addresses from the job result. An empty list keeps the current server list.
+	virtual ServerAddressList findServers(const std::string& searchResult) const = 0;
+	// pings the found servers
 	virtual void pingServers(const ServerAddressList& servers) = 0;
 
 	typedef std::list<RakClient*> ClientList;
@@ -72,7 +75,9 @@ private:
 	ClientList mQueryClients;
 	RakClient* mDirectConnectClient = nullptr;
 
-	std::future<ServerAddressList> mSearchJob;
+	std::future<std::string> mSearchJob;
+	// a search was requested while another one was running
+	bool mSearchRequested = false;
 
 	unsigned mSelectedServer;
 	bool mDisplayInfo;
@@ -96,10 +101,11 @@ public:
 	const char* getStateName() const override;
 
 private:
-	std::function<ServerAddressList()> getSearchJob() const override;
+	std::function<std::string()> getSearchJob() const override;
+	ServerAddressList findServers(const std::string& serverListXml) const override;
 	void pingServers(const ServerAddressList& servers) override;
 	// downloads the server list, runs on the search thread
-	static ServerAddressList findServers();
+	static std::string downloadServerList();
 };
 
 
@@ -114,7 +120,8 @@ public:
 	const char* getStateName() const override;
 
 private:
-	std::function<ServerAddressList()> getSearchJob() const override;
+	std::function<std::string()> getSearchJob() const override;
+	ServerAddressList findServers(const std::string& searchResult) const override;
 	void pingServers(const ServerAddressList& servers) override;
 };
 
