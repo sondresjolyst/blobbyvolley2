@@ -45,8 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "raknet/BitStream.h"
 #include "raknet/PacketEnumerations.h"
 #include "raknet/RakClient.h"
-#include "server/JoinCodes.h"
-#include "server/Tournament.h"
+#include "TournamentProtocol.h"
 
 namespace
 {

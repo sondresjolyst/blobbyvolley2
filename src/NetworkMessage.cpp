@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GenericIO.h"
 #include "DuelMatchState.h"
 #include "Global.h"
-#include "server/MatchAssignments.h"
+#include "TournamentProtocol.h"
 
 /* implementation */
 ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
@@ -118,7 +118,7 @@ void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& play
 	stream.Write( player.getPreferredSide() );
 
 	// Send playername
-	char myname[16];
+	char myname[PLAYER_NAME_BUFFER];
 	strncpy(myname, player.getName().c_str(), sizeof(myname));
 	stream.Write(myname, sizeof(myname));
 
@@ -163,7 +163,7 @@ GameReadyData readGameReady(RakNet::BitStream& stream)
 	stream.IgnoreBytes(1);	// ID_GAME_READY
 	stream.Read(data.speed);
 
-	char name[16] = {0};
+	char name[PLAYER_NAME_BUFFER] = {0};
 	stream.Read(name, sizeof(name));
 	// ensures that the name is null terminated
 	name[sizeof(name) - 1] = '\0';

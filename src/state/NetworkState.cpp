@@ -45,7 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "FileWrite.h"
 #include "SpeedController.h"
 #include "LobbyStates.h"
-#include "server/MatchAssignments.h"
+#include "TournamentProtocol.h"
 
 // global variable to save the lag
 int CURRENT_NETWORK_LAG = -1;

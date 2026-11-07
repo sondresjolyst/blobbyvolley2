@@ -203,11 +203,9 @@ if (BUILD_LOADBOT)
 		PhysicWorld.cpp
 		PlayerIdentity.cpp
 		PlayerInput.cpp
+		StringUtil.cpp
+		TournamentProtocol.cpp
 		UserConfig.cpp
-		server/JoinCodes.cpp
-		server/MatchAssignments.cpp
-		server/NetworkPlayer.cpp
-		server/Tournament.cpp
 		)
 	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
 endif ()

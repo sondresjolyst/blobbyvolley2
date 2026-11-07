@@ -39,9 +39,6 @@ constexpr std::size_t MAX_PLAYERS_FILE_BYTES = 1024 * 1024;
 /// A join code that moved to a new connection stays there at least this long.
 constexpr unsigned long long JOIN_CODE_HANDOVER_COOLDOWN_MS = 10000;
 
-/// A short part of a name or code that is safe to log. It never holds the whole code.
-std::string joinCodeLogPrefix(const std::string& raw);
-
 /// One player of the tournament.
 struct JoinCodeEntry
 {

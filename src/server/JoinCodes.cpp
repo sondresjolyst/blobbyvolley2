@@ -29,27 +29,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkPlayer.h"
 #include "StringUtil.h"
 
-namespace
-{
-	// characters of a code or name that are shown in the log
-	const std::size_t LOG_PREFIX_LENGTH = 3;
-}
-
-std::string joinCodeLogPrefix(const std::string& raw)
-{
-	std::string prefix;
-	for (char c : raw)
-	{
-		if (prefix.size() >= LOG_PREFIX_LENGTH)
-			break;
-		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
-			prefix += c;
-		else
-			prefix += '?';
-	}
-	return prefix + "...";
-}
-
 bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warnings, std::string& error)
 {
 	tinyxml2::XMLDocument doc;

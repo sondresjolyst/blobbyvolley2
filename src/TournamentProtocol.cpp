@@ -32,6 +32,9 @@ namespace
 {
 	const char JOIN_CODE_ALPHABET[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+	// characters of a code or name that are shown in the log
+	const std::size_t LOG_PREFIX_LENGTH = 3;
+
 	bool isJoinCodeChar(char c)
 	{
 		return c != '\0' && std::strchr(JOIN_CODE_ALPHABET, c) != nullptr;
@@ -106,6 +109,21 @@ bool isValidJoinCode(const std::string& code)
 bool isValidNickname(const std::string& name)
 {
 	return !name.empty() && name.size() <= MAX_NICKNAME_BYTES && isCleanUtf8(name);
+}
+
+std::string joinCodeLogPrefix(const std::string& raw)
+{
+	std::string prefix;
+	for (char c : raw)
+	{
+		if (prefix.size() >= LOG_PREFIX_LENGTH)
+			break;
+		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
+			prefix += c;
+		else
+			prefix += '?';
+	}
+	return prefix + "...";
 }
 
 TournamentStatusData readTournamentStatus(GenericIn& in)
