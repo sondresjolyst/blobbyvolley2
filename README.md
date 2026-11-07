@@ -25,7 +25,7 @@ The dedicated server is built as `src/blobby-server`. It runs at 100% game speed
 The default port is 1234.
 
 #### Run the server in Docker
-A container image of the dedicated server is published on Docker Hub as `sondresjo/blobby-server`. The `latest` tag is the newest release. The `dev` tag follows the main branch. On Windows, start Docker Desktop and run:
+A container image of the dedicated server is published on Docker Hub as `sondresjo/blobby-server`. The `dev` tag follows the main branch. Each release gets a tag with its version, such as `0.1.0`, and the `latest` tag points to the newest release. `latest` exists only after the first release, so until then use `sondresjo/blobby-server:dev` in the commands below. On Windows, start Docker Desktop and run:
 ```bash
 docker run -d --name blobby-server -p 1234:1234/udp sondresjo/blobby-server
 ```
@@ -41,22 +41,24 @@ To run a tournament server for the tournament site, pass the settings from the a
 ```bash
 docker run -d --name blobby-server --restart unless-stopped -p 1234:1234/udp -v blobby-data:/data -e BLOBBY_TOURNAMENT=1 -e BLOBBY_SITE_URL=https://<site> -e BLOBBY_SITE_TOKEN=<token> sondresjo/blobby-server
 ```
-See [Connect to the tournament site](#connect-to-the-tournament-site). `docker stop` ends the server cleanly, and reports that wait stay in the volume.
+See [Connect to the tournament site](#connect-to-the-tournament-site). `docker stop` ends the server cleanly, and reports that wait stay in the volume. Anyone who can run `docker inspect` on the machine can read the token, so only give Docker access to people you trust with it.
 
 The server runs as the user `blobby` with uid 999. A named volume such as `blobby-data` gets the right owner by itself. To use a folder of the host instead, the folder must be writable by uid 999, for example with `sudo chown 999:999 /srv/blobby-data` before `-v /srv/blobby-data:/data`.
 
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
 #### Start the tournament server
-Two scripts start the tournament server in Docker, so you do not need to type the Docker commands. Make a game server token on the admin page of the site first. On Windows, start Docker Desktop and run this in PowerShell in the repository folder:
+Two scripts start the tournament server in Docker, so you do not need to type the Docker commands. Each release on the [releases page](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) has them as `tournament-server.ps1` and `tournament-server.sh`, and the Windows zip has `tournament-server.ps1` too. The newest versions are also at [tournament-server.ps1](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2/main/scripts/tournament-server.ps1) and [tournament-server.sh](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2/main/scripts/tournament-server.sh). The scripts use the `latest` image. Before the first release, run `$env:BLOBBY_SCRIPT_IMAGE = 'sondresjo/blobby-server:dev'` in PowerShell or `export BLOBBY_SCRIPT_IMAGE=sondresjo/blobby-server:dev` on Linux first.
+
+Make a game server token on the admin page of the site first. On Windows, start Docker Desktop and run this in PowerShell in the folder of the script:
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\tournament-server.ps1 start
+powershell -ExecutionPolicy Bypass -File tournament-server.ps1 start
 ```
 On Linux:
 ```bash
-bash scripts/tournament-server.sh start
+bash tournament-server.sh start
 ```
-The first start asks for the address of the site, the token and the port. The token is not shown while you paste it. The script keeps them in a file that only you can read, in `%APPDATA%\blobby-server` on Windows and in `~/.config/blobby-server` on Linux. The other commands are `stop`, `restart`, `logs`, `status`, `update` and `set-token`. `update` downloads the newest image and starts the server on it. `set-token` replaces the token after you make a new one on the site. On Windows the script shows the firewall rule that lets players on other machines connect.
+The first start asks for the address of the site, the token and the port. The token is not shown while you paste it. The script keeps them in a file that only you can read, in `%APPDATA%\blobby-server` on Windows and in `~/.config/blobby-server` on Linux. A saved value that is not valid is asked for again. The other commands are `stop`, `restart`, `logs`, `status`, `update`, `configure` and `set-token`. `update` downloads the newest image and then starts the server on it. If the download fails, the old server keeps running. `configure` changes the address of the site and the port, and starts a running server again with them. `set-token` replaces the token after you make a new one on the site. On Windows the script shows the firewall rule that lets players on other machines connect.
 
 #### Tournament mode
 In tournament mode each player types a join code from the tournament site as player name. The server swaps the code for the nickname of that player and refuses an unknown code or a code that another connected player already uses. The client then shows why it was refused. Tournament mode is off by default. To turn it on, set these values in the server config:
@@ -64,7 +66,7 @@ In tournament mode each player types a join code from the tournament site as pla
 <var name="tournament_mode" value="true"/>
 <var name="tournament_players_file" value="tournament_players.xml"/>
 ```
-A relative path starts in the working directory of the server. The players file looks like this:
+A relative path starts in the data folder when `BLOBBY_DATA_DIR` or `tournament_data_dir` is set, and otherwise in the working directory of the server. The players file looks like this:
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <tournament>
@@ -95,7 +97,7 @@ The server logs each started match and each game result, and adds them as lines 
 ##### Connect to the tournament site
 With the address and the token of the tournament site, the server reads the players file from the site and reports each game to it. The settings are environment variables, which come before the config file:
 - `BLOBBY_TOURNAMENT=1` turns tournament mode on, and `0` turns it off.
-- `BLOBBY_SITE_URL` is the address of the site. It must start with `https://`.
+- `BLOBBY_SITE_URL` is the address of the site. It must start with `https://`. The server ignores it when tournament mode is off, so set `BLOBBY_TOURNAMENT=1` or `tournament_mode` too.
 - `BLOBBY_SITE_TOKEN` is the game server token from the admin page of the site.
 - `BLOBBY_DATA_DIR` is the folder for the files below. The container image uses `/data`.
 
@@ -118,7 +120,7 @@ For a test site, `BLOBBY_SITE_CA_FILE` adds certificates to trust, and `BLOBBY_S
 The site client needs libcurl and nlohmann_json at build time. Without them the server is built without it, and it does not start with `BLOBBY_SITE_URL` set.
 
 #### Join links
-The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. It works the same on Windows and Linux.
+The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. Joining with the "join link" button works the same on Windows and Linux. Opening a link with a click needs a handler, which is set up differently on each system, see below.
 
 To join a match:
 1. Copy your join link on the tournament site.
@@ -135,11 +137,11 @@ You can also let a click on the link open the game. The game then asks the same 
 
 On Windows, run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
 
-On Linux, run `linux/register-join-links.sh` once, with the path of the game as argument if `blobby` is not on your `PATH`:
+On Linux, `make install` installs the helpers as `blobby-register-join-links` and `blobby-unregister-join-links`. Run `blobby-register-join-links` once. Without an install, run `linux/register-join-links.sh` from the source folder, with the path of the game as argument if `blobby` is not on your `PATH`:
 ```bash
 sh linux/register-join-links.sh /path/to/blobby
 ```
-It writes `~/.local/share/applications/blobby-join.desktop` for the scheme `x-scheme-handler/blobby` and makes it the default with `xdg-mime`. It needs no root rights. Add `--print` to see the file without writing it. `linux/unregister-join-links.sh` removes the handler.
+It writes `~/.local/share/applications/blobby-join.desktop` for the scheme `x-scheme-handler/blobby` and makes it the default with `xdg-mime`. It needs no root rights. Add `--print` to see the file without writing it. `blobby-unregister-join-links` or `linux/unregister-join-links.sh` removes the handler.
 
 ### Source Code
 Clone the git repository:
@@ -199,12 +201,14 @@ export PATH="$PATH:/c/msys64/ucrt64/bin"
 ```
 
 ### Download for Windows
-Every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`.
-Open the workflow run on the Actions page of the fork, download the artifact and unzip it.
+Download `blobby-volley-2-<version>-windows-x64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) and unzip it.
 Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
 Start the game from its own folder, as Explorer and shortcuts do.
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
+The zip also holds `COPYING`, this README, the start script of the tournament server and the license texts of the bundled DLLs in `licenses`.
+
+Test builds: every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.
@@ -267,6 +271,7 @@ cmake . -DBUILD_TESTS=ON
 cmake --build .
 test/blobbytest
 ```
+`ctest` runs them too. The tests need nlohmann_json. They write their files to a folder named `bt<process id>` in the temporary folder of the system and remove it at the end.
 
 ### Credits
 See AUTHORS
