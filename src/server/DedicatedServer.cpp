@@ -568,13 +568,7 @@ void DedicatedServer::removeConnection(const packet_ptr& packet)
 void DedicatedServer::handOverJoinCode(PlayerID holder)
 {
 	// the old holder learns why it is closed
-	RakNet::BitStream stream;
-	stream.Write((unsigned char)ID_LOBBY);
-	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
-	stream.Write((unsigned char)EntryRefusedReason::CODE_IN_USE);
-	// the same priority as the other lobby packets, so the reason does not wait in the
-	// client behind an earlier packet of this channel that is still on its way
-	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, holder);
+	sendEntryRefused( holder, EntryRefusedReason::CODE_IN_USE );
 
 	// then it leaves like a lost connection, so lobby, game and tournament forget it
 	packet_ptr lost(new Packet(), [](Packet* p){ delete[] p->data; delete p; });
@@ -593,14 +587,20 @@ void DedicatedServer::handOverJoinCode(PlayerID holder)
 
 void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
 {
+	sendEntryRefused( source, reason );
+	mRefusedConnections[source] = std::chrono::steady_clock::now();
+	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+}
+
+void DedicatedServer::sendEntryRefused(PlayerID target, EntryRefusedReason reason)
+{
 	RakNet::BitStream stream;
 	stream.Write((unsigned char)ID_LOBBY);
 	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
 	stream.Write((unsigned char)reason);
-	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, source);
-
-	mRefusedConnections[source] = std::chrono::steady_clock::now();
-	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+	// the same priority as the other lobby packets, so the reason does not wait in the
+	// client behind an earlier packet of this channel that is still on its way
+	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, target);
 }
 
 void DedicatedServer::closeConnectionsThatDidNotEnter()
