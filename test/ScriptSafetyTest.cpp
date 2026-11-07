@@ -156,4 +156,35 @@ BOOST_FIXTURE_TEST_CASE( scripts_cannot_catch_the_stop, ScriptFixture )
 	BOOST_CHECK_EQUAL( logic->getSourceFile(), RULES_FILE );
 }
 
+BOOST_FIXTURE_TEST_CASE( simulate_steps_are_clamped, ScriptFixture )
+{
+	writeRules(
+		"local a, b, c, d = simulate(1000000000, 200, 300, 5, 0)\n"
+		"local e, f, g, h = simulate(375, 200, 300, 5, 0)\n"
+		"assert(a == e and b == f and c == g and d == h)\n"
+		"a, b = simulate(-5, 200, 300, 5, 0)\n"
+		"assert(a == 200 and b == 300)\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_CHECK_EQUAL( logic->getSourceFile(), RULES_FILE );
+}
+
+BOOST_FIXTURE_TEST_CASE( rules_memory_is_limited, ScriptFixture )
+{
+	writeRules("local s = \"x\"\nfor i = 1, 40 do s = s .. s end\n");
+
+	// the script fails with a memory error and the fallback rules are used
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_REQUIRE( logic );
+	BOOST_CHECK( logic->getSourceFile().empty() );
+}
+
+BOOST_FIXTURE_TEST_CASE( rules_below_the_memory_limit_load, ScriptFixture )
+{
+	writeRules("local s = \"x\"\nfor i = 1, 20 do s = s .. s end\nassert(#s == 1048576)\n");
+
+	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
+	BOOST_CHECK_EQUAL( logic->getSourceFile(), RULES_FILE );
+}
+
 BOOST_AUTO_TEST_SUITE_END()

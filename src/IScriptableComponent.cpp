@@ -8,6 +8,8 @@
 #include "FileRead.h"
 #include "PhysicWorld.h"
 
+#include <cstdlib>
+#include <new>
 #include <iostream>
 
 namespace
@@ -15,7 +17,38 @@ namespace
 	// the hook runs every INSTRUCTION_BLOCK instructions, and a call may run MAX_INSTRUCTION_BLOCKS of them
 	const int INSTRUCTION_BLOCK = 1000;
 	const unsigned long MAX_INSTRUCTION_BLOCKS = 20000;
+	// memory a single lua state may use
+	const std::size_t MAX_LUA_MEMORY = 64 * 1024 * 1024;
+	// simulate() and simulate_until() run at most this many steps
+	const int MAX_SIMULATION_STEPS = 75 * 5;
 	const char* const COMPONENT_KEY = "__C++_ScriptComponent__";
+
+	/// allocator for lua states that fails past MAX_LUA_MEMORY bytes, so lua raises a memory error
+	void* limitedAlloc(void* userData, void* ptr, size_t oldSize, size_t newSize)
+	{
+		auto used = static_cast<std::size_t*>(userData);
+		// without a block, oldSize tells the type of the new object
+		std::size_t old = ptr ? oldSize : 0;
+		if(newSize == 0)
+		{
+			std::free(ptr);
+			*used -= old;
+			return nullptr;
+		}
+		if(newSize > old && newSize - old > MAX_LUA_MEMORY - *used)
+			return nullptr;
+		void* block = std::realloc(ptr, newSize);
+		if(block)
+			*used = *used - old + newSize;
+		return block;
+	}
+
+	int luaPanic(lua_State* state)
+	{
+		const char* message = lua_tostring(state, -1);
+		std::cerr << "Lua panic: " << (message ? message : "unknown error") << std::endl;
+		return 0;
+	}
 }
 
 void scriptInstructionHook(lua_State* state, lua_Debug*)
@@ -29,8 +62,12 @@ void scriptInstructionHook(lua_State* state, lua_Debug*)
 }
 
 IScriptableComponent::IScriptableComponent() :
-		mState(luaL_newstate()), mDummyWorld(new PhysicWorld())
+		mState(lua_newstate(limitedAlloc, &mLuaMemory)), mDummyWorld(new PhysicWorld())
 {
+	if(!mState)
+		BOOST_THROW_EXCEPTION(std::bad_alloc());
+	lua_atpanic(mState, luaPanic);
+
 	// register this in the lua registry
 	lua_pushliteral(mState, "__C++_ScriptComponent__");
 	lua_pushlightuserdata(mState, (void*)this);
@@ -272,7 +309,9 @@ int simulate_steps( lua_State* state )
 	PhysicWorld* world = getWorld( state );
 	// get the initial ball settings
 	lua_settop(state, 5);
-	int steps = lua_tointeger( state, 1);
+	// a bot may ask for a negative or fractional time, which runs no steps
+	lua_Integer requested = lua_tointeger( state, 1);
+	int steps = requested < 0 ? 0 : requested > MAX_SIMULATION_STEPS ? MAX_SIMULATION_STEPS : (int)requested;
 	float x = lua_tonumber( state, 2);
 	float y = lua_tonumber( state, 3);
 	float vx = lua_tonumber( state, 4);
@@ -320,7 +359,7 @@ int simulate_until(lua_State* state)
 	world->setBallVelocity( Vector2{vx, -vy});
 
 	int steps = 0;
-	while(coordinate != ival && steps < 75 * 5)
+	while(coordinate != ival && steps < MAX_SIMULATION_STEPS)
 	{
 		steps++;
 		// set ball valid to false to ignore blobby bounces
@@ -332,7 +371,7 @@ int simulate_until(lua_State* state)
 			break;
 	}
 	// indicate failure
-	if(steps == 75 * 5)
+	if(steps == MAX_SIMULATION_STEPS)
 		steps = -1;
 
 	lua_pushinteger(state, steps);
