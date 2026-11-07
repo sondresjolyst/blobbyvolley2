@@ -53,6 +53,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 // platform specific
 #ifndef WIN32
 #include <sys/syslog.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #else
@@ -111,6 +112,8 @@ int main(int argc, char** argv)
 	}
 
 	#ifndef WIN32
+	// files and folders the server makes are only for the server user
+	umask(077);
 	int syslog_options = LOG_CONS | LOG_PID | (g_print_syslog_to_stderr ? LOG_PERROR : 0);
 
 	openlog("blobby-server", syslog_options, LOG_DAEMON);

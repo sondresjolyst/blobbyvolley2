@@ -7,6 +7,11 @@
 
 #include "server/SiteConfig.h"
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 namespace
 {
 	const char* const TOKEN = "Zx8yQ2v_Lm9pR4tW7kN1bC3dE5fG6hJ0aS-uV8wXyZq";
@@ -226,5 +231,42 @@ BOOST_AUTO_TEST_CASE( atomic_write_fails_cleanly_in_a_missing_folder )
 	BOOST_CHECK(!writeFileAtomically("no_such_folder_blobbytest/file.txt", "x", error));
 	BOOST_CHECK(!error.empty());
 }
+
+BOOST_AUTO_TEST_CASE( atomic_write_replaces_a_stale_temporary_file )
+{
+	const std::string path = "blobbytest_stale.txt";
+	std::string error;
+	{
+		FILE* stale = std::fopen((path + ".tmp").c_str(), "wb");
+		BOOST_REQUIRE(stale);
+		std::fputs("stale", stale);
+		std::fclose(stale);
+	}
+	BOOST_REQUIRE(writeFileAtomically(path, "new", error));
+	std::string content;
+	BOOST_REQUIRE(readWholeFile(path, 1024, content));
+	BOOST_CHECK_EQUAL(content, "new");
+	BOOST_CHECK(!readWholeFile(path + ".tmp", 1024, content));
+	std::remove(path.c_str());
+}
+
+#ifndef _WIN32
+BOOST_AUTO_TEST_CASE( data_files_are_only_for_the_server_user )
+{
+	const std::string folder = "blobbytest_private";
+	const std::string path = folder + "/file.txt";
+	BOOST_REQUIRE(makeFolder(folder));
+	std::string error;
+	BOOST_REQUIRE(writeFileAtomically(path, "secret", error));
+
+	struct stat info;
+	BOOST_REQUIRE_EQUAL(stat(folder.c_str(), &info), 0);
+	BOOST_CHECK_EQUAL(info.st_mode & 0777, 0700u);
+	BOOST_REQUIRE_EQUAL(stat(path.c_str(), &info), 0);
+	BOOST_CHECK_EQUAL(info.st_mode & 0777, 0600u);
+	std::remove(path.c_str());
+	rmdir(folder.c_str());
+}
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()
