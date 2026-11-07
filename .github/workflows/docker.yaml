@@ -102,3 +102,4 @@ jobs:
       repository: sondresjo/blobby-server
       tag: ${{ needs.tag.outputs.tag }}
       tag_latest: ${{ needs.tag.outputs.latest == 'true' }}
+      build_args: ${{ format('{{"BLOBBY_VERSION":"{0}"}}', needs.tag.outputs.tag) }}
