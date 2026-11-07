@@ -9,6 +9,8 @@
 #include "GenericIOFwd.h"
 
 class RakClient;
+struct JoinLink;
+struct SDL_Window;
 
 enum class ConnectionState
 {
@@ -133,5 +135,9 @@ private:
 	std::vector<PlayerID> mOtherPlayers;
 	std::vector<std::string> mOtherPlayerNames;
 };
+
+/// Asks the player whether to join the server of a join link, since any web page or clipboard can hold one.
+/// Returns a new lobby state for that server on Yes, and nullptr on No. parent may be nullptr.
+LobbyState* joinFromLink(const JoinLink& link, SDL_Window* parent);
 
 #endif // LOBBYSTATES_H_INCLUDED

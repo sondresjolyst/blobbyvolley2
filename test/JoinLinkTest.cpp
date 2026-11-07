@@ -180,11 +180,59 @@ BOOST_AUTO_TEST_CASE(detects_link_arguments)
 	BOOST_CHECK(!looksLikeJoinLink(""));
 }
 
+BOOST_AUTO_TEST_CASE(reads_pasted_text_with_space_around)
+{
+	JoinLink link;
+	BOOST_REQUIRE(joinLinkFromText("  blobby://join?server=lan:1234&code=K7QM2XPR4T\r\n", link) == JoinLinkError::NONE);
+	BOOST_CHECK_EQUAL(link.host, "lan");
+	BOOST_CHECK_EQUAL(link.port, 1234);
+	BOOST_CHECK_EQUAL(link.code, "K7QM2XPR4T");
+
+	JoinLink tabbed;
+	BOOST_CHECK(joinLinkFromText("\t\nblobby://join?server=lan:1234&code=K7QM2XPR4T\n\n", tabbed) == JoinLinkError::NONE);
+	BOOST_CHECK_EQUAL(tabbed.code, "K7QM2XPR4T");
+}
+
+BOOST_AUTO_TEST_CASE(finds_no_link_in_empty_or_other_text)
+{
+	JoinLink link;
+	BOOST_CHECK(joinLinkFromText("", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(joinLinkFromText(" \t\r\n ", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(joinLinkFromText("hello", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(joinLinkFromText("K7QM2XPR4T", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(joinLinkFromText("https://example.no/join?server=lan:1234&code=K7QM2XPR4T", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(joinLinkFromText("link: blobby://join?server=lan:1234&code=K7QM2XPR4T", link) == JoinLinkError::NO_LINK);
+	BOOST_CHECK(link.host.empty());
+	BOOST_CHECK(link.code.empty());
+}
+
+BOOST_AUTO_TEST_CASE(checks_pasted_links_like_command_line_links)
+{
+	JoinLink link;
+	BOOST_CHECK(joinLinkFromText("blobby://join?server=lan:1234&code=K7QM2XPR4T and more", link) == JoinLinkError::BAD_CHARACTER);
+	BOOST_CHECK(joinLinkFromText("blobby://join?server=lan:1234&code=K7QM2XPR4T\nblobby://join?server=evil:1&code=K7QM2XPR4T", link) == JoinLinkError::BAD_CHARACTER);
+	BOOST_CHECK(joinLinkFromText("blobby://join?server=0x7f000001:1234&code=K7QM2XPR4T", link) == JoinLinkError::BAD_HOST);
+	BOOST_CHECK(joinLinkFromText("blobby://join?server=lan:1234&code=K7QM2XPR4", link) == JoinLinkError::BAD_CODE);
+	BOOST_CHECK(joinLinkFromText("blobby://join", link) == JoinLinkError::NOT_A_JOIN_LINK);
+	BOOST_CHECK(link.host.empty());
+}
+
+BOOST_AUTO_TEST_CASE(refuses_too_long_pasted_text)
+{
+	JoinLink link;
+	std::string padded = std::string(MAX_JOIN_LINK_TEXT_BYTES - 100, ' ') + "blobby://join?server=lan:1234&code=K7QM2XPR4T";
+	BOOST_CHECK(joinLinkFromText(padded, link) == JoinLinkError::NONE);
+
+	std::string huge = std::string(MAX_JOIN_LINK_TEXT_BYTES, ' ') + "blobby://join?server=lan:1234&code=K7QM2XPR4T";
+	BOOST_CHECK(joinLinkFromText(huge, link) == JoinLinkError::TOO_LONG);
+	BOOST_CHECK(joinLinkFromText("blobby://join?server=lan:1234&code=K7QM2XPR4T" + std::string(MAX_JOIN_LINK_BYTES, '/'), link) == JoinLinkError::TOO_LONG);
+}
+
 BOOST_AUTO_TEST_CASE(every_error_has_a_message)
 {
 	for (JoinLinkError error : {JoinLinkError::TOO_LONG, JoinLinkError::BAD_CHARACTER, JoinLinkError::NOT_A_JOIN_LINK,
 	                            JoinLinkError::BAD_PARAMETERS, JoinLinkError::BAD_HOST, JoinLinkError::BAD_PORT,
-	                            JoinLinkError::BAD_CODE})
+	                            JoinLinkError::BAD_CODE, JoinLinkError::NO_LINK})
 	{
 		std::string message = describeJoinLinkError(error);
 		BOOST_CHECK(!message.empty());

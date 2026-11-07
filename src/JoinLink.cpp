@@ -253,6 +253,23 @@ JoinLinkError parseJoinLink(const std::string& text, JoinLink& link)
 	return JoinLinkError::NONE;
 }
 
+JoinLinkError joinLinkFromText(const std::string& text, JoinLink& link)
+{
+	if (text.size() > MAX_JOIN_LINK_TEXT_BYTES)
+		return JoinLinkError::TOO_LONG;
+
+	const char* const space = " \t\r\n";
+	std::size_t begin = text.find_first_not_of(space);
+	if (begin == std::string::npos)
+		return JoinLinkError::NO_LINK;
+	std::size_t end = text.find_last_not_of(space);
+	std::string trimmed = text.substr(begin, end - begin + 1);
+
+	if (!looksLikeJoinLink(trimmed))
+		return JoinLinkError::NO_LINK;
+	return parseJoinLink(trimmed, link);
+}
+
 std::string describeJoinLinkError(JoinLinkError error)
 {
 	switch (error)
@@ -273,6 +290,8 @@ std::string describeJoinLinkError(JoinLinkError error)
 			return "The server port in the join link is not valid.";
 		case JoinLinkError::BAD_CODE:
 			return "The join code in the join link is not valid.";
+		case JoinLinkError::NO_LINK:
+			return "There is no join link in the clipboard.";
 	}
 	return "The join link is not valid.";
 }

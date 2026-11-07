@@ -47,7 +47,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "state/LobbyStates.h"
 #include "BlobbyApp.h"
 #include "JoinLink.h"
-#include "NetworkMessage.h"
 
 // this global allows the host game thread to be killed
 extern std::atomic<bool> gKillHostThread;
@@ -218,44 +217,6 @@ namespace
 		}
 		return false;
 	}
-
-	/// Asks the player before the game connects to the server of a link, since any web page can open one.
-	/// Returns true only when the player picks Yes.
-	bool confirmJoin(const JoinLink& link)
-	{
-		std::string question = "Join the tournament server " + link.host + ":" + std::to_string(link.port) + "?";
-		const SDL_MessageBoxButtonData buttons[] = {
-			{ SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No" },
-			{ SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes" },
-		};
-		SDL_MessageBoxData data = {};
-		data.flags = SDL_MESSAGEBOX_INFORMATION;
-		data.window = nullptr;
-		data.title = AppTitle;
-		data.message = question.c_str();
-		data.numbuttons = 2;
-		data.buttons = buttons;
-		data.colorScheme = nullptr;
-
-		int chosen = 0;
-		if (SDL_ShowMessageBox(&data, &chosen) != 0)
-			return false;
-		return chosen == 1;
-	}
-
-	/// The server a join link points to.
-	ServerInfo serverFromLink(const JoinLink& link)
-	{
-		ServerInfo info(std::string(""));
-		std::memset(info.hostname, 0, sizeof(info.hostname));
-		std::memset(info.name, 0, sizeof(info.name));
-		std::memset(info.description, 0, sizeof(info.description));
-		std::strncpy(info.hostname, link.host.c_str(), sizeof(info.hostname) - 1);
-		info.port = link.port;
-		std::string name = link.host + ":" + std::to_string(link.port);
-		std::strncpy(info.name, name.c_str(), sizeof(info.name) - 1);
-		return info;
-	}
 }
 
 int main(int argc, char* argv[])
@@ -330,9 +291,9 @@ int main(int argc, char* argv[])
 		}
 
 		std::unique_ptr<State> first_state;
-		if (request.hasLink && confirmJoin(request.link))
-			first_state.reset(new LobbyState(serverFromLink(request.link), PreviousState::MAIN, request.link.code));
-		else
+		if (request.hasLink)
+			first_state.reset(joinFromLink(request.link, nullptr));
+		if (!first_state)
 			first_state.reset(new MainMenuState());
 
 		BlobbyApp app( std::move(first_state), gameConfig );

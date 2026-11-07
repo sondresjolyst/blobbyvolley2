@@ -29,6 +29,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 constexpr std::size_t MAX_JOIN_LINK_BYTES = 300;
 /// Longest host name in a join link. The client keeps the host in a 64 byte buffer.
 constexpr std::size_t MAX_JOIN_LINK_HOST_BYTES = 63;
+/// Longest clipboard text the game looks at for a join link, in bytes.
+constexpr std::size_t MAX_JOIN_LINK_TEXT_BYTES = 4096;
 
 /// A join link from the tournament site, blobby://join?server=<host>:<port>&code=<code>.
 struct JoinLink
@@ -49,7 +51,9 @@ enum class JoinLinkError
 	BAD_PARAMETERS,
 	BAD_HOST,
 	BAD_PORT,
-	BAD_CODE
+	BAD_CODE,
+	/// The text holds no join link at all.
+	NO_LINK
 };
 
 /// True if the argument looks like it is meant as a blobby:// link, so the game should treat it as one.
@@ -60,6 +64,11 @@ bool looksLikeJoinLink(const std::string& argument);
 /// join in any case, a slash after join or at the very end, the two parameters in either order,
 /// and the host and code in any case.
 JoinLinkError parseJoinLink(const std::string& text, JoinLink& link);
+
+/// Reads a join link from pasted text, such as the clipboard. Spaces, tabs and line breaks around
+/// the link are removed. Text that is empty or does not start with blobby: gives NO_LINK.
+/// Otherwise the same checks as parseJoinLink apply.
+JoinLinkError joinLinkFromText(const std::string& text, JoinLink& link);
 
 /// A sentence that tells the player what is wrong with a link.
 std::string describeJoinLinkError(JoinLinkError error);
