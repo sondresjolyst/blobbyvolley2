@@ -806,16 +806,9 @@ void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
 		if( const JoinCodeEntry* entry = mJoinCodes->getTable().findById( status.opponentId ) )
 			opponent = entry->nickname;
 
+		// the player's name is the nickname from the players file since the join code was accepted
 		RakNet::BitStream stream;
-		stream.Write( (unsigned char)ID_LOBBY );
-		stream.Write( (unsigned char)LobbyPacketType::TOURNAMENT_STATUS );
-		auto out = createGenericWriter( &stream );
-		out->byte( (unsigned char)status.status );
-		out->string( opponent );
-		out->uint32( status.game );
-		out->uint32( status.bestOf );
-		out->uint32( status.ownWins );
-		out->uint32( status.opponentWins );
+		writeTournamentStatus( stream, status, opponent, p.second->getName() );
 		mServer->Send( stream, LOW_PRIORITY, RELIABLE_ORDERED, p.first );
 	}
 }

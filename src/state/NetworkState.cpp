@@ -60,7 +60,7 @@ static bool isValidMatchEvent(char event, PlayerSide side)
 
 
 /* implementation */
-NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win)
+NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win, std::string own_name)
 	: GameState(new DuelMatch(true, DEFAULT_RULES_FILE, score_to_win))
 	, mNetworkState(WAITING_FOR_OPPONENT)
 	, mWaitingForReplay(false)
@@ -69,6 +69,7 @@ NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_
 	, mSelectedChatmessage(0)
 	, mChatCursorPosition(0)
 	, mRulesChecksum(rule_checksum)
+	, mOwnName(std::move(own_name))
 {
 }
 
@@ -102,6 +103,8 @@ void NetworkGameState::init()
 	}
 
 	mRemotePlayer->setName("");
+	if (!mOwnName.empty())
+		mLocalPlayer->setName(mOwnName);
 
 	// check the rules
 	int ourChecksum = 0;
@@ -134,7 +137,7 @@ void NetworkGameState::startNextGame()
 {
 	mNextGamePending = false;
 	mKeepConnection = true;
-	switchState(new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin));
+	switchState(new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin, mOwnName));
 }
 
 NetworkGameState::~NetworkGameState()
@@ -317,6 +320,11 @@ void NetworkGameState::step_impl()
 				{
 					mTournamentStatus = readTournamentStatus(*in);
 					mHasTournamentStatus = true;
+					if (!mTournamentStatus.ownName.empty())
+					{
+						mOwnName = mTournamentStatus.ownName;
+						mLocalPlayer->setName(mOwnName);
+					}
 				}
 				break;
 			}

@@ -198,7 +198,10 @@ void LobbyState::step_impl()
 				{
 					// the server picks the matches, so the casual lobby is not shown anymore
 					mTournament = true;
-					mSubState = std::make_shared<LobbyTournamentSubstate>(readTournamentStatus(*in));
+					TournamentStatusData data = readTournamentStatus(*in);
+					if (!data.ownName.empty())
+						mOwnName = data.ownName;
+					mSubState = std::make_shared<LobbyTournamentSubstate>(data);
 				}
 				else if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
 				{
@@ -284,7 +287,7 @@ void LobbyState::step_impl()
 				if (!isValidScoreToWin(scoreToWin))
 					break;
 
-				switchState( new NetworkGameState( mClient, serverChecksum, scoreToWin ) );
+				switchState( new NetworkGameState( mClient, serverChecksum, scoreToWin, mOwnName ) );
 				}
 				break;
 			default:
@@ -369,24 +372,6 @@ const char* LobbyState::getStateName() const
 	return "LobbyState";
 }
 
-
-TournamentStatusData readTournamentStatus(GenericIn& in)
-{
-	TournamentStatusData data;
-	unsigned char status = 0;
-	in.byte(status);
-	if (status <= (unsigned char)TournamentStatus::MATCH_OVER)
-		data.status = (TournamentStatus)status;
-	in.string(data.opponent);
-	in.uint32(data.game);
-	in.uint32(data.bestOf);
-	in.uint32(data.ownWins);
-	in.uint32(data.opponentWins);
-	// the name field of a player holds at most 15 bytes
-	if (data.opponent.size() > 15)
-		data.opponent.resize(15);
-	return data;
-}
 
 std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data)
 {

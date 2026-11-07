@@ -7,26 +7,14 @@
 #include "PlayerIdentity.h"
 #include "State.h"
 #include "GenericIOFwd.h"
+#include "server/Tournament.h"
 
 class RakClient;
 class IMGUI;
 
-/// What a tournament server told the player in a TOURNAMENT_STATUS packet.
-struct TournamentStatusData
-{
-	TournamentStatus status = TournamentStatus::NO_MATCH;
-	std::string opponent;
-	unsigned game = 0;
-	unsigned bestOf = 0;
-	unsigned ownWins = 0;
-	unsigned opponentWins = 0;
-};
-
-/// Reads the body of a TOURNAMENT_STATUS packet, after the packet type.
-TournamentStatusData readTournamentStatus(GenericIn& in);
-
 /// The lines of text that describe a tournament status to the player.
 std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data);
+
 struct JoinLink;
 struct SDL_Window;
 
@@ -104,6 +92,8 @@ class LobbyState : public State
 		std::shared_ptr<LobbySubstate> mSubState;
 		// true once the server said it runs a tournament
 		bool mTournament = false;
+		// nickname a tournament server gave this player
+		std::string mOwnName;
 
 		// indices of settings that resemble most closely those of local settings
 		unsigned mPreferedSpeed = -1;

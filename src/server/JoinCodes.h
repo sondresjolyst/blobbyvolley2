@@ -46,6 +46,9 @@ std::string normalizeJoinCode(const std::string& raw);
 /// True if code has the right length and only uses the join code alphabet.
 bool isValidJoinCode(const std::string& code);
 
+/// True if name is 1 to MAX_NICKNAME_BYTES bytes of UTF-8 without control characters.
+bool isValidNickname(const std::string& name);
+
 /// A short part of a name or code that is safe to log. It never holds the whole code.
 std::string joinCodeLogPrefix(const std::string& raw);
 

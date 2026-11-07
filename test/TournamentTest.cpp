@@ -14,6 +14,7 @@
 #include "server/NetworkPlayer.h"
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
+#include "GenericIO.h"
 
 namespace
 {
@@ -854,6 +855,69 @@ BOOST_AUTO_TEST_CASE( enter_server_announces_tournament_support )
 	RakNet::BitStream otherIn(other.GetData(), other.GetNumberOfBytesUsed(), false);
 	NetworkPlayer otherPlayer(makeID(1002), otherIn);
 	BOOST_CHECK_EQUAL(readClientFeatures(otherIn), 0u);
+}
+
+BOOST_AUTO_TEST_CASE( tournament_status_carries_the_own_nickname )
+{
+	PlayerTournamentStatus status;
+	status.status = TournamentStatus::NEXT_GAME;
+	status.game = 2;
+	status.bestOf = 3;
+	status.ownWins = 1;
+	status.opponentWins = 0;
+
+	auto read = [](RakNet::BitStream& stream) {
+		RakNet::BitStream in(stream.GetData(), stream.GetNumberOfBytesUsed(), false);
+		unsigned char id = 0;
+		unsigned char type = 0;
+		in.Read(id);
+		in.Read(type);
+		BOOST_CHECK_EQUAL(id, (unsigned char)ID_LOBBY);
+		BOOST_CHECK_EQUAL(type, (unsigned char)LobbyPacketType::TOURNAMENT_STATUS);
+		auto reader = createGenericReader(&in);
+		return readTournamentStatus(*reader);
+	};
+
+	RakNet::BitStream stream;
+	writeTournamentStatus(stream, status, "Ola", "Kari");
+	TournamentStatusData data = read(stream);
+	BOOST_CHECK(data.status == TournamentStatus::NEXT_GAME);
+	BOOST_CHECK_EQUAL(data.opponent, "Ola");
+	BOOST_CHECK_EQUAL(data.ownName, "Kari");
+	BOOST_CHECK_EQUAL(data.game, 2u);
+	BOOST_CHECK_EQUAL(data.bestOf, 3u);
+	BOOST_CHECK_EQUAL(data.ownWins, 1u);
+
+	// UTF-8 nicknames up to 15 bytes are kept
+	RakNet::BitStream utf;
+	writeTournamentStatus(utf, status, "Ola", "Bj\xC3\xB8rn");
+	BOOST_CHECK_EQUAL(read(utf).ownName, "Bj\xC3\xB8rn");
+
+	// names that are too long, broken UTF-8 or hold control characters are dropped
+	for (const std::string& bad : { std::string(16, 'a'), std::string("Bj\xC3"), std::string("a\nb") })
+	{
+		RakNet::BitStream s;
+		writeTournamentStatus(s, status, bad, bad);
+		TournamentStatusData d = read(s);
+		BOOST_CHECK(d.ownName.empty());
+		BOOST_CHECK(d.opponent.empty());
+		BOOST_CHECK_EQUAL(d.bestOf, 3u);
+	}
+
+	// a packet without the field leaves the name empty
+	RakNet::BitStream older;
+	older.Write((unsigned char)ID_LOBBY);
+	older.Write((unsigned char)LobbyPacketType::TOURNAMENT_STATUS);
+	{
+		auto out = createGenericWriter(&older);
+		out->byte((unsigned char)TournamentStatus::NO_MATCH);
+		out->string("");
+		out->uint32(0);
+		out->uint32(0);
+		out->uint32(0);
+		out->uint32(0);
+	}
+	BOOST_CHECK(read(older).ownName.empty());
 }
 
 BOOST_AUTO_TEST_CASE( reports_for_unknown_or_idle_matches_are_ignored )

@@ -117,6 +117,11 @@ bool isValidJoinCode(const std::string& code)
 	return true;
 }
 
+bool isValidNickname(const std::string& name)
+{
+	return !name.empty() && name.size() <= MAX_NICKNAME_BYTES && isCleanUtf8(name);
+}
+
 std::string joinCodeLogPrefix(const std::string& raw)
 {
 	std::string prefix;
@@ -172,7 +177,7 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 		}
 
 		std::string nickname = nick_attr;
-		if (nickname.empty() || nickname.size() > MAX_NICKNAME_BYTES || !isCleanUtf8(nickname))
+		if (!isValidNickname(nickname))
 		{
 			warnings.push_back(where + " has an empty, too long or invalid nickname, skipped");
 			continue;

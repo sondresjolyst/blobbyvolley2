@@ -26,6 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <random>
 #include <utility>
 
+#include "GenericIO.h"
+#include "JoinCodes.h"
+
 // - - - - - - - - - - - - - - - - - -
 // 			helpers
 // - - - - - - - - - - - - - - - - - -
@@ -85,6 +88,41 @@ std::string gameReportJson(const GameReport& r)
 	json += ",\"startedAt\":\"" + formatUtcTime(r.startedAt) + "\"";
 	json += ",\"endedAt\":\"" + formatUtcTime(r.endedAt) + "\"}";
 	return json;
+}
+
+void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStatus& status,
+						const std::string& opponent, const std::string& ownName)
+{
+	stream.Write( (unsigned char)ID_LOBBY );
+	stream.Write( (unsigned char)LobbyPacketType::TOURNAMENT_STATUS );
+	auto out = createGenericWriter( &stream );
+	out->byte( (unsigned char)status.status );
+	out->string( opponent );
+	out->uint32( status.game );
+	out->uint32( status.bestOf );
+	out->uint32( status.ownWins );
+	out->uint32( status.opponentWins );
+	out->string( ownName );
+}
+
+TournamentStatusData readTournamentStatus(GenericIn& in)
+{
+	TournamentStatusData data;
+	unsigned char status = 0;
+	in.byte(status);
+	if (status <= (unsigned char)TournamentStatus::MATCH_OVER)
+		data.status = (TournamentStatus)status;
+	in.string(data.opponent);
+	in.uint32(data.game);
+	in.uint32(data.bestOf);
+	in.uint32(data.ownWins);
+	in.uint32(data.opponentWins);
+	in.string(data.ownName);
+	if (!isValidNickname(data.opponent))
+		data.opponent.clear();
+	if (!isValidNickname(data.ownName))
+		data.ownName.clear();
+	return data;
 }
 
 // - - - - - - - - - - - - - - - - - -

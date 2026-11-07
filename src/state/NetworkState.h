@@ -46,7 +46,8 @@ class NetworkGameState : public GameState
 public:
 	/// create a NetworkGameState with connection to a certain server
 	/// \param client A client which has an established connection to the server we want to start the game on.
-	NetworkGameState(std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win);
+	/// \param own_name nickname from a tournament server, used instead of the configured name. Empty on a casual server.
+	NetworkGameState(std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win, std::string own_name = "");
 
 	~NetworkGameState() override;
 	void step_impl() override;
@@ -99,4 +100,6 @@ private:
 	// what a tournament server said about the match
 	bool mHasTournamentStatus = false;
 	TournamentStatusData mTournamentStatus;
+	// nickname from a tournament server, the saved config is not changed
+	std::string mOwnName;
 };
