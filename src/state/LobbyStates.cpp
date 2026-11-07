@@ -131,7 +131,13 @@ void LobbyState::step_impl()
 				if (mLobbyState == ConnectionState::REFUSED)
 					break;
 				mLobbyState = ConnectionState::CONNECTED;
-				if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
+				if((LobbyPacketType)t == LobbyPacketType::TOURNAMENT_STATUS)
+				{
+					// the server picks the matches, so the casual lobby is not shown anymore
+					mTournament = true;
+					mSubState = std::make_shared<LobbyTournamentSubstate>(readTournamentStatus(*in));
+				}
+				else if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
 				{
 					uint32_t player_count;
 					in->uint32( player_count );
@@ -186,7 +192,7 @@ void LobbyState::step_impl()
 					mPreferedScore = std::distance( scores.begin(), closest_score );
 
 					// if this is the first time we receive the config, create new main substate
-					if( first_config )
+					if( first_config && !mTournament )
 					{
 						mSubState = std::make_shared<LobbyMainSubstate>(mClient, mPreferedSpeed, mPreferedRules, mPreferedScore);
 					}
@@ -201,8 +207,8 @@ void LobbyState::step_impl()
 				}
 				break;
 			case ID_RULES_CHECKSUM: // this packet is sent when a game was created, so we probably are joining a game here.
-				// this is only a valid request if we are in the lobby game substate
-				assert(dynamic_cast<LobbyGameSubstate*>(mSubState.get()) != nullptr);
+				// in a casual lobby we are in the lobby game substate here. A tournament server
+				// starts the game while we wait in the tournament substate.
 				{
 				RakNet::BitStream stream(packet->data, packet->length, false);
 
@@ -295,6 +301,84 @@ const char* LobbyState::getStateName() const
 	return "LobbyState";
 }
 
+
+TournamentStatusData readTournamentStatus(GenericIn& in)
+{
+	TournamentStatusData data;
+	unsigned char status = 0;
+	in.byte(status);
+	if (status <= (unsigned char)TournamentStatus::MATCH_OVER)
+		data.status = (TournamentStatus)status;
+	in.string(data.opponent);
+	in.uint32(data.game);
+	in.uint32(data.bestOf);
+	in.uint32(data.ownWins);
+	in.uint32(data.opponentWins);
+	// the name field of a player holds at most 15 bytes
+	if (data.opponent.size() > 15)
+		data.opponent.resize(15);
+	return data;
+}
+
+std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data)
+{
+	std::vector<std::string> lines;
+	switch (data.status)
+	{
+		case TournamentStatus::NO_MATCH:
+			lines.push_back(imgui.getText(TextManager::TNM_NO_MATCH));
+			return lines;
+		case TournamentStatus::WAITING_FOR_OPPONENT:
+			lines.push_back(imgui.getText(TextManager::TNM_WAITING_OPPONENT));
+			break;
+		case TournamentStatus::WAITING_FOR_SLOT:
+			lines.push_back(imgui.getText(TextManager::TNM_WAITING_SLOT));
+			break;
+		case TournamentStatus::WAITING_FOR_ORGANIZER:
+			lines.push_back(imgui.getText(TextManager::TNM_WAITING_ORGANIZER));
+			break;
+		case TournamentStatus::PLAYING:
+			lines.push_back(imgui.getText(TextManager::TNM_PLAYING));
+			break;
+		case TournamentStatus::NEXT_GAME:
+			lines.push_back(imgui.getText(TextManager::TNM_NEXT_GAME));
+			break;
+		case TournamentStatus::MATCH_OVER:
+			lines.push_back(imgui.getText(TextManager::TNM_MATCH_OVER));
+			break;
+	}
+
+	if (!data.opponent.empty())
+		lines.push_back(imgui.getText(TextManager::TNM_OPPONENT) + data.opponent);
+	if (data.bestOf > 1)
+	{
+		lines.push_back(imgui.getText(TextManager::TNM_BEST_OF) + std::to_string(data.bestOf) + ", "
+			+ imgui.getText(TextManager::TNM_GAMES_WON) + std::to_string(data.ownWins) + " - "
+			+ std::to_string(data.opponentWins));
+	}
+	return lines;
+}
+
+// ----------------------------------------------------------------------------
+// 				T o u r n a m e n t     S u b s t a t e
+// ----------------------------------------------------------------------------
+
+LobbyTournamentSubstate::LobbyTournamentSubstate(TournamentStatusData data) :
+	mData(std::move(data))
+{
+}
+
+#undef GEN_ID
+#define GEN_ID imgui.getNextId()
+void LobbyTournamentSubstate::step(IMGUI& imgui, const ServerStatusData& /*status*/)
+{
+	imgui.doOverlay(GEN_ID, Vector2(25.0, 90.0), Vector2(775.0, 470.0));
+	auto lines = describeTournamentStatus(imgui, mData);
+	for (unsigned i = 0; i < lines.size(); ++i)
+	{
+		imgui.doText(GEN_ID, Vector2(400.0, 200.0 + 50.0 * i), lines[i], TF_ALIGN_CENTER);
+	}
+}
 
 // ----------------------------------------------------------------------------
 // 				M a i n     S u b s t a t e

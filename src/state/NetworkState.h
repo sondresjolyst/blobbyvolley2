@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GameState.h"
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
+#include "LobbyStates.h"
 
 #include <vector>
 #include <memory>
@@ -87,4 +88,10 @@ private:
 
 	// somewhat ugly: we need to keep the rules checksum until we actually initialize the state
 	int mRulesChecksum;
+
+	// a tournament server started the next game, which takes over the connection
+	bool mKeepConnection = false;
+	// what a tournament server said about the match
+	bool mHasTournamentStatus = false;
+	TournamentStatusData mTournamentStatus;
 };

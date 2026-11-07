@@ -9,6 +9,24 @@
 #include "GenericIOFwd.h"
 
 class RakClient;
+class IMGUI;
+
+/// What a tournament server told the player in a TOURNAMENT_STATUS packet.
+struct TournamentStatusData
+{
+	TournamentStatus status = TournamentStatus::NO_MATCH;
+	std::string opponent;
+	unsigned game = 0;
+	unsigned bestOf = 0;
+	unsigned ownWins = 0;
+	unsigned opponentWins = 0;
+};
+
+/// Reads the body of a TOURNAMENT_STATUS packet, after the packet type.
+TournamentStatusData readTournamentStatus(GenericIn& in);
+
+/// The lines of text that describe a tournament status to the player.
+std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data);
 
 enum class ConnectionState
 {
@@ -79,6 +97,8 @@ class LobbyState : public State
 
 		ServerStatusData mStatus;
 		std::shared_ptr<LobbySubstate> mSubState;
+		// true once the server said it runs a tournament
+		bool mTournament = false;
 
 		// indices of settings that resemble most closely those of local settings
 		unsigned mPreferedSpeed = -1;
@@ -106,6 +126,17 @@ private:
 	bool mChosenPasswordVisible;
 
 	std::vector<unsigned> mPossibleScores{2, 5, 10, 15, 20, 25, 40, 50};
+};
+
+
+/// Shown on a tournament server, where the server starts the matches.
+class LobbyTournamentSubstate : public LobbySubstate
+{
+public:
+	explicit LobbyTournamentSubstate(TournamentStatusData data);
+	void step( IMGUI& imgui, const ServerStatusData& status ) override;
+private:
+	TournamentStatusData mData;
 };
 
 

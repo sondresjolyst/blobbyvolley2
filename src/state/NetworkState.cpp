@@ -132,7 +132,8 @@ void NetworkGameState::init()
 NetworkGameState::~NetworkGameState()
 {
 	CURRENT_NETWORK_LAG = -1;
-	mClient->Disconnect(50);
+	if (!mKeepConnection)
+		mClient->Disconnect(50);
 }
 
 void NetworkGameState::step_impl()
@@ -140,7 +141,8 @@ void NetworkGameState::step_impl()
 	IMGUI& imgui = getIMGUI();
 
 	packet_ptr packet;
-	while (nullptr != (packet = mClient->Receive()))
+	// once the next game started, its state reads the following packets
+	while (!mKeepConnection && nullptr != (packet = mClient->Receive()))
 	{
 		switch(packet->data[0])
 		{
@@ -276,7 +278,32 @@ void NetworkGameState::step_impl()
 			}
 			case ID_RULES_CHECKSUM:
 			{
-				assert(0);
+				// only a tournament server sends this during a game. It starts the next
+				// game of the match on the same connection.
+				if (mNetworkState != PLAYER_WON && mNetworkState != OPPONENT_DISCONNECTED)
+					break;
+				RakNet::BitStream stream(packet->data, packet->length, false);
+				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
+				int serverChecksum = 0;
+				int scoreToWin = 0;
+				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
+					break;
+				mKeepConnection = true;
+				switchState(new NetworkGameState(mClient, serverChecksum, scoreToWin));
+				break;
+			}
+			case ID_LOBBY:
+			{
+				RakNet::BitStream stream(packet->data, packet->length, false);
+				auto in = createGenericReader(&stream);
+				unsigned char type = 0;
+				in->byte(type);	// ID_LOBBY
+				in->byte(type);
+				if ((LobbyPacketType)type == LobbyPacketType::TOURNAMENT_STATUS)
+				{
+					mTournamentStatus = readTournamentStatus(*in);
+					mHasTournamentStatus = true;
+				}
 				break;
 			}
 			case ID_RULES:
@@ -521,6 +548,13 @@ void NetworkGameState::step_impl()
 		{
 			mMatch->updateEvents(); // so the last whistle will be sounded
 			displayWinningPlayerScreen(mWinningPlayer);
+			if (mHasTournamentStatus && mTournamentStatus.status != TournamentStatus::PLAYING)
+			{
+				auto lines = describeTournamentStatus(imgui, mTournamentStatus);
+				imgui.doText(GEN_ID, Vector2(400, 400), lines.front(), TF_ALIGN_CENTER);
+				if (mTournamentStatus.bestOf > 1)
+					imgui.doText(GEN_ID, Vector2(400, 425), lines.back(), TF_ALIGN_CENTER);
+			}
 			if (imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
 			{
 				switchState(new MainMenuState());
