@@ -26,7 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <vector>
 #include <list>
 #include <future>
-#include <atomic>
+#include <functional>
+#include <string>
+#include <utility>
 
 class RakClient;
 class RakServer;
@@ -36,9 +38,11 @@ class NetworkGame;
 /*! \class NetworkSearchState
 	\brief Base class for search states
 	\details This class provides a search interface.
-			The actual search process has to be implemented
-			by derived class by overriding the searchServers()
-			method.
+			Derived classes provide the job that downloads the
+			server list, and the code that reads and pings the
+			servers. The job runs on a detached search thread and
+			only uses the network. Files, the state and all
+			RakNet calls stay on the main thread.
 */
 class NetworkSearchState : public State
 {
@@ -53,22 +57,27 @@ public:
 
 	const char* getStateName() const override;
 protected:
+	typedef std::vector< std::pair<std::string, int> > ServerAddressList;
+
 	std::vector<ServerInfo> mScannedServers;
 	std::unique_ptr<RakClient> mPingClient;
-	// set this to true to step pinging before we are finished
-	std::atomic<bool> mCancelPing;
-	// the search thread sets this, the main thread then clears mScannedServers
-	std::atomic<bool> mClearScannedServers{false};
 
 private:
-	virtual void doSearchServers() = 0;
+	// returns the job that runs on the search thread. It must not touch the state, files or other globals.
+	virtual std::function<std::string()> getSearchJob() const = 0;
+	// reads the server addresses from the job result. An empty list keeps the current server list.
+	virtual ServerAddressList findServers(const std::string& searchResult) const = 0;
+	// pings the found servers
+	virtual void pingServers(const ServerAddressList& servers) = 0;
 
 	typedef std::list<RakClient*> ClientList;
 
 	ClientList mQueryClients;
 	RakClient* mDirectConnectClient = nullptr;
 
-	std::future<void> mPingJob;
+	std::future<std::string> mSearchJob;
+	// a search was requested while another one was running
+	bool mSearchRequested = false;
 
 	unsigned mSelectedServer;
 	bool mDisplayInfo;
@@ -89,8 +98,14 @@ class OnlineSearchState : public NetworkSearchState
 public:
 	OnlineSearchState();
 	~OnlineSearchState() override = default;
-	void doSearchServers() override;
 	const char* getStateName() const override;
+
+private:
+	std::function<std::string()> getSearchJob() const override;
+	ServerAddressList findServers(const std::string& serverListXml) const override;
+	void pingServers(const ServerAddressList& servers) override;
+	// downloads the server list, runs on the search thread
+	static std::string downloadServerList();
 };
 
 
@@ -105,6 +120,8 @@ public:
 	const char* getStateName() const override;
 
 private:
-	void doSearchServers() override;
+	std::function<std::string()> getSearchJob() const override;
+	ServerAddressList findServers(const std::string& searchResult) const override;
+	void pingServers(const ServerAddressList& servers) override;
 };
 
