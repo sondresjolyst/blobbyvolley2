@@ -26,26 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GenericIOFwd.h"
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
+#include "TournamentLimits.h"
 
 // What the game and a tournament server both need to know about tournaments.
-
-/// Limits of the match settings. They are the limits of the tournament site.
-constexpr int MIN_MATCH_SCORE_TO_WIN = 1;
-constexpr int MAX_MATCH_SCORE_TO_WIN = 99;
-constexpr int MIN_MATCH_SPEED = 30;
-constexpr int MAX_MATCH_SPEED = 120;
-constexpr int MAX_MATCH_BEST_OF = 99;
-constexpr int MAX_MATCH_WINS = 99;
-/// Pause between two games of a series, in seconds.
-constexpr int MIN_NEXT_GAME_DELAY = 3;
-constexpr int MAX_NEXT_GAME_DELAY = 120;
-constexpr int DEFAULT_NEXT_GAME_DELAY = 10;
-
-/// Longest wait for the next game that a client accepts from a server, the longest next game delay.
-constexpr unsigned MAX_NEXT_GAME_DELAY_MS = MAX_NEXT_GAME_DELAY * 1000;
-
-/// True if a score to win, from a file or from a server, is in the range a match can have.
-bool isValidScoreToWin(int scoreToWin);
 
 /// Number of characters in a join code.
 constexpr std::size_t JOIN_CODE_LENGTH = 10;
