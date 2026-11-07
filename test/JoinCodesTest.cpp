@@ -393,14 +393,14 @@ BOOST_AUTO_TEST_CASE( gate_hands_a_known_code_over_to_a_new_connection )
 
 	// the connection that holds the code does not take it from itself
 	PlayerID holder;
-	BOOST_CHECK(gate.checkHandover(makeID(1), "K7QM2XPR4T", 1000, holder) == JoinCodeGate::Handover::NONE);
+	BOOST_CHECK(gate.checkHandover(makeID(1), "K7QM2XPR4T", 1000, {}, holder) == JoinCodeGate::Handover::NONE);
 	// a free code needs no handover
-	BOOST_CHECK(gate.checkHandover(makeID(2), "B9HNZ3WD6F", 1000, holder) == JoinCodeGate::Handover::NONE);
+	BOOST_CHECK(gate.checkHandover(makeID(2), "B9HNZ3WD6F", 1000, {}, holder) == JoinCodeGate::Handover::NONE);
 
 	// from any address, knowing the code is enough
 	PlayerID other = makeID(2);
 	other.binaryAddress = 0x0500A8C0;
-	BOOST_REQUIRE(gate.checkHandover(other, "k7qm2xpr4t", 1000, holder) == JoinCodeGate::Handover::HAND_OVER);
+	BOOST_REQUIRE(gate.checkHandover(other, "k7qm2xpr4t", 1000, {}, holder) == JoinCodeGate::Handover::HAND_OVER);
 	BOOST_CHECK(holder == makeID(1));
 	// the server lets the old connection leave, then admits the new one
 	gate.release(holder);
@@ -416,17 +416,17 @@ BOOST_AUTO_TEST_CASE( gate_keeps_a_handed_over_code_for_the_cooldown )
 	std::string nickname;
 	PlayerID holder;
 	BOOST_REQUIRE(gate.admit(makeID(1), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
-	BOOST_REQUIRE(gate.checkHandover(makeID(2), "K7QM2XPR4T", 5000, holder) == JoinCodeGate::Handover::HAND_OVER);
+	BOOST_REQUIRE(gate.checkHandover(makeID(2), "K7QM2XPR4T", 5000, {}, holder) == JoinCodeGate::Handover::HAND_OVER);
 	gate.release(holder);
 	BOOST_REQUIRE(gate.admit(makeID(2), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
 
 	// a third connection inside the cooldown is refused, so two clients cannot take turns
-	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 5000 + JOIN_CODE_HANDOVER_COOLDOWN_MS - 1, holder)
+	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 5000 + JOIN_CODE_HANDOVER_COOLDOWN_MS - 1, {}, holder)
 		== JoinCodeGate::Handover::TOO_SOON);
 	BOOST_CHECK_EQUAL(gate.playerIdOf(makeID(2)), 12);
 
 	// after the cooldown the code moves again
-	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 5000 + JOIN_CODE_HANDOVER_COOLDOWN_MS, holder)
+	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 5000 + JOIN_CODE_HANDOVER_COOLDOWN_MS, {}, holder)
 		== JoinCodeGate::Handover::HAND_OVER);
 	BOOST_CHECK(holder == makeID(2));
 }
@@ -444,7 +444,7 @@ BOOST_AUTO_TEST_CASE( gate_does_not_hand_over_a_code_removed_by_a_reload )
 
 	// the old holder stays, the new connection is refused by admit
 	PlayerID holder;
-	BOOST_CHECK(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, holder) == JoinCodeGate::Handover::NONE);
+	BOOST_CHECK(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, {}, holder) == JoinCodeGate::Handover::NONE);
 	BOOST_CHECK(gate.admit(makeID(2), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::UNKNOWN_CODE);
 	PlayerID connection;
 	BOOST_CHECK(!gate.findConnection(12, connection));
@@ -452,7 +452,7 @@ BOOST_AUTO_TEST_CASE( gate_does_not_hand_over_a_code_removed_by_a_reload )
 
 	// when the code comes back it is free
 	BOOST_REQUIRE(gate.applyContent(VALID_FILE));
-	BOOST_CHECK(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, holder) == JoinCodeGate::Handover::NONE);
+	BOOST_CHECK(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, {}, holder) == JoinCodeGate::Handover::NONE);
 	BOOST_CHECK(gate.admit(makeID(2), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
 }
 
@@ -463,13 +463,13 @@ BOOST_AUTO_TEST_CASE( gate_lets_a_player_reconnect_after_a_lost_connection )
 	std::string nickname;
 	PlayerID holder;
 	BOOST_REQUIRE(gate.admit(makeID(1), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
-	BOOST_REQUIRE(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, holder) == JoinCodeGate::Handover::HAND_OVER);
+	BOOST_REQUIRE(gate.checkHandover(makeID(2), "K7QM2XPR4T", 1000, {}, holder) == JoinCodeGate::Handover::HAND_OVER);
 	gate.release(holder);
 	BOOST_REQUIRE(gate.admit(makeID(2), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
 
 	// the connection is lost, and the player comes back inside the cooldown
 	gate.release(makeID(2));
-	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 1001, holder) == JoinCodeGate::Handover::NONE);
+	BOOST_CHECK(gate.checkHandover(makeID(3), "K7QM2XPR4T", 1001, {}, holder) == JoinCodeGate::Handover::NONE);
 	BOOST_CHECK(gate.admit(makeID(3), "K7QM2XPR4T", nickname) == JoinCodeGate::Result::ACCEPTED);
 	BOOST_CHECK_EQUAL(nickname, "Ola");
 }

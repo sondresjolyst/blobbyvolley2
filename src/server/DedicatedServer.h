@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <iosfwd>
 #include <memory>
 #include <set>
+#include <atomic>
 #include <chrono>
 #include <functional>
 
@@ -163,7 +164,11 @@ class DedicatedServer
 
 		// tournament mode, empty on a casual server
 		std::unique_ptr<JoinCodeGate> mJoinCodes;
-		// refused connections and when to close them
+		// updates of the network thread that found the server busy, and when that was last logged
+		std::atomic<unsigned> mBusyUpdates{0};
+		unsigned long long mBusyLoggedAt = 0;
+
+		// connections to close and when each was refused
 		std::map<PlayerID, std::chrono::steady_clock::time_point> mRefusedConnections;
 		// a new connection has to send ID_ENTER_SERVER within ten seconds
 		EntryDeadlines mEntryDeadlines{ std::chrono::seconds(10) };

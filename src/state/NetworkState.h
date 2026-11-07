@@ -102,6 +102,8 @@ private:
 	void startNextGame();
 	// what a tournament server said about the match
 	bool mHasTournamentStatus = false;
+	// true when the server closed the connection because the join code moved to another connection
+	bool mCodeInUse = false;
 	TournamentStatusData mTournamentStatus;
 	// nickname from a tournament server, the saved config is not changed
 	std::string mOwnName;

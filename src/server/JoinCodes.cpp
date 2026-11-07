@@ -392,7 +392,9 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 	mTable = std::move(table);
 	mMatches.swap(matches);
 
-	// a code that left the file no longer belongs to anybody
+	// A code that left the file no longer belongs to anybody, so it cannot be handed over and its
+	// player id is 0. The connection that held it stays as it is, the server does not close it.
+	// It keeps its lobby place and a running game, and it gets no new tournament games.
 	for (auto it = mCodeOwners.begin(); it != mCodeOwners.end(); )
 	{
 		if (mTable.find(it->first))
@@ -446,7 +448,8 @@ JoinCodeGate::Result JoinCodeGate::admit(NetworkPlayer& player)
 }
 
 JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const std::string& name,
-												unsigned long long now_ms, PlayerID& holder)
+												unsigned long long now_ms, const HolderCheck& holderCanLeave,
+												PlayerID& holder)
 {
 	const std::string code = normalizeJoinCode(name);
 	auto owner = mCodeOwners.find(code);
@@ -459,6 +462,11 @@ JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const
 	{
 		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
 		return Handover::TOO_SOON;
+	}
+	if (holderCanLeave && !holderCanLeave(owner->second))
+	{
+		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
+		return Handover::HOLDER_BUSY;
 	}
 
 	holder = owner->second;

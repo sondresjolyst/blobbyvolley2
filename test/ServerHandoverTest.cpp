@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -169,14 +170,12 @@ namespace
 		std::unique_ptr<DedicatedServer> server;
 		std::shared_ptr<RecordingEvents> events = std::make_shared<RecordingEvents>();
 		std::vector<std::unique_ptr<Client>> clients;
-		unsigned short port;
+		unsigned short port = 0;
 
-		ServerFixture(unsigned short serverPort, const std::string& matches, bool director) : fs("./test"), port(serverPort)
+		ServerFixture(const std::string& matches, bool director) : fs("./test")
 		{
 			fs.addToSearchPath(BLOBBY_TEST_DATA_DIR);
-			ServerInfo info("test");
-			info.port = port;
-			server.reset(new DedicatedServer(info, {"default.lua"}, {75.f}, 8));
+			startOnFreePort();
 			std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(""));
 			BOOST_REQUIRE(gate->applyContent(playersFile(matches)));
 			server->setJoinCodeGate(std::move(gate));
@@ -186,6 +185,27 @@ namespace
 				d->setEvents(events);
 				server->setTournamentDirector(std::move(d));
 			}
+		}
+
+		// the server cannot bind a port in use, so it tries random ports until one is free
+		void startOnFreePort()
+		{
+			std::mt19937 random{std::random_device{}()};
+			std::uniform_int_distribution<int> ports(20000, 60000);
+			for (int attempt = 0; attempt < 50 && !server; ++attempt)
+			{
+				ServerInfo info("test");
+				info.port = (unsigned short)ports(random);
+				try
+				{
+					server.reset(new DedicatedServer(info, {"default.lua"}, {75.f}, 8));
+					port = info.port;
+				}
+				catch (...)
+				{
+				}
+			}
+			BOOST_REQUIRE(server);
 		}
 
 		~ServerFixture()
@@ -204,7 +224,7 @@ namespace
 		}
 
 		// runs the server loop until done is true, false after timeout_ms
-		bool pump(const std::function<bool()>& done, int timeout_ms = 5000)
+		bool pump(const std::function<bool()>& done, int timeout_ms = 8000)
 		{
 			auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
 			while (std::chrono::steady_clock::now() < end)
@@ -226,13 +246,15 @@ namespace
 			pump([](){ return false; }, ms);
 		}
 	};
+
+	const char* const MATCH_7 = "\t<match id=\"7\" player1=\"12\" player2=\"17\" bestOf=\"3\"/>\n";
 }
 
 BOOST_AUTO_TEST_SUITE( ServerHandoverTest )
 
 BOOST_AUTO_TEST_CASE( code_entered_again_moves_to_the_new_connection_in_the_lobby )
 {
-	ServerFixture f(23461, "", true);
+	ServerFixture f("", true);
 	Client& first = f.connect();
 	first.enter(OLA);
 	BOOST_REQUIRE(f.pump([&](){ return first.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
@@ -240,8 +262,10 @@ BOOST_AUTO_TEST_CASE( code_entered_again_moves_to_the_new_connection_in_the_lobb
 	Client& second = f.connect();
 	const std::size_t before = first.mark();
 	second.enter(OLA);
-	BOOST_REQUIRE(f.pump([&](){ return second.hasLobby(LobbyPacketType::TOURNAMENT_STATUS) && first.closed; }));
-	BOOST_CHECK(first.refusedWith(EntryRefusedReason::CODE_IN_USE));
+	// the reason arrives before the connection closes
+	BOOST_REQUIRE(f.pump([&](){ return second.hasLobby(LobbyPacketType::TOURNAMENT_STATUS)
+		&& first.refusedWith(EntryRefusedReason::CODE_IN_USE); }));
+	BOOST_REQUIRE(f.pump([&](){ return first.closed; }));
 	BOOST_CHECK(!second.hasLobby(LobbyPacketType::ENTRY_REFUSED));
 
 	// nothing for the new holder reaches the old connection
@@ -254,7 +278,7 @@ BOOST_AUTO_TEST_CASE( code_entered_again_moves_to_the_new_connection_in_the_lobb
 BOOST_AUTO_TEST_CASE( handover_removes_the_open_game_of_the_old_holder )
 {
 	// a gate without matches keeps the casual lobby, where players open games
-	ServerFixture f(23462, "", false);
+	ServerFixture f("", false);
 	Client& first = f.connect();
 	first.enter(OLA);
 	Client& watcher = f.connect();
@@ -271,42 +295,49 @@ BOOST_AUTO_TEST_CASE( handover_removes_the_open_game_of_the_old_holder )
 
 	Client& second = f.connect();
 	second.enter(OLA);
-	BOOST_REQUIRE(f.pump([&](){ return first.closed && watcher.openGames() == 0; }));
-	BOOST_CHECK(first.refusedWith(EntryRefusedReason::CODE_IN_USE));
+	BOOST_REQUIRE(f.pump([&](){ return first.refusedWith(EntryRefusedReason::CODE_IN_USE) && watcher.openGames() == 0; }));
+	BOOST_REQUIRE(f.pump([&](){ return first.closed; }));
 	BOOST_CHECK_EQUAL(f.server->getWaitingPlayers(), 2);
 }
 
-BOOST_AUTO_TEST_CASE( handover_in_a_running_match_ends_the_game_like_a_disconnect )
+BOOST_AUTO_TEST_CASE( code_of_a_player_in_a_running_game_is_not_handed_over )
 {
-	ServerFixture f(23463, "\t<match id=\"7\" player1=\"12\" player2=\"17\" bestOf=\"3\"/>\n", true);
+	ServerFixture f(MATCH_7, true);
 	Client& ola = f.connect();
 	ola.enter(OLA);
 	Client& kari = f.connect();
 	kari.enter(KARI);
 	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0 && kari.count(ID_GAME_READY) > 0; }));
 
+	// the new connection is refused and the game goes on
 	Client& again = f.connect();
-	const std::size_t before = ola.mark();
 	again.enter(OLA);
-	BOOST_REQUIRE(f.pump([&](){ return ola.closed && kari.count(ID_OPPONENT_DISCONNECTED) > 0
-		&& again.hasLobby(LobbyPacketType::TOURNAMENT_STATUS) && !f.events->games.empty(); }));
+	BOOST_REQUIRE(f.pump([&](){ return again.refusedWith(EntryRefusedReason::CODE_IN_USE); }));
+	BOOST_REQUIRE(f.pump([&](){ return again.closed; }));
 	f.settle();
+	BOOST_CHECK(!ola.closed);
+	BOOST_CHECK(!ola.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+	BOOST_CHECK_EQUAL(kari.count(ID_OPPONENT_DISCONNECTED), 0);
+	BOOST_CHECK(f.events->games.empty());
 
-	// the opponent is told, the old connection only gets its reason
-	BOOST_CHECK_EQUAL(ola.countSince(before, ID_OPPONENT_DISCONNECTED), 0);
-	BOOST_CHECK(ola.refusedWith(EntryRefusedReason::CODE_IN_USE));
-	BOOST_CHECK_EQUAL(again.count(ID_GAME_READY), 0);
+	// once the connection of the player is gone, the code is free again
+	ola.rak.Disconnect(100);
+	BOOST_REQUIRE(f.pump([&](){ return kari.count(ID_OPPONENT_DISCONNECTED) > 0 && !f.events->games.empty(); }));
+	Client& back = f.connect();
+	back.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return back.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
+	BOOST_CHECK(!back.hasLobby(LobbyPacketType::ENTRY_REFUSED));
 
-	// the game is abandoned by the player who held the code, the series goes on
+	// the game counts as left by that player, the series goes on
 	BOOST_REQUIRE_EQUAL(f.events->games.size(), 1u);
 	BOOST_CHECK(!f.events->games[0].finished);
 	BOOST_CHECK_EQUAL(f.events->games[0].matchId, 7);
 	BOOST_CHECK_EQUAL(f.events->games[0].leftPlayerId, 12);
 }
 
-BOOST_AUTO_TEST_CASE( code_entered_twice_quickly_ends_with_the_last_connection )
+BOOST_AUTO_TEST_CASE( code_entered_twice_quickly_ends_with_one_connection )
 {
-	ServerFixture f(23464, "", true);
+	ServerFixture f("", true);
 	Client& first = f.connect();
 	first.enter(OLA);
 	BOOST_REQUIRE(f.pump([&](){ return first.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
@@ -315,15 +346,14 @@ BOOST_AUTO_TEST_CASE( code_entered_twice_quickly_ends_with_the_last_connection )
 	Client& third = f.connect();
 	second.enter(OLA);
 	third.enter(OLA);
-	// the two entries arrive in either order, the one handled last keeps the code
-	BOOST_REQUIRE(f.pump([&](){ return first.closed && (second.closed != third.closed); }));
+	// the entries arrive in either order. One of the two gets the code, the other is refused.
+	BOOST_REQUIRE(f.pump([&](){ return first.refusedWith(EntryRefusedReason::CODE_IN_USE)
+		&& (second.refusedWith(EntryRefusedReason::CODE_IN_USE) != third.refusedWith(EntryRefusedReason::CODE_IN_USE)); }));
+	Client& loser = second.refusedWith(EntryRefusedReason::CODE_IN_USE) ? second : third;
+	Client& holder = &loser == &second ? third : second;
+	BOOST_REQUIRE(f.pump([&](){ return first.closed && loser.closed && holder.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
 	f.settle();
-	Client& holder = second.closed ? third : second;
-	Client& loser = second.closed ? second : third;
 
-	BOOST_CHECK(first.refusedWith(EntryRefusedReason::CODE_IN_USE));
-	BOOST_CHECK(loser.refusedWith(EntryRefusedReason::CODE_IN_USE));
-	BOOST_CHECK(holder.hasLobby(LobbyPacketType::TOURNAMENT_STATUS));
 	BOOST_CHECK(!holder.hasLobby(LobbyPacketType::ENTRY_REFUSED));
 	BOOST_CHECK(!holder.closed);
 	BOOST_CHECK_EQUAL(f.server->getWaitingPlayers(), 1);

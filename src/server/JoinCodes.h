@@ -154,12 +154,19 @@ class JoinCodeGate
 			/// holder has the code and has to leave before player is admitted.
 			HAND_OVER,
 			/// The code moved less than JOIN_CODE_HANDOVER_COOLDOWN_MS ago, refuse player.
-			TOO_SOON
+			TOO_SOON,
+			/// The connection that holds the code cannot leave now, refuse player.
+			HOLDER_BUSY
 		};
+
+		/// Tells whether the connection that holds a code may lose it now.
+		typedef std::function<bool(const PlayerID&)> HolderCheck;
 
 		/// Decides whether the known join code in name moves from the connection that holds it to player.
 		/// HAND_OVER sets holder and starts the cooldown of the code. now_ms is the clock poll() uses.
-		Handover checkHandover(const PlayerID& player, const std::string& name, unsigned long long now_ms, PlayerID& holder);
+		/// holderCanLeave may keep the code with its holder, an empty check always lets it go.
+		Handover checkHandover(const PlayerID& player, const std::string& name, unsigned long long now_ms,
+							const HolderCheck& holderCanLeave, PlayerID& holder);
 
 		/// Frees the code of a player that left. Does nothing for an unknown player.
 		void release(const PlayerID& player);
