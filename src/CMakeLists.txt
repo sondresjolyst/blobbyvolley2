@@ -177,6 +177,13 @@ if (UNIX AND (NOT ANDROID) OR WIN32)
 		endif ()
 	endif ()
 endif ()
+
+# headless client for load tests of a tournament server, see tools/loadbot/README.md
+if (BUILD_LOADBOT)
+	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp ${common_SRC})
+	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
+endif ()
+
 if (UNIX AND (NOT ANDROID))
 	add_executable(blobby-runtest EXCLUDE_FROM_ALL runtest.cpp ${blobby_SRC})
 	target_link_libraries(blobby-runtest ${BLOBBY_COMMON_LIBS} ${OPENGL_LIBRARIES})

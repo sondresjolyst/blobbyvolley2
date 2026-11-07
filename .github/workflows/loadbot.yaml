@@ -1,0 +1,39 @@
+name: Load test bot
+
+on:
+  push:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+  pull_request:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  smoke:
+    name: Two bots play a match
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Build the server and bot images
+        run: |
+          docker build -t blobby-server:smoke .
+          docker build -f tools/loadbot/Dockerfile -t blobby-loadbot:smoke .
+      - name: Play one match without a site
+        run: tools/loadbot/smoke.sh blobby-server:smoke blobby-loadbot:smoke
