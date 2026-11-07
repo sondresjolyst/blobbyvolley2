@@ -151,7 +151,7 @@ namespace
 
 HttpClient::~HttpClient() = default;
 
-Outbox::Outbox(std::string path, LogFunction log, std::size_t maxBytes)
+Outbox::Outbox(std::string path, ServerLog log, std::size_t maxBytes)
 : mPath(std::move(path))
 , mLog(std::move(log))
 , mMaxBytes(maxBytes)
@@ -799,7 +799,7 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 	return true;
 }
 
-StoredSponsorBoard::StoredSponsorBoard(std::string folder, LogFunction log)
+StoredSponsorBoard::StoredSponsorBoard(std::string folder, ServerLog log)
 : mFolder(std::move(folder))
 , mLog(std::move(log))
 {
@@ -838,7 +838,7 @@ bool StoredSponsorBoard::poll(sponsors::Board& board)
 // 			site link
 // - - - - - - - - - - - - - - - - - -
 
-SiteLink::SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, LogFunction log, SiteTiming timing)
+SiteLink::SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, ServerLog log, SiteTiming timing)
 : mHttp(http)
 , mOutbox(outbox)
 , mPaths(std::move(paths))
@@ -1199,7 +1199,7 @@ void SiteLink::sendLive(unsigned long long now_ms)
 // - - - - - - - - - - - - - - - - - -
 
 SiteReporter::SiteReporter(std::shared_ptr<TournamentEvents> inner, std::unique_ptr<HttpClient> http,
-						std::unique_ptr<Outbox> outbox, SitePaths paths, SiteLink::LogFunction log)
+						std::unique_ptr<Outbox> outbox, SitePaths paths, ServerLog log)
 : mInner(std::move(inner))
 , mHttp(std::move(http))
 , mOutbox(std::move(outbox))

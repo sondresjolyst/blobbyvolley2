@@ -292,15 +292,15 @@ JoinCodeGate::JoinCodeGate(std::string path, unsigned reload_interval_ms)
 {
 }
 
-void JoinCodeGate::setLogFunction(LogFunction log)
+void JoinCodeGate::setLogFunction(ServerLog log)
 {
 	mLog = std::move(log);
 }
 
-void JoinCodeGate::log(LogLevel level, const std::string& message) const
+void JoinCodeGate::log(bool problem, const std::string& message) const
 {
 	if (mLog)
-		mLog(level, message);
+		mLog(problem, message);
 }
 
 bool JoinCodeGate::reload()
@@ -312,7 +312,7 @@ bool JoinCodeGate::reload()
 		// log each problem once, not on every poll
 		if (error != mLastError)
 		{
-			log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+			log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
 			mLastError = error;
 		}
 		return false;
@@ -344,19 +344,19 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 	std::string error;
 	if (!table.parse(xml, warnings, error))
 	{
-		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+		log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
 		return false;
 	}
 
 	std::vector<MatchAssignment> matches;
 	if (!parseMatchAssignments(xml, table.playerIds(), matches, warnings, error))
 	{
-		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+		log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
 		return false;
 	}
 
 	for (const auto& w : warnings)
-		log(LogLevel::PROBLEM, "players file: " + w);
+		log(true, "players file: " + w);
 
 	mTable = std::move(table);
 	mMatches.swap(matches);
@@ -376,7 +376,7 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 		it = mCodeOwners.erase(it);
 	}
 	++mGeneration;
-	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
+	log(false, "loaded " + std::to_string(mTable.size()) + " tournament players and "
 		+ std::to_string(mMatches.size()) + " matches");
 	return true;
 }
@@ -387,14 +387,14 @@ JoinCodeGate::Result JoinCodeGate::admit(const PlayerID& player, const std::stri
 	const JoinCodeEntry* entry = code.empty() ? nullptr : mTable.find(code);
 	if (!entry)
 	{
-		log(LogLevel::INFO, "refused unknown join code " + joinCodeLogPrefix(name));
+		log(false, "refused unknown join code " + joinCodeLogPrefix(name));
 		return Result::UNKNOWN_CODE;
 	}
 
 	auto owner = mCodeOwners.find(code);
 	if (owner != mCodeOwners.end() && owner->second != player)
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", already in use by " + entry->nickname);
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", already in use by " + entry->nickname);
 		return Result::CODE_IN_USE;
 	}
 
@@ -403,7 +403,7 @@ JoinCodeGate::Result JoinCodeGate::admit(const PlayerID& player, const std::stri
 	mCodeOwners[code] = player;
 	mPlayerCodes[player] = code;
 	nickname = entry->nickname;
-	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " accepted for " + nickname);
+	log(false, "join code " + joinCodeLogPrefix(code) + " accepted for " + nickname);
 	return Result::ACCEPTED;
 }
 
@@ -429,18 +429,18 @@ JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const
 	auto last = mHandedOverAt.find(code);
 	if (last != mHandedOverAt.end() && now_ms < last->second + JOIN_CODE_HANDOVER_COOLDOWN_MS)
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
 		return Handover::TOO_SOON;
 	}
 	if (holderCanLeave && !holderCanLeave(owner->second))
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
 		return Handover::HOLDER_BUSY;
 	}
 
 	holder = owner->second;
 	mHandedOverAt[code] = now_ms;
-	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
+	log(false, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
 	return Handover::HAND_OVER;
 }
 

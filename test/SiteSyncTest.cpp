@@ -552,7 +552,7 @@ BOOST_AUTO_TEST_CASE( sync_writes_the_players_file_only_for_a_new_version )
 	http.handler = std::ref(site);
 	Outbox outbox("");
 	SitePaths paths = testPaths("sync");
-	SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+	SiteLink link(http, outbox, paths, ServerLog());
 
 	link.step(0);
 	const std::string first = readFile(paths.playersFile);
@@ -610,7 +610,7 @@ BOOST_AUTO_TEST_CASE( reports_of_a_match_go_in_order_one_at_a_time )
 	outbox.addConnected(7, 12, 17);
 	outbox.addGame(makeReport(7, 1, true, 12, "a"));
 	outbox.addGame(makeReport(7, 2, true, 17, "b"));
-	SiteLink link(http, outbox, testPaths("order"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("order"), ServerLog());
 
 	link.step(0);
 	BOOST_CHECK_EQUAL(http.posts("/api/server/matches/7/connected").size(), 1u);
@@ -634,7 +634,7 @@ BOOST_AUTO_TEST_CASE( reports_wait_for_the_site_and_keep_their_order )
 	std::remove(path.c_str());
 	{
 		Outbox outbox(path);
-		SiteLink link(http, outbox, testPaths("outage"), SiteLink::LogFunction());
+		SiteLink link(http, outbox, testPaths("outage"), ServerLog());
 		outbox.addGame(makeReport(7, 1, true, 12, "a"));
 		link.step(0);
 		outbox.addGame(makeReport(7, 2, true, 17, "b"));
@@ -652,7 +652,7 @@ BOOST_AUTO_TEST_CASE( reports_wait_for_the_site_and_keep_their_order )
 	Outbox outbox(path);
 	outbox.load();
 	BOOST_CHECK_EQUAL(outbox.size(), 2u);
-	SiteLink link(http, outbox, testPaths("outage"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("outage"), ServerLog());
 	for (unsigned long long t = 0; t < 1000; t += 250)
 		link.step(t);
 	BOOST_CHECK_EQUAL(outbox.size(), 0u);
@@ -695,7 +695,7 @@ BOOST_AUTO_TEST_CASE( game_ahead_is_final )
 	http.handler = std::ref(site);
 	Outbox outbox("");
 	outbox.addGame(makeReport(7, 5, true, 12, "a"));
-	SiteLink link(http, outbox, testPaths("ahead"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("ahead"), ServerLog());
 	link.step(0);
 	BOOST_CHECK_EQUAL(outbox.size(), 0u);
 	BOOST_CHECK(site.stored.empty());
@@ -732,7 +732,7 @@ BOOST_AUTO_TEST_CASE( players_file_follows_the_outbox )
 	};
 	Outbox outbox("");
 	SitePaths paths = testPaths("follow");
-	SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+	SiteLink link(http, outbox, paths, ServerLog());
 	link.step(0);
 	BOOST_CHECK(contains(readFile(paths.playersFile), "nextGame=\"1\""));
 
@@ -757,7 +757,7 @@ BOOST_AUTO_TEST_CASE( a_delivered_report_counts_until_a_newer_sync_has_it )
 	};
 	Outbox outbox("");
 	SitePaths paths = testPaths("delivered");
-	SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+	SiteLink link(http, outbox, paths, ServerLog());
 	link.step(0);
 
 	// the sync of the site lags behind the report it took
@@ -792,7 +792,7 @@ BOOST_AUTO_TEST_CASE( a_restart_during_an_outage_uses_the_saved_sync )
 	std::remove(paths.syncFile.c_str());
 	{
 		Outbox outbox("");
-		SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+		SiteLink link(http, outbox, paths, ServerLog());
 		link.step(0);
 	}
 	BOOST_CHECK(contains(readFile(paths.syncFile), "\"syncVersion\":\"v1\""));
@@ -801,7 +801,7 @@ BOOST_AUTO_TEST_CASE( a_restart_during_an_outage_uses_the_saved_sync )
 	site.up = false;
 	Outbox outbox("");
 	outbox.addGame(makeReport(7, 1, true, 12, "a"));
-	SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+	SiteLink link(http, outbox, paths, ServerLog());
 	link.step(0);
 	const std::string xml = readFile(paths.playersFile);
 	BOOST_CHECK(contains(xml, "nextGame=\"2\""));
@@ -835,7 +835,7 @@ BOOST_AUTO_TEST_CASE( a_restart_after_delivery_does_not_play_the_game_again )
 	std::remove(outboxPath.c_str());
 	{
 		Outbox outbox(outboxPath);
-		SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+		SiteLink link(http, outbox, paths, ServerLog());
 		link.step(0);
 		outbox.addGame(makeReport(7, 1, true, 17, "a"));
 		link.step(100);
@@ -849,7 +849,7 @@ BOOST_AUTO_TEST_CASE( a_restart_after_delivery_does_not_play_the_game_again )
 	BOOST_CHECK_EQUAL(outbox.size(), 0u);
 	BOOST_REQUIRE_EQUAL(outbox.entries().size(), 1u);
 	BOOST_CHECK(outbox.entries()[0].delivered);
-	SiteLink link(http, outbox, paths, SiteLink::LogFunction());
+	SiteLink link(http, outbox, paths, ServerLog());
 	link.step(0);
 	const std::string xml = readFile(paths.playersFile);
 	BOOST_CHECK(contains(xml, "nextGame=\"2\""));
@@ -923,7 +923,7 @@ BOOST_AUTO_TEST_CASE( a_closed_game_leaves_the_outbox_at_once )
 	};
 	Outbox outbox("");
 	outbox.addGame(makeReport(7, 1, true, 17, "a"));
-	SiteLink link(http, outbox, testPaths("closed"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("closed"), ServerLog());
 	link.step(0);
 	BOOST_CHECK(outbox.entries().empty());
 }
@@ -935,7 +935,7 @@ BOOST_AUTO_TEST_CASE( stop_flag_ends_a_step_before_the_next_request )
 	http.handler = std::ref(site);
 	Outbox outbox("");
 	outbox.addGame(makeReport(7, 1, true, 17, "a"));
-	SiteLink link(http, outbox, testPaths("stop"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("stop"), ServerLog());
 	std::atomic<bool> stop(true);
 	link.setStopFlag(&stop);
 	link.step(0);
@@ -949,7 +949,7 @@ BOOST_AUTO_TEST_CASE( live_score_is_throttled_and_never_queued )
 	FakeHttp http;
 	http.handler = std::ref(site);
 	Outbox outbox("");
-	SiteLink link(http, outbox, testPaths("live"), SiteLink::LogFunction());
+	SiteLink link(http, outbox, testPaths("live"), ServerLog());
 
 	LiveScore score;
 	score.matchId = 7;

@@ -141,7 +141,7 @@ void TournamentEvents::liveScore(int, int, int, int, int, int)
 {
 }
 
-TournamentLog::TournamentLog(std::string resultsPath, LogFunction log)
+TournamentLog::TournamentLog(std::string resultsPath, ServerLog log)
 : mPath(std::move(resultsPath))
 , mLog(std::move(log))
 {

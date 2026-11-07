@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "MatchAssignments.h"
 #include "NetworkMessage.h"
+#include "ServerLog.h"
 #include "GenericIOFwd.h"
 
 typedef std::chrono::system_clock::time_point WallTime;
@@ -104,9 +105,7 @@ class TournamentEvents
 class TournamentLog : public TournamentEvents
 {
 	public:
-		typedef std::function<void(bool problem, const std::string&)> LogFunction;
-
-		TournamentLog(std::string resultsPath, LogFunction log);
+		TournamentLog(std::string resultsPath, ServerLog log);
 
 		void matchConnected(int matchId, int player1, int player2) override;
 		void gameEnded(const GameReport& report) override;
@@ -116,7 +115,7 @@ class TournamentLog : public TournamentEvents
 		void append(const std::string& line);
 
 		std::string mPath;
-		LogFunction mLog;
+		ServerLog mLog;
 };
 
 /// What a player of the tournament waits for.

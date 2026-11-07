@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "raknet/NetworkTypes.h"
 #include "MatchAssignments.h"
+#include "ServerLog.h"
 
 class NetworkPlayer;
 
@@ -117,19 +118,11 @@ class JoinCodeGate
 			CODE_IN_USE
 		};
 
-		enum class LogLevel
-		{
-			INFO,
-			PROBLEM
-		};
-
-		typedef std::function<void(LogLevel, const std::string&)> LogFunction;
-
 		/// \param path players file. A relative path is relative to the working directory.
 		/// \param reload_interval_ms how often poll() checks the file
 		explicit JoinCodeGate(std::string path, unsigned reload_interval_ms = 2000);
 
-		void setLogFunction(LogFunction log);
+		void setLogFunction(ServerLog log);
 
 		/// Reads the file now if its content changed since the last read.
 		/// Returns true if a new table is in use.
@@ -185,7 +178,7 @@ class JoinCodeGate
 		bool findConnection(int playerId, PlayerID& player) const;
 
 	private:
-		void log(LogLevel level, const std::string& message) const;
+		void log(bool problem, const std::string& message) const;
 
 		std::string mPath;
 		unsigned mReloadIntervalMs;
@@ -204,5 +197,5 @@ class JoinCodeGate
 		std::map<std::string, unsigned long long> mHandedOverAt;
 		std::map<PlayerID, std::string> mPlayerCodes;
 
-		LogFunction mLog;
+		ServerLog mLog;
 };

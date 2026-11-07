@@ -351,8 +351,8 @@ void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
 	mJoinCodes = std::move(gate);
 	if( mJoinCodes )
 	{
-		mJoinCodes->setLogFunction([](JoinCodeGate::LogLevel level, const std::string& message){
-			syslog(level == JoinCodeGate::LogLevel::PROBLEM ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
+		mJoinCodes->setLogFunction([](bool problem, const std::string& message){
+			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
 		});
 	}
 }

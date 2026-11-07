@@ -31,9 +31,9 @@ namespace
 	struct LogCapture
 	{
 		std::vector<std::string> lines;
-		JoinCodeGate::LogFunction function()
+		ServerLog function()
 		{
-			return [this](JoinCodeGate::LogLevel, const std::string& line){ lines.push_back(line); };
+			return [this](bool, const std::string& line){ lines.push_back(line); };
 		}
 		bool contains(const std::string& text) const
 		{

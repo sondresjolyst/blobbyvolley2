@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <thread>
 #include <vector>
 
+#include "ServerLog.h"
 #include "Sha256.h"
 #include "SponsorSync.h"
 #include "Tournament.h"
@@ -102,10 +103,8 @@ struct OutboxEntry
 class Outbox
 {
 	public:
-		typedef std::function<void(bool problem, const std::string&)> LogFunction;
-
 		/// \param maxBytes largest file that load() reads
-		explicit Outbox(std::string path, LogFunction log = LogFunction(), std::size_t maxBytes = 16 * 1024 * 1024);
+		explicit Outbox(std::string path, ServerLog log = ServerLog(), std::size_t maxBytes = 16 * 1024 * 1024);
 
 		/// Reads the file. A line that cannot be read is skipped and the file is kept as path.bad.
 		/// A file that cannot be read at all or is too large is renamed to path.bad before anything is saved.
@@ -144,7 +143,7 @@ class Outbox
 		void save();
 
 		std::string mPath;
-		LogFunction mLog;
+		ServerLog mLog;
 		std::size_t mMaxBytes;
 		mutable std::mutex mMutex;
 		std::vector<OutboxEntry> mEntries;
@@ -216,9 +215,7 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 class StoredSponsorBoard
 {
 	public:
-		typedef std::function<void(bool problem, const std::string&)> LogFunction;
-
-		explicit StoredSponsorBoard(std::string folder, LogFunction log = LogFunction());
+		explicit StoredSponsorBoard(std::string folder, ServerLog log = ServerLog());
 
 		/// True and the board when board.json changed and was read. A board that could not be read
 		/// is tried again on the next call.
@@ -226,7 +223,7 @@ class StoredSponsorBoard
 
 	private:
 		std::string mFolder;
-		LogFunction mLog;
+		ServerLog mLog;
 		std::string mContent;
 		bool mLoaded = false;
 		std::string mLastError;
@@ -278,9 +275,7 @@ unsigned siteFailurePause(const SiteTiming& timing, unsigned failures);
 class SiteLink
 {
 	public:
-		typedef std::function<void(bool problem, const std::string&)> LogFunction;
-
-		SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, LogFunction log, SiteTiming timing = SiteTiming());
+		SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, ServerLog log, SiteTiming timing = SiteTiming());
 
 		/// Does what is due. now_ms is any monotonic time in milliseconds.
 		void step(unsigned long long now_ms);
@@ -311,7 +306,7 @@ class SiteLink
 		HttpClient& mHttp;
 		Outbox& mOutbox;
 		SitePaths mPaths;
-		LogFunction mLog;
+		ServerLog mLog;
 		SiteTiming mTiming;
 
 		const std::atomic<bool>* mStop = nullptr;
@@ -351,7 +346,7 @@ class SiteReporter : public TournamentEvents
 {
 	public:
 		SiteReporter(std::shared_ptr<TournamentEvents> inner, std::unique_ptr<HttpClient> http,
-					std::unique_ptr<Outbox> outbox, SitePaths paths, SiteLink::LogFunction log);
+					std::unique_ptr<Outbox> outbox, SitePaths paths, ServerLog log);
 		~SiteReporter() override;
 
 		/// Starts the thread.
@@ -367,7 +362,7 @@ class SiteReporter : public TournamentEvents
 	private:
 		void run();
 		void wake();
-		SiteLink::LogFunction mLogLine;
+		ServerLog mLogLine;
 
 		std::shared_ptr<TournamentEvents> mInner;
 		std::unique_ptr<HttpClient> mHttp;
