@@ -47,6 +47,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "FileRead.h"
 #include "UserConfig.h"
 #include "SpeedController.h"
+#include "FutureResult.h"
 #include "server/DedicatedServer.h"
 
 
@@ -76,16 +77,13 @@ NetworkSearchState::~NetworkSearchState()
 			delete client;
 		}
 	}
-	// request ping thread to stop
-	mCancelPing = true;
 }
 
 void NetworkSearchState::searchServers()
 {
-	mCancelPing = false;
 	// we need the explicit async launch policy here, because otherwise gcc will always launch deferred and we have no sync point
 	// where we would wait for that.
-	mPingJob = std::async(std::launch::async, [this](){ doSearchServers();});
+	mSearchJob = std::async(std::launch::async, getSearchJob());
 }
 
 void NetworkSearchState::step_impl()
@@ -95,12 +93,27 @@ void NetworkSearchState::step_impl()
 	// set to true to initiate server connection
 	bool doEnterServer = false;
 
-	// a new search has started, so the old list is cleared here on the main thread
-	if (mClearScannedServers.exchange(false))
+	// a search has finished, so the old list is cleared and the found servers are pinged
+	ServerAddressList foundServers;
+	bool searchDone = false;
+	try
+	{
+		searchDone = takeFutureResult(mSearchJob, foundServers);
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "Server search failed: " << e.what() << std::endl;
+	}
+	catch (...)
+	{
+		std::cerr << "Server search failed after an unknown error." << std::endl;
+	}
+	if (searchDone && !foundServers.empty())
 	{
 		mScannedServers.clear();
 		mSelectedServer = 0;
 		mDisplayInfo = false;
+		pingServers(foundServers);
 	}
 
 	for (auto iter = mQueryClients.begin();
@@ -449,7 +462,12 @@ OnlineSearchState::OnlineSearchState()
 	searchServers();
 }
 
-void OnlineSearchState::doSearchServers()
+std::function<NetworkSearchState::ServerAddressList()> OnlineSearchState::getSearchJob() const
+{
+	return &OnlineSearchState::findServers;
+}
+
+NetworkSearchState::ServerAddressList OnlineSearchState::findServers()
 {
 	// Get the serverlist
 	try
@@ -475,7 +493,7 @@ void OnlineSearchState::doSearchServers()
 		std::cout << "Can't get onlineserver.xml. Unknown error." << std::endl;
 	}
 
-	std::vector< std::pair<std::string, int> > serverList;
+	ServerAddressList serverList;
 
 	// Get the serverlist
 	try {
@@ -492,7 +510,7 @@ void OnlineSearchState::doSearchServers()
 		if (!onlineserverElem)
 		{
 			std::cout << "Can't read onlineserver.xml" << std::endl;
-			return;
+			return ServerAddressList();
 		}
 
 		for (const auto* serverElem = onlineserverElem->FirstChildElement("server");
@@ -549,16 +567,15 @@ void OnlineSearchState::doSearchServers()
 
 	std::pair<std::string, int> pairs(server.c_str(), port);
 	serverList.push_back(pairs);
+	return serverList;
+}
 
-	mClearScannedServers = true;
+void OnlineSearchState::pingServers(const ServerAddressList& serverList)
+{
 	mPingClient->Initialize( serverList.size() + 2, 0, 10 );
 
 	for( auto& server : serverList )
 	{
-		// if we receive the cancel signal from the main thread, we leave as soon as possible
-		if(mCancelPing)
-			break;
-
 		std::cout << "ping" << server.first << "\n";
 		mPingClient->Ping(server.first.c_str(), server.second, true);
 	}
@@ -575,10 +592,18 @@ LANSearchState::LANSearchState()
 	searchServers();
 }
 
-void LANSearchState::doSearchServers()
+std::function<NetworkSearchState::ServerAddressList()> LANSearchState::getSearchJob() const
 {
-	mClearScannedServers = true;
-	mPingClient->PingServer("255.255.255.255", BLOBBY_PORT, 0, true);
+	return []()
+	{
+		return ServerAddressList{ std::make_pair(std::string("255.255.255.255"), BLOBBY_PORT) };
+	};
+}
+
+void LANSearchState::pingServers(const ServerAddressList& serverList)
+{
+	for( auto& server : serverList )
+		mPingClient->PingServer(server.first.c_str(), server.second, 0, true);
 }
 
 const char* LANSearchState::getStateName() const

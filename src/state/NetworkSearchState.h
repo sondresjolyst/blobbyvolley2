@@ -26,7 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <vector>
 #include <list>
 #include <future>
-#include <atomic>
+#include <functional>
+#include <string>
+#include <utility>
 
 class RakClient;
 class RakServer;
@@ -36,9 +38,10 @@ class NetworkGame;
 /*! \class NetworkSearchState
 	\brief Base class for search states
 	\details This class provides a search interface.
-			The actual search process has to be implemented
-			by derived class by overriding the searchServers()
-			method.
+			Derived classes provide the job that finds the server
+			addresses and the code that pings them. The job runs
+			on a search thread and must not touch the state. All
+			RakNet calls happen on the main thread.
 */
 class NetworkSearchState : public State
 {
@@ -53,22 +56,23 @@ public:
 
 	const char* getStateName() const override;
 protected:
+	typedef std::vector< std::pair<std::string, int> > ServerAddressList;
+
 	std::vector<ServerInfo> mScannedServers;
 	std::unique_ptr<RakClient> mPingClient;
-	// set this to true to step pinging before we are finished
-	std::atomic<bool> mCancelPing;
-	// the search thread sets this, the main thread then clears mScannedServers
-	std::atomic<bool> mClearScannedServers{false};
 
 private:
-	virtual void doSearchServers() = 0;
+	// returns the job that runs on the search thread. An empty result keeps the current server list.
+	virtual std::function<ServerAddressList()> getSearchJob() const = 0;
+	// pings the servers found by the search job, on the main thread
+	virtual void pingServers(const ServerAddressList& servers) = 0;
 
 	typedef std::list<RakClient*> ClientList;
 
 	ClientList mQueryClients;
 	RakClient* mDirectConnectClient = nullptr;
 
-	std::future<void> mPingJob;
+	std::future<ServerAddressList> mSearchJob;
 
 	unsigned mSelectedServer;
 	bool mDisplayInfo;
@@ -89,8 +93,13 @@ class OnlineSearchState : public NetworkSearchState
 public:
 	OnlineSearchState();
 	~OnlineSearchState() override = default;
-	void doSearchServers() override;
 	const char* getStateName() const override;
+
+private:
+	std::function<ServerAddressList()> getSearchJob() const override;
+	void pingServers(const ServerAddressList& servers) override;
+	// downloads the server list, runs on the search thread
+	static ServerAddressList findServers();
 };
 
 
@@ -105,6 +114,7 @@ public:
 	const char* getStateName() const override;
 
 private:
-	void doSearchServers() override;
+	std::function<ServerAddressList()> getSearchJob() const override;
+	void pingServers(const ServerAddressList& servers) override;
 };
 
