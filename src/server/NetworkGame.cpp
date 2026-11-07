@@ -102,16 +102,19 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 
 	rules = FileRead::makeLuaFilename( rules );
 	FileRead file(std::string("rules/") + rules);
-	int checksum = file.calcChecksum(0);
+	mRulesChecksum = file.calcChecksum(0);
 	mRulesString = file.readRawBytes(file.length());
+}
 
-	// writing rules checksum
-	RakNet::BitStream stream;
-	stream.Write((unsigned char)ID_RULES_CHECKSUM);
-	stream.Write(checksum);
-	stream.Write(mMatch->getScoreToWin());
-	/// \todo write file author and title, too; maybe add a version number in scripts, too.
-	broadcastBitstream(stream);
+void NetworkGame::start()
+{
+	// a game starts once
+	assert(!mStartCalled);
+	if (mStartCalled)
+		return;
+	mStartCalled = true;
+
+	sendRulesChecksum();
 
 	// game loop
 	mGameThread = std::thread(
@@ -120,11 +123,53 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 			while(mGameValid)
 			{
 				processPackets();
+				// a player who did not answer the checksum is asked again, a few times
+				if (mGameValid && !isGameStarted() && std::chrono::steady_clock::now() - mRulesChecksumSentAt >= mRulesChecksumRepeat)
+				{
+					if (mRulesChecksumSends < mMaxRulesChecksumSends)
+						sendRulesChecksum();
+					else
+						giveUpStart();
+				}
 				step();
 				SWLS_GameSteps++;
 				mSpeedController.update();
 			}
 		}					);
+}
+
+void NetworkGame::sendRulesChecksum()
+{
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_RULES_CHECKSUM);
+	stream.Write(mRulesChecksum);
+	stream.Write(mMatch->getScoreToWin());
+	/// \todo write file author and title too. Maybe add a version number in scripts as well.
+	if (!mRulesSent[LEFT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	if (!mRulesSent[RIGHT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	mRulesChecksumSentAt = std::chrono::steady_clock::now();
+	++mRulesChecksumSends;
+}
+
+void NetworkGame::giveUpStart()
+{
+	// a player who answered learns that the other one is not coming
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_OPPONENT_DISCONNECTED);
+	if (mRulesSent[LEFT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	if (mRulesSent[RIGHT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	mNotStarted = true;
+	mGameValid = false;
+}
+
+void NetworkGame::setRulesChecksumRepeat(std::chrono::milliseconds interval, int maxSends)
+{
+	mRulesChecksumRepeat = interval;
+	mMaxRulesChecksumSends = maxSends;
 }
 
 NetworkGame::~NetworkGame()
@@ -338,7 +383,11 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			bool needRules;
 			stream->IgnoreBytes(1);
 			stream->Read(needRules);
-			mRulesSent[mLeftPlayer == packet->playerId ? LEFT_PLAYER : RIGHT_PLAYER] = true;
+			// a player answers once, a second answer to a repeated checksum is ignored
+			const PlayerSide side = mLeftPlayer == packet->playerId ? LEFT_PLAYER : RIGHT_PLAYER;
+			if (mRulesSent[side])
+				break;
+			mRulesSent[side] = true;
 
 			if (needRules)
 			{

@@ -104,6 +104,9 @@ private:
 	bool mHasTournamentStatus = false;
 	// true when the server closed the connection because the join code moved to another connection
 	bool mCodeInUse = false;
+	// whether this client asked for the rules, sent again when the server repeats the checksum
+	bool mNeedRules = false;
+	void sendRulesAnswer();
 	TournamentStatusData mTournamentStatus;
 	// nickname from a tournament server, the saved config is not changed
 	std::string mOwnName;
