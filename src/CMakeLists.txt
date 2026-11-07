@@ -60,6 +60,7 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	JoinLink.cpp JoinLink.h
 	LocalInputSource.cpp LocalInputSource.h
 	FontIndex.cpp FontIndex.h
+	FutureResult.h
 	RenderManager.cpp RenderManager.h
 	RenderManagerGL2D.cpp RenderManagerGL2D.h
 	RenderManagerSDL.cpp RenderManagerSDL.h

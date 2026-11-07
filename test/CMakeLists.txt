@@ -22,6 +22,7 @@ set(SRC
 	../src/Color.cpp          ../src/Color.h
 	../src/base64.cpp         ../src/base64.h
 	../src/FontIndex.cpp      ../src/FontIndex.h
+	../src/FutureResult.h
 	../src/SponsorBoard.cpp   ../src/SponsorBoard.h
 	../src/Sha256.cpp         ../src/Sha256.h
 	../src/SponsorSync.cpp    ../src/SponsorSync.h
@@ -54,7 +55,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp TestDir.cpp TestDir.h ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp TestDir.cpp TestDir.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
 find_package(nlohmann_json 3.10 CONFIG REQUIRED)

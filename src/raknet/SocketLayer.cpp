@@ -31,6 +31,7 @@
 
 #include "SocketLayer.h"
 #include <cassert>
+#include <mutex>
 #include "MTUSize.h"
 
 #ifdef _WIN32
@@ -42,6 +43,10 @@ typedef int socklen_t;
 #endif
 
 int SocketLayer::socketLayerInstanceCount = 0;
+
+// guards the usecount, as socket layers are made and destroyed on several threads.
+// It is defined before I, so it outlives it.
+static std::mutex socketLayerInstanceMutex;
 
 SocketLayer SocketLayer::I;
 
@@ -57,6 +62,8 @@ extern void ProcessNetworkPacket( unsigned int binaryAddress, unsigned short por
 
 SocketLayer::SocketLayer()
 {
+	std::lock_guard<std::mutex> lock(socketLayerInstanceMutex);
+
 	// Check if the socketlayer is already started
 	if (socketLayerInstanceCount == 0)
 	{
@@ -77,6 +84,8 @@ SocketLayer::SocketLayer()
 
 SocketLayer::~SocketLayer()
 {
+	std::lock_guard<std::mutex> lock(socketLayerInstanceMutex);
+
 	if (socketLayerInstanceCount == 1)
 	{
 #ifdef _WIN32
@@ -185,7 +194,8 @@ SOCKET SocketLayer::CreateBoundSocket(unsigned short port, bool blockingSocket, 
 
 const char* SocketLayer::DomainNameToIP(const char *domainName)
 {
-	static char ip[16];
+	// one buffer per thread, the callers use the result right away
+	static thread_local char ip[16];
 
 	if (this->nameToIpStrings(domainName, ip, sizeof(ip), 1) > 0) {
 		return ip;
