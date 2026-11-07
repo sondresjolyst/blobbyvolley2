@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #pragma once
 
-#include <cstddef>
 #include <functional>
 #include <string>
 #include <vector>
@@ -70,25 +69,3 @@ bool isValidSiteToken(const std::string& token);
 */
 bool loadSiteConfig(const SiteConfigFile& file, const EnvironmentFunction& env, SiteConfig& config,
 					std::vector<std::string>& errors);
-
-/// Puts a relative path below dir. An absolute path or an empty dir leaves the path as it is.
-std::string pathInDataDir(const std::string& dir, const std::string& path);
-
-/// Makes a folder if it is not there. Returns false when it cannot be made.
-bool makeFolder(const std::string& path);
-
-/// Writes a whole file under a temporary name and renames it over the old file,
-/// so a reader never sees half a file. Returns false and sets error when it fails.
-bool writeFileAtomically(const std::string& path, const std::string& content, std::string& error);
-
-/// Removes an empty folder. Returns false when it fails.
-bool removeFolder(const std::string& path);
-
-/// Renames a file, replacing a file of the new name. Returns false when it fails.
-bool renameFile(const std::string& from, const std::string& to);
-
-/// Lists the file names in a folder, without . and .. Returns false when the folder cannot be read.
-bool listFolder(const std::string& path, std::vector<std::string>& names);
-
-/// Reads a whole file of at most maxBytes. Returns false when it cannot be read or is larger.
-bool readWholeFile(const std::string& path, std::size_t maxBytes, std::string& content);

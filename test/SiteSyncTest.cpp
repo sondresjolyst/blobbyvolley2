@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "server/SiteSync.h"
-#include "server/SiteConfig.h"
+#include "server/FileUtil.h"
 #include "server/JoinCodes.h"
 #include "server/MatchAssignments.h"
 #include "base64.h"

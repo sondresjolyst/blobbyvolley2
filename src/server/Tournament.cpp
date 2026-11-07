@@ -22,10 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <random>
 #include <utility>
 
+#include "FileUtil.h"
 #include "GenericIO.h"
 #include "JoinCodes.h"
 
@@ -193,10 +193,7 @@ void TournamentLog::append(const std::string& line)
 {
 	if (mPath.empty())
 		return;
-	std::ofstream file(mPath, std::ios::out | std::ios::app | std::ios::binary);
-	if (file)
-		file << line << "\n";
-	if (!file && mLog)
+	if (!appendLine(mPath, line) && mLog)
 		mLog(true, "cannot write the results file " + mPath);
 }
 

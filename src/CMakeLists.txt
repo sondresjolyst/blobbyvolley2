@@ -42,6 +42,7 @@ set(common_SRC
 	SponsorSync.cpp SponsorSync.h
 	StringUtil.cpp StringUtil.h
 	server/DedicatedServer.cpp server/DedicatedServer.h
+	server/FileUtil.cpp server/FileUtil.h
 	server/NetworkPlayer.cpp server/NetworkPlayer.h
 	server/NetworkGame.cpp server/NetworkGame.h
 	server/MatchMaker.cpp server/MatchMaker.h

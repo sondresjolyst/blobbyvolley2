@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <SDL.h>
 
 #include "DedicatedServer.h"
+#include "FileUtil.h"
 #include "SiteConfig.h"
 #ifdef BLOBBY_SITE_SYNC
 #include "SiteSync.h"

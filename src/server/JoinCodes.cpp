@@ -21,12 +21,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "JoinCodes.h"
 
 #include <cstring>
-#include <fstream>
 #include <set>
 #include <utility>
 
 #include "tinyxml2.h"
 
+#include "FileUtil.h"
 #include "NetworkPlayer.h"
 #include "StringUtil.h"
 
@@ -274,33 +274,16 @@ bool readJoinCodeFile(const std::string& path, std::string& content, std::string
 		return false;
 	}
 
-	std::ifstream file(path, std::ios::in | std::ios::binary);
-	if (!file)
-	{
+	ReadFileError why = ReadFileError::NONE;
+	if (readWholeFile(path, MAX_PLAYERS_FILE_BYTES, content, &why))
+		return true;
+	if (why == ReadFileError::CANNOT_OPEN)
 		error = "cannot open players file " + path;
-		return false;
-	}
-
-	std::string data;
-	char buffer[4096];
-	while (file)
-	{
-		file.read(buffer, sizeof(buffer));
-		data.append(buffer, static_cast<std::size_t>(file.gcount()));
-		if (data.size() > MAX_PLAYERS_FILE_BYTES)
-		{
-			error = "players file " + path + " is larger than 1 MB";
-			return false;
-		}
-	}
-	if (file.bad())
-	{
+	else if (why == ReadFileError::TOO_LARGE)
+		error = "players file " + path + " is larger than 1 MB";
+	else
 		error = "cannot read players file " + path;
-		return false;
-	}
-
-	content.swap(data);
-	return true;
+	return false;
 }
 
 JoinCodeGate::JoinCodeGate(std::string path, unsigned reload_interval_ms)

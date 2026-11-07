@@ -32,6 +32,7 @@ set(SRC
 	../src/server/JoinCodes.cpp     ../src/server/JoinCodes.h
 	../src/server/MatchAssignments.cpp ../src/server/MatchAssignments.h
 	../src/server/Tournament.cpp    ../src/server/Tournament.h
+	../src/server/FileUtil.cpp      ../src/server/FileUtil.h
 	../src/server/SiteConfig.cpp    ../src/server/SiteConfig.h
 	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h

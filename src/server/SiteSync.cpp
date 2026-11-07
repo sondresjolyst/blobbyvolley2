@@ -31,8 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "tinyxml2.h"
 
+#include "FileUtil.h"
 #include "MatchAssignments.h"
-#include "SiteConfig.h"
 #include "SponsorBoard.h"
 #include "base64.h"
 
@@ -1138,9 +1138,7 @@ void SiteLink::logRefused(const OutboxEntry& entry, const std::string& reason)
 	line["kind"] = entry.kind;
 	line["path"] = entry.path;
 	line["body"] = json::parse(entry.body, nullptr, false);
-	std::ofstream file(mPaths.refusedFile, std::ios::out | std::ios::app | std::ios::binary);
-	if (file)
-		file << line.dump() << "\n";
+	appendLine(mPaths.refusedFile, line.dump());
 }
 
 void SiteLink::setLiveScore(const LiveScore& score)
