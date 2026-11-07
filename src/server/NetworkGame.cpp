@@ -45,6 +45,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 extern std::atomic<int> SWLS_GameSteps;
 
+namespace
+{
+	// the checksum goes out again to a player who has not answered after this long
+	const std::chrono::milliseconds RULES_CHECKSUM_REPEAT(3000);
+}
+
 /* implementation */
 
 NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
@@ -102,16 +108,13 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 
 	rules = FileRead::makeLuaFilename( rules );
 	FileRead file(std::string("rules/") + rules);
-	int checksum = file.calcChecksum(0);
+	mRulesChecksum = file.calcChecksum(0);
 	mRulesString = file.readRawBytes(file.length());
+}
 
-	// writing rules checksum
-	RakNet::BitStream stream;
-	stream.Write((unsigned char)ID_RULES_CHECKSUM);
-	stream.Write(checksum);
-	stream.Write(mMatch->getScoreToWin());
-	/// \todo write file author and title, too; maybe add a version number in scripts, too.
-	broadcastBitstream(stream);
+void NetworkGame::start()
+{
+	sendRulesChecksum();
 
 	// game loop
 	mGameThread = std::thread(
@@ -120,11 +123,28 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 			while(mGameValid)
 			{
 				processPackets();
+				// a player who did not answer the checksum is asked again
+				if (!isGameStarted() && std::chrono::steady_clock::now() - mRulesChecksumSentAt >= RULES_CHECKSUM_REPEAT)
+					sendRulesChecksum();
 				step();
 				SWLS_GameSteps++;
 				mSpeedController.update();
 			}
 		}					);
+}
+
+void NetworkGame::sendRulesChecksum()
+{
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_RULES_CHECKSUM);
+	stream.Write(mRulesChecksum);
+	stream.Write(mMatch->getScoreToWin());
+	/// \todo write file author and title, too; maybe add a version number in scripts, too.
+	if (!mRulesSent[LEFT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	if (!mRulesSent[RIGHT_PLAYER])
+		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	mRulesChecksumSentAt = std::chrono::steady_clock::now();
 }
 
 NetworkGame::~NetworkGame()
@@ -338,7 +358,11 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			bool needRules;
 			stream->IgnoreBytes(1);
 			stream->Read(needRules);
-			mRulesSent[mLeftPlayer == packet->playerId ? LEFT_PLAYER : RIGHT_PLAYER] = true;
+			// a player answers once, a second answer to a repeated checksum is ignored
+			const PlayerSide side = mLeftPlayer == packet->playerId ? LEFT_PLAYER : RIGHT_PLAYER;
+			if (mRulesSent[side])
+				break;
+			mRulesSent[side] = true;
 
 			if (needRules)
 			{

@@ -709,6 +709,8 @@ void DedicatedServer::createGame(NetworkPlayer& left,
 								switchSide, rules, scoreToWin, gamespeed);
 	left.setGame( newgame );
 	right.setGame( newgame );
+	// the players know the game now, so their answer to the checksum reaches it
+	newgame->start();
 
 	SWLS_Games++;
 
@@ -926,6 +928,8 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 		left.setGame( game );
 		right.setGame( game );
 	}
+	// the players know the game now, so their answer to the checksum reaches it
+	game->start();
 
 	SWLS_Games++;
 	mGameList.push_back( game );

@@ -1,3 +1,12 @@
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 #include <boost/test/unit_test.hpp>
 
 #include <atomic>
@@ -20,6 +29,9 @@
 #include "raknet/RakClient.h"
 #include "server/DedicatedServer.h"
 #include "server/JoinCodes.h"
+#include "server/NetworkGame.h"
+#include "server/NetworkPlayer.h"
+#include "server/ThreadSafeRakServer.h"
 #include "server/Tournament.h"
 
 // the server binary defines these
@@ -37,6 +49,41 @@ void syslog(int, const char*, ...)
 // Runs a tournament server and real clients over the loopback interface.
 namespace
 {
+	// RakNet binds its sockets with SO_REUSEADDR, so a server can start on a port that another
+	// socket uses and then miss its packets. A plain socket finds out whether the port is free.
+	// The ports are below the ephemeral range of Linux, macOS and Windows, so no client gets them.
+	unsigned short freeTestPort()
+	{
+		static std::mt19937 random{std::random_device{}()};
+		std::uniform_int_distribution<int> ports(20000, 32000);
+#ifdef _WIN32
+		static bool started = false;
+		if (!started)
+		{
+			WSADATA data;
+			started = WSAStartup(MAKEWORD(2, 2), &data) == 0;
+		}
+#endif
+		for (int attempt = 0; attempt < 200; ++attempt)
+		{
+			const unsigned short port = (unsigned short)ports(random);
+			auto probe = socket(AF_INET, SOCK_DGRAM, 0);
+			sockaddr_in address{};
+			address.sin_family = AF_INET;
+			address.sin_addr.s_addr = htonl(INADDR_ANY);
+			address.sin_port = htons(port);
+			const bool free = bind(probe, (sockaddr*)&address, sizeof(address)) == 0;
+#ifdef _WIN32
+			closesocket(probe);
+#else
+			close(probe);
+#endif
+			if (free)
+				return port;
+		}
+		return 0;
+	}
+
 	const char* const OLA = "K7QM2XPR4T";
 	const char* const KARI = "B9HNZ3WD6F";
 	const char* const PER = "C2DEFGHJKM";
@@ -63,6 +110,8 @@ namespace
 		RakClient rak;
 		std::vector<std::vector<unsigned char>> packets;
 		bool closed = false;
+		// checksums this client lets pass without an answer
+		int checksumsToIgnore = 0;
 
 		void enter(const std::string& name)
 		{
@@ -91,7 +140,11 @@ namespace
 				if (data[0] == ID_DISCONNECTION_NOTIFICATION || data[0] == ID_CONNECTION_LOST)
 					closed = true;
 				// a game starts once both players said whether they need the rules
-				if (data[0] == ID_RULES_CHECKSUM)
+				if (data[0] == ID_RULES_CHECKSUM && checksumsToIgnore > 0)
+				{
+					--checksumsToIgnore;
+				}
+				else if (data[0] == ID_RULES_CHECKSUM)
 				{
 					RakNet::BitStream answer;
 					answer.Write((unsigned char)ID_RULES);
@@ -187,15 +240,13 @@ namespace
 			}
 		}
 
-		// the server cannot bind a port in use, so it tries random ports until one is free
+		// tries free ports until the server starts
 		void startOnFreePort()
 		{
-			std::mt19937 random{std::random_device{}()};
-			std::uniform_int_distribution<int> ports(20000, 60000);
 			for (int attempt = 0; attempt < 50 && !server; ++attempt)
 			{
 				ServerInfo info("test");
-				info.port = (unsigned short)ports(random);
+				info.port = freeTestPort();
 				try
 				{
 					server.reset(new DedicatedServer(info, {"default.lua"}, {75.f}, 8));
@@ -364,6 +415,90 @@ BOOST_AUTO_TEST_CASE( code_entered_twice_quickly_ends_with_one_connection )
 	per.enter(PER);
 	BOOST_REQUIRE(f.pump([&](){ return per.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
 	BOOST_CHECK(!holder.closed);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE( NetworkGameStartTest )
+
+BOOST_AUTO_TEST_CASE( rules_checksum_goes_out_when_the_game_starts )
+{
+	FileSystem fs("./test");
+	fs.addToSearchPath(BLOBBY_TEST_DATA_DIR);
+
+	// a bare server, so the test decides when the game starts
+	ThreadSafeRakServer server;
+	unsigned short port = 0;
+	for (int attempt = 0; attempt < 50 && port == 0; ++attempt)
+	{
+		unsigned short candidate = freeTestPort();
+		if (server.access([&](RakServer& srv){ return srv.Start(4, 1, candidate); }))
+			port = candidate;
+	}
+	BOOST_REQUIRE(port != 0);
+
+	Client left;
+	Client right;
+	BOOST_REQUIRE(left.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
+	BOOST_REQUIRE(right.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
+
+	// the ids of the clients as the server sees them
+	std::vector<PlayerID> ids;
+	auto pump = [&](const std::function<bool()>& done, int timeout_ms)
+	{
+		auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+		while (std::chrono::steady_clock::now() < end)
+		{
+			while (packet_ptr packet = server.access([](RakServer& srv){ return srv.Receive(); }))
+			{
+				if (packet->data[0] == ID_NEW_INCOMING_CONNECTION)
+					ids.push_back(packet->playerId);
+			}
+			left.drain();
+			right.drain();
+			if (done())
+				return true;
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+		return false;
+	};
+	BOOST_REQUIRE(pump([&](){ return ids.size() == 2 && left.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0
+		&& right.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0; }, 8000));
+
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
+	{
+		auto game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "default.lua", 15, 75.f);
+
+		// nothing goes out before start, so an answer cannot come before the players know the game
+		pump([](){ return false; }, 500);
+		BOOST_CHECK_EQUAL(left.count(ID_RULES_CHECKSUM) + right.count(ID_RULES_CHECKSUM), 0);
+
+		game->start();
+		BOOST_CHECK(pump([&](){ return left.count(ID_RULES_CHECKSUM) == 1 && right.count(ID_RULES_CHECKSUM) == 1; }, 8000));
+		game->finish();
+	}
+
+	left.rak.Disconnect(0);
+	right.rak.Disconnect(0);
+	server.access([](RakServer& srv){ srv.Disconnect(0); });
+}
+
+BOOST_AUTO_TEST_CASE( game_starts_when_the_first_checksum_gets_no_answer )
+{
+	ServerFixture f(MATCH_7, true);
+	Client& ola = f.connect();
+	ola.checksumsToIgnore = 1;
+	ola.enter(OLA);
+	Client& kari = f.connect();
+	kari.enter(KARI);
+
+	// the server asks again after a few seconds, the client that answered is not asked twice
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0 && kari.count(ID_GAME_READY) > 0; }));
+	BOOST_CHECK_EQUAL(ola.count(ID_RULES_CHECKSUM), 2);
+	BOOST_CHECK_EQUAL(kari.count(ID_RULES_CHECKSUM), 1);
+	BOOST_CHECK_EQUAL(ola.count(ID_GAME_READY), 1);
+	BOOST_CHECK_EQUAL(kari.count(ID_GAME_READY), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

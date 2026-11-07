@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <list>
 #include <mutex>
 #include <thread>
@@ -62,6 +63,10 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 					std::string rules, int scoreToWin, float speed);
 
 		~NetworkGame();
+
+		/// Sends the rules checksum to the players and starts the game thread. Call it once the
+		/// players know this game, so that their answer reaches it.
+		void start();
 
 		void injectPacket(const packet_ptr& packet);
 
@@ -135,6 +140,9 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		std::vector<unsigned char> mPreviousReplay[MAX_PLAYERS];
 
 		bool mRulesSent[MAX_PLAYERS];
+		int mRulesChecksum = 0;
+		std::chrono::steady_clock::time_point mRulesChecksumSentAt;
+		void sendRulesChecksum();
 		std::vector<char> mRulesString;
 };
 
