@@ -45,6 +45,17 @@ The server runs as the user `blobby` with uid 999. A named volume such as `blobb
 
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
+#### Start the tournament server
+Two scripts start the tournament server in Docker, so you do not need to type the Docker commands. Make a game server token on the admin page of the site first. On Windows, start Docker Desktop and run this in PowerShell in the repository folder:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\tournament-server.ps1 start
+```
+On Linux:
+```bash
+bash scripts/tournament-server.sh start
+```
+The first start asks for the address of the site, the token and the port. The token is not shown while you paste it. The script keeps them in a file that only you can read, in `%APPDATA%\blobby-server` on Windows and in `~/.config/blobby-server` on Linux. The other commands are `stop`, `restart`, `logs`, `status`, `update` and `set-token`. `update` downloads the newest image and starts the server on it. `set-token` replaces the token after you make a new one on the site. On Windows the script shows the firewall rule that lets players on other machines connect.
+
 #### Tournament mode
 In tournament mode each player types a join code from the tournament site as player name. The server swaps the code for the nickname of that player and refuses an unknown code or a code that another connected player already uses. The client then shows why it was refused. Tournament mode is off by default. To turn it on, set these values in the server config:
 ```xml
