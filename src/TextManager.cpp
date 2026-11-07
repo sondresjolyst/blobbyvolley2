@@ -166,7 +166,7 @@ void TextManager::setDefault()
 	mStrings[MNU_LABEL_REPLAY] = "watch replay";
 	mStrings[MNU_LABEL_CREDITS] = "credits";
 	mStrings[MNU_LABEL_EXIT] = "exit";
-	mStrings[MNU_LABEL_PASTE_LINK] = "paste join link";
+	mStrings[MNU_LABEL_JOIN_LINK] = "join link";
 	mStrings[MNU_NO_JOIN_LINK] = "no join link in the clipboard";
 
 	mStrings[CRD_PROGRAMMERS] = "programmers:";
