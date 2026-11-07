@@ -112,6 +112,10 @@ class DedicatedServer
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		void closeRefusedConnections();
 		void closeConnectionsThatDidNotEnter();
+		// forgets a connection that closed: lobby, game, tournament and every per connection map
+		void removeConnection(const packet_ptr& packet);
+		// closes the connection that held a join code that another connection entered
+		void handOverJoinCode(PlayerID holder);
 
 		// tournament matches
 		bool isTournament() const;

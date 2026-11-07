@@ -39,6 +39,11 @@ set(SRC
 	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
 	../src/replays/ReplayRecorder.cpp  ../src/replays/ReplayRecorder.h
 	../src/replays/ReplaySavePoint.cpp ../src/replays/ReplaySavePoint.h
+	# the server tests run a real server over the loopback interface
+	../src/SpeedController.cpp      ../src/SpeedController.h
+	../src/server/NetworkGame.cpp     ../src/server/NetworkGame.h
+	../src/server/DedicatedServer.cpp ../src/server/DedicatedServer.h
+	ServerHandoverTest.cpp
 )
 
 # BOOST_TEST_DYN_LINK below needs the shared library

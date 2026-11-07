@@ -108,8 +108,10 @@ DedicatedServer::~DedicatedServer()
 
 void DedicatedServer::queuePackets()
 {
+	// this runs on the update thread of the server. When another thread holds the server, the packets
+	// are taken on the next update, so the destructor can stop that thread while it holds the server.
 	packet_ptr packet;
-	while ((packet = mServer->access( [](RakServer& srv){ return srv.Receive(); })))
+	while (mServer->tryAccess( [&](RakServer& srv){ packet = srv.Receive(); } ) && packet)
 	{
 		SWLS_PacketCount++;
 
@@ -206,48 +208,8 @@ void DedicatedServer::processPackets()
 				break;
 			case ID_CONNECTION_LOST:
 			case ID_DISCONNECTION_NOTIFICATION:
-			{
-				mActiveConnections.erase(packet->playerId);
-				mRefusedConnections.erase(packet->playerId);
-				mEntryDeadlines.remove(packet->playerId);
-				mSentStatus.erase(packet->playerId);
-				mSponsorPlayers.erase(packet->playerId);
-				mSentSponsorVersion.erase(packet->playerId);
-				mSentLogos.erase(packet->playerId);
-				mHeldLogos.erase(packet->playerId);
-				if( mJoinCodes )
-				{
-					if( mTournament )
-						mTournament->playerDisconnected( mJoinCodes->playerIdOf(packet->playerId) );
-					mJoinCodes->release(packet->playerId);
-				}
-
-				auto player = mPlayerMap.find(packet->playerId);
-				// delete the disconnecting player.
-				if( player != mPlayerMap.end() )
-				{
-					const std::string playerName = player->second->getName();
-					if( player->second->getGame() )
-					{
-						player->second->getGame()->injectPacket( packet );
-					}
-
-					// no longer count this player as connected. protect this change with a mutex
-					{
-						std::lock_guard<std::mutex> lock( mPlayerMapMutex );
-						mPlayerMap.erase( player );
-						// player iterator is invalid after erase
-					}
-					mMatchMaker.removePlayer(packet->playerId);
-					syslog(LOG_DEBUG, "Player removed (%d) from %s (%s), %d players available",
-						   packet_id, packet->playerId.toString().c_str(),
-						   playerName.c_str(), (int)mPlayerMap.size());
-				}
-
-				syslog(LOG_DEBUG, "Connection closed (%d) from %s, %d clients connected now",
-					   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
+				removeConnection( packet );
 				break;
-			}
 			case ID_ENTER_SERVER:
 			case ID_LOBBY:
 			case ID_BLOBBY_SERVER_PRESENT:
@@ -474,6 +436,11 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 			return;
 		}
 
+		// a known code entered again moves to the new connection, the old one is closed
+		PlayerID holder;
+		if( mJoinCodes->findHolder( newplayer->getName(), holder ) && holder != source )
+			handOverJoinCode( holder );
+
 		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
 		if( result != JoinCodeGate::Result::ACCEPTED )
 		{
@@ -516,6 +483,73 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		writer->generic<std::string>("");
 		mMatchMaker.receiveLobbyPacket( source, stream );
 	}
+}
+
+void DedicatedServer::removeConnection(const packet_ptr& packet)
+{
+	const int packet_id = packet->data[0];
+	mActiveConnections.erase(packet->playerId);
+	mRefusedConnections.erase(packet->playerId);
+	mEntryDeadlines.remove(packet->playerId);
+	mSentStatus.erase(packet->playerId);
+	mSponsorPlayers.erase(packet->playerId);
+	mSentSponsorVersion.erase(packet->playerId);
+	mSentLogos.erase(packet->playerId);
+	mHeldLogos.erase(packet->playerId);
+	if( mJoinCodes )
+	{
+		if( mTournament )
+			mTournament->playerDisconnected( mJoinCodes->playerIdOf(packet->playerId) );
+		mJoinCodes->release(packet->playerId);
+	}
+
+	auto player = mPlayerMap.find(packet->playerId);
+	// delete the disconnecting player.
+	if( player != mPlayerMap.end() )
+	{
+		const std::string playerName = player->second->getName();
+		if( player->second->getGame() )
+		{
+			player->second->getGame()->injectPacket( packet );
+		}
+
+		// no longer count this player as connected. protect this change with a mutex
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			mPlayerMap.erase( player );
+			// player iterator is invalid after erase
+		}
+		mMatchMaker.removePlayer(packet->playerId);
+		syslog(LOG_DEBUG, "Player removed (%d) from %s (%s), %d players available",
+			   packet_id, packet->playerId.toString().c_str(),
+			   playerName.c_str(), (int)mPlayerMap.size());
+	}
+
+	syslog(LOG_DEBUG, "Connection closed (%d) from %s, %d clients connected now",
+		   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
+}
+
+void DedicatedServer::handOverJoinCode(PlayerID holder)
+{
+	// the old holder learns why it is closed
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_LOBBY);
+	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
+	stream.Write((unsigned char)EntryRefusedReason::CODE_IN_USE);
+	mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, holder);
+
+	// then it leaves like a lost connection, so lobby, game and tournament forget it
+	packet_ptr lost(new Packet(), [](Packet* p){ delete[] p->data; delete p; });
+	lost->playerIndex = UNASSIGNED_PLAYER_INDEX;
+	lost->playerId = holder;
+	lost->data = new unsigned char[1]{ (unsigned char)ID_CONNECTION_LOST };
+	lost->length = 1;
+	lost->bitSize = 8;
+	removeConnection( lost );
+
+	// the connection closes once the reason had time to arrive
+	mRefusedConnections[holder] = std::chrono::steady_clock::now() + REFUSED_CLOSE_DELAY;
+	syslog(LOG_NOTICE, "Join code handed over, closing the connection from %s", holder.toString().c_str());
 }
 
 

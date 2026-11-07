@@ -432,6 +432,15 @@ JoinCodeGate::Result JoinCodeGate::admit(NetworkPlayer& player)
 	return result;
 }
 
+bool JoinCodeGate::findHolder(const std::string& name, PlayerID& holder) const
+{
+	auto owner = mCodeOwners.find(normalizeJoinCode(name));
+	if (owner == mCodeOwners.end())
+		return false;
+	holder = owner->second;
+	return true;
+}
+
 void JoinCodeGate::release(const PlayerID& player)
 {
 	auto code = mPlayerCodes.find(player);

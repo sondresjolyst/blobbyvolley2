@@ -224,7 +224,13 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 		{
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_OPPONENT_DISCONNECTED);
-			broadcastBitstream(stream);
+			// only the player who stays is told, the other one is gone
+			if (packet->playerId == mLeftPlayer)
+				mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+			else if (packet->playerId == mRightPlayer)
+				mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+			else
+				broadcastBitstream(stream);
 			mMatch->pause();
 			mGameValid = false;
 			break;

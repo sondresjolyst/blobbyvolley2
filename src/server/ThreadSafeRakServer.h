@@ -44,6 +44,16 @@ public:
 		return f(*mServer);
 	}
 
+	/// Like access, but returns false at once when another thread holds the server.
+	template<class F>
+	bool tryAccess(F&& f) {
+		std::unique_lock<std::mutex> lock(mMutex, std::try_to_lock);
+		if (!lock.owns_lock())
+			return false;
+		f(*mServer);
+		return true;
+	}
+
 	void Send(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability, PlayerID target,
 			  bool broadcast=false) {
 		access([&](RakServer& server){ server.Send(&stream, priority, reliability, 0, target, broadcast); });

@@ -145,6 +145,9 @@ class JoinCodeGate
 		/// Checks the name of player as a join code and replaces it with the nickname when accepted.
 		Result admit(NetworkPlayer& player);
 
+		/// Finds the connection that holds the join code in name. Returns false when nobody holds it.
+		bool findHolder(const std::string& name, PlayerID& holder) const;
+
 		/// Frees the code of a player that left. Does nothing for an unknown player.
 		void release(const PlayerID& player);
 
