@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "DuelMatchState.h"
 
 struct lua_State;
+struct lua_Debug;
 class DuelMatch;
 class PhysicWorld;
 
@@ -58,6 +59,10 @@ class IScriptableComponent
 		// calls a lua function that is on the stack and performs error handling
 		void callLuaFunction(int arg_count = 0);
 
+		/// lua_pcall that stops the call with an error when it runs too many instructions.
+		/// Rules scripts can come from a server, so a script must not be able to hang the game.
+		int protectedCall(int arg_count, int result_count) const;
+
 		// load lua functions
 		void setGameConstants();
 		void setGameFunctions();
@@ -71,5 +76,10 @@ class IScriptableComponent
 		std::unique_ptr<PhysicWorld> mDummyWorld;
 
 		DuelMatchState mCachedState;
+
+		// instruction blocks the current protected call has run
+		mutable unsigned long mInstructionBlocks = 0;
+		mutable int mCallDepth = 0;
+		friend void scriptInstructionHook(lua_State* state, lua_Debug* debug);
 };
 

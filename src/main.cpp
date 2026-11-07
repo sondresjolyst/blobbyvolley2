@@ -44,7 +44,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Blood.h"
 #include "FileSystem.h"
 #include "state/State.h"
+#include "state/LobbyStates.h"
 #include "BlobbyApp.h"
+#include "JoinLink.h"
 
 // this global allows the host game thread to be killed
 extern std::atomic<bool> gKillHostThread;
@@ -98,6 +100,16 @@ void setupPHYSFS()
 		}
 	}
 
+	// set read dir (data folder next to application). A join link starts the game
+	// in another working directory, so the data folder above is not found then.
+	{
+		std::string dataDir = fs.join(fs.getBaseDir(), "data");
+		fs.addToSearchPath(dataDir);
+		for(const auto& archive : subdirs) {
+			fs.addToSearchPath(fs.join(dataDir, archive + ".zip"));
+		}
+	}
+
 	// set read dir (files inside MacOS bundle)
 	#if (defined BUILD_MACOS_BUNDLE)
 	{
@@ -120,8 +132,101 @@ void setupPHYSFS()
 	#endif
 }
 
+namespace
+{
+	const char* const REGISTER_FLAG = "--register-link-handler";
+	const char* const UNREGISTER_FLAG = "--unregister-link-handler";
+
+	/// What the command line asks for.
+	struct StartRequest
+	{
+		bool hasLink = false;
+		JoinLink link;
+		/// Set when a link was given but cannot be used.
+		std::string linkError;
+	};
+
+	/// Looks for a join link on the command line. Other arguments are ignored, as before.
+	/// A link must be the only argument, so nothing can be added next to it.
+	StartRequest readStartRequest(int argc, char* argv[])
+	{
+		StartRequest request;
+		bool link_seen = false;
+		for (int i = 1; i < argc; ++i)
+		{
+			if (looksLikeJoinLink(argv[i]))
+				link_seen = true;
+		}
+		if (!link_seen)
+			return request;
+
+		if (argc != 2)
+		{
+			request.linkError = "A join link must be the only argument.";
+			return request;
+		}
+
+		JoinLinkError error = parseJoinLink(argv[1], request.link);
+		if (error != JoinLinkError::NONE)
+		{
+			request.linkError = describeJoinLinkError(error);
+			return request;
+		}
+		request.hasLink = true;
+		return request;
+	}
+
+	/// Handles the flags that register or remove the link handler. Returns true if one was given.
+	bool handleLinkHandlerFlag(int argc, char* argv[], int& exit_code)
+	{
+		if (argc != 2)
+			return false;
+		std::string flag = argv[1];
+		std::string error;
+		if (flag == REGISTER_FLAG)
+		{
+			if (registerLinkHandler(error))
+			{
+				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, AppTitle,
+					"Join links now open this copy of Blobby Volley 2. If you move the game, run this again.", nullptr);
+				exit_code = EXIT_SUCCESS;
+			}
+			else
+			{
+				std::cerr << error << std::endl;
+				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, AppTitle, error.c_str(), nullptr);
+				exit_code = EXIT_FAILURE;
+			}
+			return true;
+		}
+		if (flag == UNREGISTER_FLAG)
+		{
+			if (unregisterLinkHandler(error))
+			{
+				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, AppTitle,
+					"Join links no longer open Blobby Volley 2.", nullptr);
+				exit_code = EXIT_SUCCESS;
+			}
+			else
+			{
+				std::cerr << error << std::endl;
+				SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, AppTitle, error.c_str(), nullptr);
+				exit_code = EXIT_FAILURE;
+			}
+			return true;
+		}
+		return false;
+	}
+}
+
 int main(int argc, char* argv[])
 {
+	{
+		int exit_code = EXIT_SUCCESS;
+		if (handleLinkHandlerFlag(argc, argv, exit_code))
+			return exit_code;
+	}
+
 #if (defined __SWITCH__) && (defined DEBUG)
 	socketInitializeDefault();   
 	nxlinkStdio();
@@ -177,7 +282,21 @@ int main(int argc, char* argv[])
 
 		DEBUG_STATUS("starting mainloop");
 
-		BlobbyApp app( std::unique_ptr<State>(new MainMenuState()), gameConfig );
+		StartRequest request = readStartRequest(argc, argv);
+		if (!request.linkError.empty())
+		{
+			std::cerr << "Join link not used: " << request.linkError << std::endl;
+			SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, AppTitle,
+				(request.linkError + "\nGet a new link from the tournament site. The game opens the main menu.").c_str(), nullptr);
+		}
+
+		std::unique_ptr<State> first_state;
+		if (request.hasLink)
+			first_state.reset(joinFromLink(request.link, nullptr));
+		if (!first_state)
+			first_state.reset(new MainMenuState());
+
+		BlobbyApp app( std::move(first_state), gameConfig );
 
 		while (running)
 		{

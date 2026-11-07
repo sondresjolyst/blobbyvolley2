@@ -86,6 +86,9 @@ BlobbyApp::BlobbyApp(std::unique_ptr<State> initState, const IUserConfigReader& 
 	mIMGUI->setTextMgr(config.getString("language"));
 
 	setupRenderManager(config);
+
+	// a state that is switched to gets init() in step(), the first state gets it here
+	mCurrentState->init();
 }
 
 SoundManager& BlobbyApp::getSoundManager() const
