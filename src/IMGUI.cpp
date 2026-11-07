@@ -522,10 +522,16 @@ void IMGUI::resetSelection()
 	mButtonReset = true;
 }
 
-bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std::string& text, unsigned& cpos, unsigned int flags, bool force_active)
+bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std::string& text, unsigned& cpos, unsigned int flags, bool force_active, unsigned maxLength)
 {
 	int FontSize = (flags & TF_SMALL_FONT ? FONT_WIDTH_SMALL : FONT_WIDTH_NORMAL);
 	bool changed = false;
+	if (maxLength == 0)
+		maxLength = length;
+	if (cpos > text.length())
+		cpos = text.length();
+	// first visible character, so that the cursor stays inside the box
+	unsigned first = cpos > length ? cpos - length : 0;
 	QueueObject obj;
 	obj.id = id;
 	obj.pos1 = position;
@@ -554,8 +560,8 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 		if (mInputManager->click())
 		{
 			// Handle click on the text.
-			if (mousepos.x < obj.pos1.x + text.length() * FontSize)
-				cpos = (int) ((mousepos.x-obj.pos1.x-5+(FontSize/2)) / FontSize);
+			if (mousepos.x < obj.pos1.x + (text.length() - first) * FontSize)
+				cpos = first + (int) ((mousepos.x-obj.pos1.x-5+(FontSize/2)) / FontSize);
 			// Handle click behind the text.
 			else if (mousepos.x < obj.pos1.x + width)
 				cpos = (int) text.length();
@@ -649,14 +655,14 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 			}
 			// This is a temporary solution until the new
 			// UTF-8 class can tell the real length!!!
-			else if (text.length() < length)
+			else if (text.length() < maxLength)
 			{
 				if (input == "paste")
 				{
 					char * clipboardText = SDL_GetClipboardText();
 
 					if (clipboardText != nullptr) {
-						for (int i = 0; text.length() < length; i++)
+						for (int i = 0; text.length() < maxLength; i++)
 						{
 							const char c = clipboardText[i];
 
@@ -748,8 +754,9 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 		}
 	}
 
-	obj.pos2.x = SDL_GetTicks() % 1000 >= 500 ? cpos : -1.0;
-	obj.text = text;
+	first = cpos > length ? cpos - length : 0;
+	obj.pos2.x = SDL_GetTicks() % 1000 >= 500 ? cpos - first : -1.0;
+	obj.text = text.substr(first, length);
 
 	mLastWidget = id;
 	mQueue->push(obj);

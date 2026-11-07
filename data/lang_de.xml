@@ -16,7 +16,7 @@
 	<string english = "credits" translation = "credits" />
 	<string english = "exit" translation = "beenden" />
 	<string english = "join link" translation = "beitrittslink" />
-	<string english = "no join link in the clipboard" translation = "kein beitrittslink in der zwischenablage" />
+	<string english = "join" translation = "beitreten" />
 	
 	<string english = "programmers:" translation = "programmierer:" />
 	<string english = "graphics:" translation = "grafik:" />

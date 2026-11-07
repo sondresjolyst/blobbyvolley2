@@ -110,7 +110,7 @@ void MainMenuState::step_impl()
 	// eight buttons 36 apart fit between the title, which ends at 298, and the bottom of the screen
 	if (imgui.doButton(GEN_ID, Vector2(34.0, 300.0), TextManager::MNU_LABEL_JOIN_LINK))
 	{
-		pasteJoinLink();
+		switchState(new JoinLinkState());
 	}
 	if (imgui.doButton(GEN_ID, Vector2(34.0, 336.0), TextManager::MNU_LABEL_ONLINE))
 	{
@@ -156,35 +156,73 @@ void MainMenuState::step_impl()
 	}
 }
 
-void MainMenuState::pasteJoinLink()
+const char* MainMenuState::getStateName() const
 {
-	std::string text;
+	return "MainMenuState";
+}
+
+JoinLinkState::JoinLinkState()
+{
 	char* clipboard = SDL_GetClipboardText();
 	if (clipboard)
 	{
-		text = clipboard;
+		mLink = joinLinkPrefill(clipboard);
 		SDL_free(clipboard);
 	}
+	mCursor = mLink.size();
+}
 
+void JoinLinkState::step_impl()
+{
+	IMGUI& imgui = getIMGUI();
+
+	imgui.doCursor();
+	imgui.doImage(GEN_ID, Vector2(400.0, 300.0), "background");
+	imgui.doOverlay(GEN_ID, Vector2(0.0, 0.0), Vector2(800.0, 600.0));
+	imgui.doText(GEN_ID, Vector2(400.0, 200.0), TextManager::MNU_LABEL_JOIN_LINK, TF_ALIGN_CENTER);
+
+	// a small font fits a whole join link with a common host name, longer links scroll
+	if (imgui.doEditbox(GEN_ID, Vector2(400.0, 250.0), 62, mLink, mCursor, TF_SMALL_FONT | TF_ALIGN_CENTER, true, MAX_JOIN_LINK_BYTES + 1))
+	{
+		if (getInputMgr().getLastActionKey() == "Return")
+		{
+			join();
+			return;
+		}
+		mError.clear();
+	}
+	imgui.doText(GEN_ID, Vector2(400.0, 290.0), mError, TF_SMALL_FONT | TF_ALIGN_CENTER);
+
+	if (imgui.doButton(GEN_ID, Vector2(220.0, 350.0), TextManager::MNU_JOIN))
+	{
+		join();
+		return;
+	}
+	if (imgui.doButton(GEN_ID, Vector2(440.0, 350.0), TextManager::LBL_CANCEL) || is_exiting())
+	{
+		switchState(new MainMenuState());
+	}
+}
+
+void JoinLinkState::join()
+{
 	JoinLink link;
-	JoinLinkError error = joinLinkFromText(text, link);
+	JoinLinkError error = joinLinkFromField(mLink, link);
 	if (error != JoinLinkError::NONE)
 	{
-		std::string message = getIMGUI().getText(TextManager::MNU_NO_JOIN_LINK);
-		if (error != JoinLinkError::NO_LINK)
-			message = describeJoinLinkError(error);
-		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, AppTitle, message.c_str(), getApp().getWindow());
+		mError = describeJoinLinkError(error);
 		return;
 	}
 
+	mError.clear();
 	LobbyState* lobby = joinFromLink(link, getApp().getWindow());
 	if (lobby)
 		switchState(lobby);
 }
 
-const char* MainMenuState::getStateName() const
+const char* JoinLinkState::getStateName() const
 {
-	return "MainMenuState";
+	return "JoinLinkState";
 }
 
 CreditsState::CreditsState()

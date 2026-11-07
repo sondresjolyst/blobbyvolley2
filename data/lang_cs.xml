@@ -16,7 +16,7 @@
 	<string english = "credits" translation = "Zásluhy" />
 	<string english = "exit" translation = "Ukončit" />
 	<string english = "join link" translation = "Odkaz ke hře" />
-	<string english = "no join link in the clipboard" translation = "Ve schránce není odkaz" />
+	<string english = "join" translation = "Připojit" />
 	
 	<string english = "programmers:" translation = "Programátoři:" />
 	<string english = "graphics:" translation = "Grafika:" />
