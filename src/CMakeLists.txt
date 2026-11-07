@@ -180,6 +180,38 @@ if (UNIX AND (NOT ANDROID) OR WIN32)
 		endif ()
 	endif ()
 endif ()
+
+# headless client for load tests of a tournament server, see tools/loadbot/README.md
+if (BUILD_LOADBOT)
+	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp
+		BlobbyDebug.cpp
+		Clock.cpp
+		Color.cpp
+		DuelMatch.cpp
+		DuelMatchState.cpp
+		File.cpp
+		FileRead.cpp
+		FileSystem.cpp
+		FileWrite.cpp
+		GameLogic.cpp
+		GameLogicState.cpp
+		GenericIO.cpp
+		InputSource.cpp
+		IScriptableComponent.cpp
+		NetworkMessage.cpp
+		PhysicState.cpp
+		PhysicWorld.cpp
+		PlayerIdentity.cpp
+		PlayerInput.cpp
+		UserConfig.cpp
+		server/JoinCodes.cpp
+		server/MatchAssignments.cpp
+		server/NetworkPlayer.cpp
+		server/Tournament.cpp
+		)
+	target_link_libraries(blobby-loadbot ${BLOBBY_COMMON_LIBS})
+endif ()
+
 if (UNIX AND (NOT ANDROID))
 	add_executable(blobby-runtest EXCLUDE_FROM_ALL runtest.cpp ${blobby_SRC})
 	target_link_libraries(blobby-runtest ${BLOBBY_COMMON_LIBS} ${OPENGL_LIBRARIES})

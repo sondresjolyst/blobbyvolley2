@@ -289,18 +289,12 @@ void LobbyState::step_impl()
 				// starts the game while we wait in the tournament substate.
 				{
 				RakNet::BitStream stream(packet->data, packet->length, false);
-
-				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
-
-				int serverChecksum = 0;
-				int scoreToWin = 0;
-				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
-					break;
-				if (!isValidScoreToWin(scoreToWin))
+				RulesChecksumData rules;
+				if (!readRulesChecksum(stream, rules))
 					break;
 
 				{
-					auto game = new NetworkGameState( mClient, serverChecksum, scoreToWin, mOwnName );
+					auto game = new NetworkGameState( mClient, rules.checksum, rules.scoreToWin, mOwnName );
 					// a tournament player goes back to this lobby after the match
 					if (mTournament)
 						game->setTournamentLobby(mInfo);
