@@ -900,6 +900,9 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 	// each player gets the announcement once per board version
 	for( const auto& player : mSponsorPlayers )
 	{
+		// players accept the board only after their tournament status
+		if( mSentStatus.count(player) == 0 )
+			continue;
 		std::string& sent = mSentSponsorVersion[player];
 		if( sent == mSponsors.version() )
 			continue;

@@ -375,7 +375,9 @@ void NetworkGameState::step_impl()
 				break;
 			}
 			case ID_SPONSORS:
-				getApp().handleSponsorPacket(packet->data, packet->length, mClient);
+				// only a tournament server sends the board, after the tournament status
+				if (mTournamentLobby || mHasTournamentStatus)
+					getApp().handleSponsorPacket(packet->data, packet->length, mClient);
 				break;
 			// status messages we don't care about
 			case ID_REMOTE_DISCONNECTION_NOTIFICATION:

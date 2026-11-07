@@ -23,11 +23,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <iosfwd>
 #include <cstdint>
+#include <deque>
+#include <vector>
 
 #include "raknet/PacketEnumerations.h"
 #include "raknet/NetworkTypes.h"
 #include "raknet/BitStream.h"
 #include "BlobbyDebug.h"
+#include "GenericIOFwd.h"
 
 enum MessageType
 {
@@ -308,6 +311,25 @@ class PlayerIdentity;
 void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& player );
 /// Reads the features at the end of an ID_ENTER_SERVER packet whose other fields were read. 0 when there are none.
 uint32_t readClientFeatures(RakNet::BitStream& stream);
+
+/// The lists of a SERVER_STATUS lobby packet, after the waiting player count
+struct ServerStatusLists
+{
+	std::vector<unsigned int> speeds;
+	std::vector<std::string> rules;
+	std::vector<std::string> rulesAuthors;
+	std::vector<unsigned int> gameIds;
+	std::vector<std::string> gameNames;
+	std::vector<unsigned char> gameSpeeds;
+	std::vector<unsigned char> gameRules;
+	std::vector<unsigned char> gameScores;
+	std::deque<bool> gamePasswords;
+
+	void read(GenericIn& in);
+	/// True if there are speeds and rules, every rules file has an author, every game has
+	/// an entry in each game list, and the speed and rules of every game are in the lists.
+	bool consistent() const;
+};
 
 bool operator == (const ServerInfo& lval, const ServerInfo& rval);
 std::ostream& operator<<(std::ostream& stream, const ServerInfo& val);
