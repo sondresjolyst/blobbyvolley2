@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkMessage.h"
 #include "server/MatchMaker.h"
 #include "server/JoinCodes.h"
+#include "server/EntryDeadlines.h"
 #include "server/Tournament.h"
 #include "SponsorSync.h"
 
@@ -110,6 +111,7 @@ class DedicatedServer
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		void closeRefusedConnections();
+		void closeConnectionsThatDidNotEnter();
 
 		// tournament matches
 		bool isTournament() const;
@@ -159,6 +161,8 @@ class DedicatedServer
 		std::unique_ptr<JoinCodeGate> mJoinCodes;
 		// refused connections and when to close them
 		std::map<PlayerID, std::chrono::steady_clock::time_point> mRefusedConnections;
+		// a new connection has to send ID_ENTER_SERVER within ten seconds
+		EntryDeadlines mEntryDeadlines{ std::chrono::seconds(10) };
 
 		// starts assigned matches, empty on a casual server
 		std::unique_ptr<TournamentDirector> mTournament;

@@ -65,6 +65,16 @@ const unsigned int TIMEOUT_TIME = 30000; // In debug don't timeout for 30 second
 const unsigned int TIMEOUT_TIME = 10000; // In release timeout after the normal 10 seconds
 #endif
 
+/**
+* Limits for the split packets one connection may have waiting.
+* A larger split count, more waiting data or more waiting split ids drop the part.
+* Incomplete split packets are dropped after SPLIT_PACKET_EXPIRY_TIME ms.
+*/
+const unsigned int MAX_SPLIT_PACKET_COUNT = 2048;
+const unsigned int MAX_PENDING_SPLIT_BYTES = 4 * 1024 * 1024;
+const unsigned int MAX_PENDING_SPLIT_IDS = 16;
+const unsigned int SPLIT_PACKET_EXPIRY_TIME = 30000;
+
 #include "BitStream.h"
 /**
 * This class provide reliable communication services.
@@ -107,6 +117,8 @@ public:
 	* @return false on modified packets
 	*/
 	bool HandleSocketReceiveFromConnectedPlayer( const char *buffer, int length );
+	/// Same as above, with the receive time given in ms
+	bool HandleSocketReceiveFromConnectedPlayer( const char *buffer, int length, unsigned int time );
 
 	/**
 	* This gets an end-user packet already parsed out.
@@ -241,6 +253,12 @@ private:
 
 	// Delete any unreliable split packets that have long since expired
 	void DeleteOldUnreliableSplitPackets( unsigned int time );
+
+	// Delete all split packets whose newest part is older than SPLIT_PACKET_EXPIRY_TIME
+	void DeleteExpiredSplitPackets( unsigned int time );
+
+	// True if the split packet list can take this part without going past the split packet limits
+	bool SplitPacketFitsLimits( const InternalPacket *internalPacket );
 
 	// Creates a copy of the specified internal packet with data copied from the original starting at dataByteOffset for dataByteLength bytes.
 	// Does not copy any split data parameters as that information is always generated does not have any reason to be copied

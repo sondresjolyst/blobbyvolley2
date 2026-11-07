@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "server/EntryDeadlines.h"
 #include "server/JoinCodes.h"
 #include "server/NetworkPlayer.h"
 
@@ -381,6 +382,36 @@ BOOST_AUTO_TEST_CASE( network_player_with_bad_name_is_refused )
 	writeEnterServer(ok, "K7QM2XPR4T", 10);
 	NetworkPlayer real(makeID(4), ok);
 	BOOST_CHECK(gate.admit(real) == JoinCodeGate::Result::ACCEPTED);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE( EntryDeadlinesTest )
+
+BOOST_AUTO_TEST_CASE( connection_that_does_not_enter_expires )
+{
+	EntryDeadlines deadlines(std::chrono::seconds(10));
+	auto start = EntryDeadlines::Clock::time_point();
+	deadlines.connected(makeID(1), start);
+	deadlines.connected(makeID(2), start + std::chrono::seconds(5));
+
+	BOOST_CHECK(deadlines.takeExpired(start + std::chrono::seconds(9)).empty());
+
+	auto expired = deadlines.takeExpired(start + std::chrono::seconds(10));
+	BOOST_REQUIRE_EQUAL(expired.size(), 1u);
+	BOOST_CHECK(expired[0] == makeID(1));
+	BOOST_CHECK_EQUAL(deadlines.size(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE( entered_connection_does_not_expire )
+{
+	EntryDeadlines deadlines(std::chrono::seconds(10));
+	auto start = EntryDeadlines::Clock::time_point();
+	deadlines.connected(makeID(1), start);
+	deadlines.remove(makeID(1));
+
+	BOOST_CHECK(deadlines.takeExpired(start + std::chrono::hours(1)).empty());
+	BOOST_CHECK_EQUAL(deadlines.size(), 0u);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

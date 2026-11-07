@@ -143,7 +143,11 @@ public:
 	LobbyGameSubstate(std::shared_ptr<RakClient> client, std::shared_ptr<GenericIn>);
 
 	void step( IMGUI& imgui, const ServerStatusData& status ) override;
+	/// True if the game settings are in the server lists and every player has a name
+	bool fits(const ServerStatusData& status) const;
 private:
+	bool settingsFit(const ServerStatusData& status) const;
+
 	std::shared_ptr<RakClient> mClient;
 
 	unsigned mGameID = 0;

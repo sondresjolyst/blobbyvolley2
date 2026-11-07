@@ -196,6 +196,7 @@ void DedicatedServer::processPackets()
 					syslog(LOG_DEBUG, "Connection not accepted (%d) from %s.",
 						   packet_id, packet->playerId.toString().c_str());
 				} else if( addConnection(packet->playerId) ) {
+					mEntryDeadlines.connected( packet->playerId, std::chrono::steady_clock::now() );
 					syslog(LOG_DEBUG, "Connection incoming (%d) from %s, %d clients connected now",
 						   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
 				} else {
@@ -208,6 +209,7 @@ void DedicatedServer::processPackets()
 			{
 				mActiveConnections.erase(packet->playerId);
 				mRefusedConnections.erase(packet->playerId);
+				mEntryDeadlines.remove(packet->playerId);
 				mSentStatus.erase(packet->playerId);
 				mSponsorPlayers.erase(packet->playerId);
 				mSentSponsorVersion.erase(packet->playerId);
@@ -269,10 +271,9 @@ void DedicatedServer::processPackets()
 void DedicatedServer::updateGames()
 {
 	if( mJoinCodes )
-	{
 		mJoinCodes->poll( steadyMilliseconds() );
-		closeRefusedConnections();
-	}
+	closeConnectionsThatDidNotEnter();
+	closeRefusedConnections();
 
 	if( isTournament() )
 	{
@@ -445,6 +446,8 @@ void DedicatedServer::processBlobbyServerPresent( PlayerID source, RakNet::BitSt
 }
 
 void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& data) {
+	mEntryDeadlines.remove(source);
+
 	// a connection enters the server only once
 	if( mPlayerMap.find(source) != mPlayerMap.end() )
 	{
@@ -526,6 +529,19 @@ void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
 
 	mRefusedConnections[source] = std::chrono::steady_clock::now() + REFUSED_CLOSE_DELAY;
 	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+}
+
+void DedicatedServer::closeConnectionsThatDidNotEnter()
+{
+	auto now = std::chrono::steady_clock::now();
+	for( PlayerID target : mEntryDeadlines.takeExpired(now) )
+	{
+		if( isConnected(target) && mRefusedConnections.count(target) == 0 )
+		{
+			mRefusedConnections[target] = now;
+			syslog(LOG_NOTICE, "Connection from %s did not enter in time", target.toString().c_str());
+		}
+	}
 }
 
 void DedicatedServer::closeRefusedConnections()
@@ -884,6 +900,9 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 	// each player gets the announcement once per board version
 	for( const auto& player : mSponsorPlayers )
 	{
+		// players accept the board only after their tournament status
+		if( mSentStatus.count(player) == 0 )
+			continue;
 		std::string& sent = mSentSponsorVersion[player];
 		if( sent == mSponsors.version() )
 			continue;

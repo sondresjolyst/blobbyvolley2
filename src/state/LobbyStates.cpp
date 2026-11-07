@@ -219,27 +219,19 @@ void LobbyState::step_impl()
 				{
 					uint32_t player_count;
 					in->uint32( player_count );
-					in->generic<std::vector<unsigned int>>( mStatus.mPossibleSpeeds );
-					in->generic<std::vector<std::string>>( mStatus.mPossibleRules );
-					in->generic<std::vector<std::string>>( mStatus.mPossibleRulesAuthor );
+					ServerStatusLists lists;
+					lists.read( *in );
+					// lists that do not fit together are dropped
+					if( !lists.consistent() )
+						break;
 
-					std::vector<unsigned int> gameids;
-					std::vector<std::string> gamenames;
-					std::vector<unsigned char> gamespeeds;
-					std::vector<unsigned char> gamerules;
-					std::vector<unsigned char> gamescores;
-					std::deque<bool> passwords;
-					in->generic<std::vector<unsigned int>>( gameids );
-					in->generic<std::vector<std::string>>( gamenames );
-					in->generic<std::vector<unsigned char>>( gamespeeds );
-					in->generic<std::vector<unsigned char>>( gamerules );
-					in->generic<std::vector<unsigned char>>( gamescores );
-					in->generic<std::deque<bool>>( passwords );
-
+					mStatus.mPossibleSpeeds = lists.speeds;
+					mStatus.mPossibleRules = lists.rules;
+					mStatus.mPossibleRulesAuthor = lists.rulesAuthors;
 					mStatus.mOpenGames.clear();
-					for( unsigned i = 0; i < gameids.size(); ++i)
+					for( unsigned i = 0; i < lists.gameIds.size(); ++i)
 					{
-						mStatus.mOpenGames.push_back( ServerStatusData::OpenGame{ gameids.at(i), gamenames.at(i), gamerules.at(i), gamespeeds.at(i), gamescores.at(i), passwords.at(i)});
+						mStatus.mOpenGames.push_back( ServerStatusData::OpenGame{ lists.gameIds[i], lists.gameNames[i], lists.gameRules[i], lists.gameSpeeds[i], lists.gameScores[i], lists.gamePasswords[i]});
 					}
 
 					// find out which settings most closely resemble the local config
@@ -277,7 +269,10 @@ void LobbyState::step_impl()
 
 				} else if((LobbyPacketType)t == LobbyPacketType::GAME_STATUS)
 				{
-					mSubState = std::make_shared<LobbyGameSubstate>(mClient, in);
+					auto game = std::make_shared<LobbyGameSubstate>(mClient, in);
+					// a game whose settings are not in the server lists is dropped
+					if( game->fits(mStatus) )
+						mSubState = game;
 				} else if((LobbyPacketType)t == LobbyPacketType::REMOVED_FROM_GAME)
 				{
 					mSubState = std::make_shared<LobbyMainSubstate>(mClient, mPreferedSpeed, mPreferedRules, mPreferedScore);
@@ -285,7 +280,9 @@ void LobbyState::step_impl()
 				}
 				break;
 			case ID_SPONSORS:
-				getApp().handleSponsorPacket(packet->data, packet->length, mClient);
+				// only a tournament server sends the board, after the tournament status
+				if (mTournament)
+					getApp().handleSponsorPacket(packet->data, packet->length, mClient);
 				break;
 			case ID_RULES_CHECKSUM: // this packet is sent when a game was created, so we probably are joining a game here.
 				// in a casual lobby we are in the lobby game substate here. A tournament server
@@ -516,7 +513,7 @@ void LobbyMainSubstate::step(IMGUI& imgui, const ServerStatusData& status)
 		//  * rulesfile
 		imgui.doText(GEN_ID, Vector2(435, 170), imgui.getText(TextManager::NET_RULES_TITLE) );
 		std::string rulesstring = status.mPossibleRules.at(status.getGame(gameIndex).rules) + imgui.getText(TextManager::NET_RULES_BY);
-		rulesstring += status.mPossibleRulesAuthor.at(mChosenRules);
+		rulesstring += status.mPossibleRulesAuthor.at(status.getGame(gameIndex).rules);
 		for (unsigned int i = 0; i < rulesstring.length(); i += 25)
 		{
 			imgui.doText(GEN_ID, Vector2(445, 205 + i / 25 * 15), rulesstring.substr(i, 25), TF_SMALL_FONT);
@@ -559,6 +556,16 @@ void LobbyMainSubstate::step(IMGUI& imgui, const ServerStatusData& status)
 	// open game
 	else
 	{
+		// no lists before the first server status
+		if( status.mPossibleSpeeds.empty() || status.mPossibleRules.empty() ||
+			status.mPossibleRulesAuthor.size() != status.mPossibleRules.size() )
+			return;
+		// a newer server status can have shorter lists
+		if( mChosenSpeed >= status.mPossibleSpeeds.size() )
+			mChosenSpeed = 0;
+		if( mChosenRules >= status.mPossibleRules.size() )
+			mChosenRules = 0;
+
 		// info panel
 		imgui.doOverlay(GEN_ID, Vector2(425.0, 90.0), Vector2(775.0, 470.0));
 
@@ -642,8 +649,23 @@ LobbyGameSubstate::LobbyGameSubstate(std::shared_ptr<RakClient> client, std::sha
 	in->generic<std::vector<std::string>>(mOtherPlayerNames);
 }
 
+bool LobbyGameSubstate::settingsFit(const ServerStatusData& status) const
+{
+	return mSpeed < status.mPossibleSpeeds.size() && mRules < status.mPossibleRules.size() &&
+		mRules < status.mPossibleRulesAuthor.size();
+}
+
+bool LobbyGameSubstate::fits(const ServerStatusData& status) const
+{
+	return settingsFit(status) && mOtherPlayers.size() == mOtherPlayerNames.size();
+}
+
 void LobbyGameSubstate::step( IMGUI& imgui, const ServerStatusData& status )
 {
+	// a newer server status can have shorter lists
+	if( !settingsFit(status) )
+		return;
+
 	bool no_players = mOtherPlayers.empty();
 	if(mOtherPlayerNames.empty())
 	{
@@ -686,14 +708,14 @@ void LobbyGameSubstate::step( IMGUI& imgui, const ServerStatusData& status )
 			mClient->Send(&stream, LOW_PRIORITY, RELIABLE_ORDERED, 0);
 		}
 
-		if( !no_players && (imgui.doButton(GEN_ID, Vector2(435, 430), imgui.getText(TextManager::MNU_LABEL_START) ) || doEnterGame) )
+		if( !no_players && mSelectedPlayer < mOtherPlayers.size() && (imgui.doButton(GEN_ID, Vector2(435, 430), imgui.getText(TextManager::MNU_LABEL_START) ) || doEnterGame) )
 		{
 			// Start Game
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_LOBBY);
 			stream.Write((unsigned char)LobbyPacketType::START_GAME);
 			auto writer = createGenericWriter(&stream);
-			writer->generic<PlayerID>( mOtherPlayers.at(mSelectedPlayer) );
+			writer->generic<PlayerID>( mOtherPlayers[mSelectedPlayer] );
 			mClient->Send(&stream, LOW_PRIORITY, RELIABLE_ORDERED, 0);
 		}
 

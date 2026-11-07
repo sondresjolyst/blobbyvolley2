@@ -276,7 +276,8 @@ bool makeFolder(const std::string& path)
 	if (_mkdir(path.c_str()) == 0 || errno == EEXIST)
 		return true;
 #else
-	if (mkdir(path.c_str(), 0755) == 0 || errno == EEXIST)
+	// server data is only for the server user
+	if (mkdir(path.c_str(), 0700) == 0 || errno == EEXIST)
 		return true;
 #endif
 	return false;
@@ -285,7 +286,16 @@ bool makeFolder(const std::string& path)
 bool writeFileAtomically(const std::string& path, const std::string& content, std::string& error)
 {
 	const std::string temp = path + ".tmp";
+#ifdef _WIN32
 	FILE* file = std::fopen(temp.c_str(), "wb");
+#else
+	// a temporary file left by a crash is replaced by a new one that only the server user can read
+	std::remove(temp.c_str());
+	const int descriptor = open(temp.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+	FILE* file = descriptor >= 0 ? fdopen(descriptor, "wb") : nullptr;
+	if (descriptor >= 0 && !file)
+		close(descriptor);
+#endif
 	if (!file)
 	{
 		error = "cannot write " + temp;

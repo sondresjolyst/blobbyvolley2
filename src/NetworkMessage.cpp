@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "UserConfig.h"
 #include "PlayerIdentity.h"
+#include "GenericIO.h"
 
 /* implementation */
 ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
@@ -154,3 +155,33 @@ std::ostream& operator<<(std::ostream& stream, const ServerInfo& val)
 	return stream << val.name << " (" << val.hostname << ":" << val.port << ")";
 }
 
+void ServerStatusLists::read(GenericIn& in)
+{
+	in.generic<std::vector<unsigned int>>( speeds );
+	in.generic<std::vector<std::string>>( rules );
+	in.generic<std::vector<std::string>>( rulesAuthors );
+	in.generic<std::vector<unsigned int>>( gameIds );
+	in.generic<std::vector<std::string>>( gameNames );
+	in.generic<std::vector<unsigned char>>( gameSpeeds );
+	in.generic<std::vector<unsigned char>>( gameRules );
+	in.generic<std::vector<unsigned char>>( gameScores );
+	in.generic<std::deque<bool>>( gamePasswords );
+}
+
+bool ServerStatusLists::consistent() const
+{
+	if( speeds.empty() || rules.empty() || rulesAuthors.size() != rules.size() )
+		return false;
+
+	const std::size_t games = gameIds.size();
+	if( gameNames.size() != games || gameSpeeds.size() != games || gameRules.size() != games ||
+		gameScores.size() != games || gamePasswords.size() != games )
+		return false;
+
+	for( std::size_t i = 0; i < games; ++i )
+	{
+		if( gameSpeeds[i] >= speeds.size() || gameRules[i] >= rules.size() )
+			return false;
+	}
+	return true;
+}

@@ -248,6 +248,36 @@ BOOST_AUTO_TEST_CASE( generic_io_network_element_size_bound )
 	BOOST_CHECK(v.empty());
 }
 
+BOOST_AUTO_TEST_CASE( generic_io_network_string_vector_size_bound )
+{
+	// 100 strings announced, with 100 bytes of data after the count.
+	// Each string needs at least its 32 bit length, so this cannot be valid.
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(100);
+	for(int i = 0; i < 100; ++i)
+		out->byte(0);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<std::string> v(2, "x");
+	in->generic<std::vector<std::string>>(v);
+	BOOST_CHECK(v.empty());
+	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
+}
+
+BOOST_AUTO_TEST_CASE( generic_io_network_valid_string_vector )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	std::vector<std::string> names = {"", "a", "blobby"};
+	out->generic<std::vector<std::string>>(names);
+
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	std::vector<std::string> namesIn;
+	in->generic<std::vector<std::string>>(namesIn);
+	BOOST_CHECK(names == namesIn);
+}
+
 BOOST_AUTO_TEST_CASE( generic_io_network_valid_nested_and_bytes )
 {
 	RakNet::BitStream stream;
