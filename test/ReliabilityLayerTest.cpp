@@ -20,6 +20,7 @@ namespace
 	{
 		ReliabilityLayer layer;
 		unsigned short packetNumber = 0;
+		unsigned int now = 1000;
 
 		// encodes one message in the same layout as WriteToBitStreamFromInternalPacket
 		void receive(const Part& part, unsigned short bitLength, unsigned int bytesPresent)
@@ -45,7 +46,7 @@ namespace
 			}
 			stream.WriteCompressed(bitLength);
 			stream.WriteAlignedBytes(part.bytes.data(), bytesPresent);
-			layer.HandleSocketReceiveFromConnectedPlayer((const char*)stream.GetData(), stream.GetNumberOfBytesUsed());
+			layer.HandleSocketReceiveFromConnectedPlayer((const char*)stream.GetData(), stream.GetNumberOfBytesUsed(), now);
 		}
 
 		void receive(const Part& part)
@@ -192,6 +193,68 @@ BOOST_FIXTURE_TEST_CASE( truncated_message_is_dropped, ReliabilityLayerFixture )
 	receive(part, 80, 4);
 	BOOST_CHECK(delivered().empty());
 	BOOST_CHECK(!layer.IsDataWaiting());
+}
+
+BOOST_FIXTURE_TEST_CASE( split_count_above_limit_is_dropped, ReliabilityLayerFixture )
+{
+	auto whole = makeBytes(10, 23);
+	receive(makePart(UNRELIABLE, 1, 0, MAX_SPLIT_PACKET_COUNT + 1, whole, 0, 10));
+	BOOST_CHECK(!layer.IsDataWaiting());
+
+	receive(makePart(UNRELIABLE, 2, 0, MAX_SPLIT_PACKET_COUNT, whole, 0, 10));
+	BOOST_CHECK(layer.IsDataWaiting());
+}
+
+BOOST_FIXTURE_TEST_CASE( pending_split_ids_are_limited, ReliabilityLayerFixture )
+{
+	auto whole = makeBytes(20, 29);
+	for (unsigned int id = 100; id < 100 + MAX_PENDING_SPLIT_IDS; ++id)
+		receive(makePart(UNRELIABLE, id, 0, 2, whole, 0, 10));
+
+	unsigned int extra = 100 + MAX_PENDING_SPLIT_IDS;
+	receive(makePart(UNRELIABLE, extra, 0, 2, whole, 0, 10));
+	receive(makePart(UNRELIABLE, extra, 1, 2, whole, 10, 10));
+	BOOST_CHECK(delivered().empty());
+
+	receive(makePart(UNRELIABLE, 100, 1, 2, whole, 10, 10));
+	auto result = delivered();
+	BOOST_REQUIRE_EQUAL(result.size(), 1u);
+	BOOST_CHECK(result[0] == whole);
+}
+
+BOOST_FIXTURE_TEST_CASE( pending_split_bytes_are_limited, ReliabilityLayerFixture )
+{
+	const unsigned int partSize = 7000;
+	auto big = makeBytes(partSize, 31);
+	for (unsigned int index = 0; index * partSize <= MAX_PENDING_SPLIT_BYTES; ++index)
+		receive(makePart(UNRELIABLE, 1, index, MAX_SPLIT_PACKET_COUNT, big, 0, partSize));
+
+	// the list stays just below the limit, so another set of this size does not fit
+	receive(makePart(UNRELIABLE, 2, 0, 2, big, 0, partSize));
+	receive(makePart(UNRELIABLE, 2, 1, 2, big, 0, partSize));
+	BOOST_CHECK(delivered().empty());
+}
+
+BOOST_FIXTURE_TEST_CASE( reliable_split_parts_expire, ReliabilityLayerFixture )
+{
+	auto whole = makeBytes(30, 41);
+	receive(makePart(RELIABLE, 3, 0, 3, whole, 0, 10));
+	receive(makePart(RELIABLE, 3, 1, 3, whole, 10, 10));
+	now += SPLIT_PACKET_EXPIRY_TIME + 1;
+	receive(makePart(RELIABLE, 3, 2, 3, whole, 20, 10));
+	BOOST_CHECK(delivered().empty());
+}
+
+BOOST_FIXTURE_TEST_CASE( reliable_split_parts_within_expiry_reassemble, ReliabilityLayerFixture )
+{
+	auto whole = makeBytes(30, 43);
+	receive(makePart(RELIABLE, 3, 0, 3, whole, 0, 10));
+	receive(makePart(RELIABLE, 3, 1, 3, whole, 10, 10));
+	now += SPLIT_PACKET_EXPIRY_TIME - 1000;
+	receive(makePart(RELIABLE, 3, 2, 3, whole, 20, 10));
+	auto result = delivered();
+	BOOST_REQUIRE_EQUAL(result.size(), 1u);
+	BOOST_CHECK(result[0] == whole);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

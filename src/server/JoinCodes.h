@@ -38,6 +38,8 @@ constexpr std::size_t JOIN_CODE_LENGTH = 10;
 constexpr std::size_t MAX_NICKNAME_BYTES = 15;
 /// Largest players file the loader reads.
 constexpr std::size_t MAX_PLAYERS_FILE_BYTES = 1024 * 1024;
+/// A join code that moved to a new connection stays there at least this long.
+constexpr unsigned long long JOIN_CODE_HANDOVER_COOLDOWN_MS = 10000;
 
 /// Trims spaces and turns lower case letters into upper case.
 /// Returns an empty string when the result is not a valid join code.
@@ -145,6 +147,27 @@ class JoinCodeGate
 		/// Checks the name of player as a join code and replaces it with the nickname when accepted.
 		Result admit(NetworkPlayer& player);
 
+		enum class Handover
+		{
+			/// Nobody else holds a known code, admit decides.
+			NONE,
+			/// holder has the code and has to leave before player is admitted.
+			HAND_OVER,
+			/// The code moved less than JOIN_CODE_HANDOVER_COOLDOWN_MS ago, refuse player.
+			TOO_SOON,
+			/// The connection that holds the code cannot leave now, refuse player.
+			HOLDER_BUSY
+		};
+
+		/// Tells whether the connection that holds a code may lose it now.
+		typedef std::function<bool(const PlayerID&)> HolderCheck;
+
+		/// Decides whether the known join code in name moves from the connection that holds it to player.
+		/// HAND_OVER sets holder and starts the cooldown of the code. now_ms is the clock poll() uses.
+		/// holderCanLeave may keep the code with its holder, an empty check always lets it go.
+		Handover checkHandover(const PlayerID& player, const std::string& name, unsigned long long now_ms,
+							const HolderCheck& holderCanLeave, PlayerID& holder);
+
 		/// Frees the code of a player that left. Does nothing for an unknown player.
 		void release(const PlayerID& player);
 
@@ -177,6 +200,8 @@ class JoinCodeGate
 		bool mHasContent = false;
 
 		std::map<std::string, PlayerID> mCodeOwners;
+		// when each code last moved to a new connection
+		std::map<std::string, unsigned long long> mHandedOverAt;
 		std::map<PlayerID, std::string> mPlayerCodes;
 
 		LogFunction mLog;

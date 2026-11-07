@@ -169,6 +169,15 @@ enum class SiteAnswer
 /// detail gets the status or the reason the site gave.
 SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& response, std::string& detail);
 
+/// Text from the site made safe to log: control characters become '?' and it is cut to 200 bytes.
+std::string siteTextForLog(const std::string& text);
+
+/// True if path can go after the site origin, that is it starts with '/'.
+bool isSitePath(const std::string& path);
+
+/// The only path an outbox report of this kind and match goes to, empty for an unknown kind.
+std::string outboxPath(const std::string& kind, int matchId);
+
 /*! Turns the sync of the site into a players file for JoinCodeGate and TournamentDirector.
 	\details Pending game reports that the site does not have yet count as if it had them,
 	so a restart during an outage does not play a game again. Returns false and sets error
@@ -257,6 +266,9 @@ struct SiteTiming
 	unsigned maxRetry = 30000;
 	unsigned authRetry = 30000;
 };
+
+/// Pause after the given number of failed steps in a row, from firstRetry doubling up to maxRetry.
+unsigned siteFailurePause(const SiteTiming& timing, unsigned failures);
 
 /*! \class SiteLink
 	\brief Talks to the tournament site: reads the sync, sends the reports of the outbox and the live score.

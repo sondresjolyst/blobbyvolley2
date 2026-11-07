@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "tinyxml2.h"
 
+#include "MatchAssignments.h"
 #include "SiteConfig.h"
 #include "SponsorBoard.h"
 #include "base64.h"
@@ -44,6 +45,20 @@ namespace
 	const std::size_t MAX_SPONSORS_BYTES = 8 * 1024 * 1024;
 	const std::size_t MAX_ANSWER_BYTES = 64 * 1024;
 	const unsigned LIVE_TIMEOUT_MS = 2000;
+	// longest site text that is logged, and longest sponsor name that is stored
+	const std::size_t MAX_SITE_TEXT_BYTES = 200;
+	const std::size_t MAX_SPONSOR_NAME_BYTES = 64;
+
+	// cuts text to at most max bytes without splitting a UTF-8 character
+	std::string cutUtf8(const std::string& text, std::size_t max)
+	{
+		if (text.size() <= max)
+			return text;
+		std::size_t end = max;
+		while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xC0) == 0x80)
+			--end;
+		return text.substr(0, end);
+	}
 
 	bool isInt(const json& value, long long min, long long max)
 	{
@@ -110,7 +125,8 @@ namespace
 			entry.finished = stringField(*body, "status") == "finished";
 			entry.winnerId = intField(*body, "winnerId", 0, 1);
 		}
-		ok = entry.seq > 0 && entry.matchId > 0 && !entry.path.empty()
+		// a report only goes to the path its kind uses
+		ok = entry.seq > 0 && entry.matchId > 0 && entry.path == outboxPath(entry.kind, entry.matchId)
 			&& (entry.kind == "connected" || (entry.kind == "game" && entry.game > 0));
 		return entry;
 	}
@@ -205,7 +221,7 @@ void Outbox::addConnected(int matchId, int player1, int player2)
 	OutboxEntry entry;
 	entry.kind = "connected";
 	entry.matchId = matchId;
-	entry.path = "/api/server/matches/" + std::to_string(matchId) + "/connected";
+	entry.path = outboxPath(entry.kind, matchId);
 	json body;
 	body["playerIds"] = json::array({player1, player2});
 	entry.body = body.dump();
@@ -220,7 +236,7 @@ void Outbox::addGame(const GameReport& report)
 	entry.game = report.game;
 	entry.finished = report.finished;
 	entry.winnerId = report.finished ? report.winnerId : 0;
-	entry.path = "/api/server/games";
+	entry.path = outboxPath(entry.kind, report.matchId);
 	entry.body = gameReportJson(report);
 	add(std::move(entry));
 }
@@ -331,6 +347,39 @@ void Outbox::save()
 // 			answers
 // - - - - - - - - - - - - - - - - - -
 
+std::string siteTextForLog(const std::string& text)
+{
+	std::string result = cutUtf8(text, MAX_SITE_TEXT_BYTES);
+	for (char& c : result)
+	{
+		if (static_cast<unsigned char>(c) < 0x20 || c == 0x7F)
+			c = '?';
+	}
+	return result;
+}
+
+bool isSitePath(const std::string& path)
+{
+	return !path.empty() && path[0] == '/';
+}
+
+std::string outboxPath(const std::string& kind, int matchId)
+{
+	if (kind == "connected")
+		return "/api/server/matches/" + std::to_string(matchId) + "/connected";
+	if (kind == "game")
+		return "/api/server/games";
+	return std::string();
+}
+
+unsigned siteFailurePause(const SiteTiming& timing, unsigned failures)
+{
+	unsigned pause = timing.firstRetry;
+	for (unsigned i = 1; i < failures && pause < timing.maxRetry; ++i)
+		pause *= 2;
+	return std::min(pause, timing.maxRetry);
+}
+
 SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& response, std::string& detail)
 {
 	if (response.status == 0)
@@ -342,7 +391,7 @@ SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& respo
 	{
 		json body;
 		if (parseObject(response.body, body) && body.contains("error") && body["error"].is_string())
-			detail = body["error"].get<std::string>();
+			detail = siteTextForLog(body["error"].get<std::string>());
 		else
 			detail = "HTTP " + std::to_string(response.status);
 		// a 503 without the not-configured error is an outage, not a missing token
@@ -355,7 +404,7 @@ SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& respo
 		json body;
 		detail = "HTTP " + std::to_string(response.status);
 		if (parseObject(response.body, body) && body.contains("field") && body["field"].is_string())
-			detail += ", invalid " + body["field"].get<std::string>();
+			detail += ", invalid " + siteTextForLog(body["field"].get<std::string>());
 		return SiteAnswer::REFUSED;
 	}
 	if (response.status != 200)
@@ -372,12 +421,12 @@ SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& respo
 		detail = "an answer that cannot be read";
 		return SiteAnswer::RETRY;
 	}
-	const std::string status = body["status"].get<std::string>();
+	const std::string status = siteTextForLog(body["status"].get<std::string>());
 	if (status == "refused")
 	{
 		detail = "refused";
 		if (body.contains("reason") && body["reason"].is_string())
-			detail += " " + body["reason"].get<std::string>();
+			detail += " " + siteTextForLog(body["reason"].get<std::string>());
 		return SiteAnswer::REFUSED;
 	}
 	detail = status;
@@ -506,7 +555,14 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 		if (wins2 >= 0)
 			element->SetAttribute("wins2", wins2);
 		if (isInt(m.value("nextGameDelay", json()), -2147483647LL, 2147483647LL))
-			element->SetAttribute("nextGameDelay", m["nextGameDelay"].get<int>());
+		{
+			const int delay = m["nextGameDelay"].get<int>();
+			if (delay != clampNextGameDelay(delay))
+				warnings.push_back("match " + std::to_string(matchId) + " of the sync has a nextGameDelay outside "
+					+ std::to_string(MIN_NEXT_GAME_DELAY) + " to " + std::to_string(MAX_NEXT_GAME_DELAY) + " seconds, "
+					+ std::to_string(clampNextGameDelay(delay)) + " is used");
+			element->SetAttribute("nextGameDelay", clampNextGameDelay(delay));
+		}
 		root->InsertEndChild(element);
 	}
 
@@ -585,6 +641,12 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 			warnings.push_back(where + " has no logo, skipped");
 			continue;
 		}
+		if (board["sponsors"].size() >= sponsors::MAX_LOGOS)
+		{
+			warnings.push_back("a board shows at most " + std::to_string(sponsors::MAX_LOGOS) + " logos, the sponsors from "
+				+ where + " on are skipped");
+			break;
+		}
 		const json& logo = s["logo"];
 		const std::string hash = stringField(logo, "hash");
 		if (stringField(logo, "format") != "bmp" || !isSha256Hex(hash))
@@ -602,7 +664,16 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 				warnings.push_back(where + " has a logo that is too large, skipped");
 				continue;
 			}
-			std::vector<uint8_t> decoded = decode(data);
+			std::vector<uint8_t> decoded;
+			try
+			{
+				decoded = decode(data);
+			}
+			catch (const std::exception&)
+			{
+				warnings.push_back(where + " has a logo that is not valid base64, skipped");
+				continue;
+			}
 			const std::string bytes(decoded.begin(), decoded.end());
 			if (sha256Hex(bytes) != hash)
 			{
@@ -625,7 +696,7 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 		}
 		json entry;
 		entry["sponsorId"] = intField(s, "sponsorId", 0);
-		entry["name"] = stringField(s, "name");
+		entry["name"] = cutUtf8(stringField(s, "name"), MAX_SPONSOR_NAME_BYTES);
 		entry["logo"] = file;
 		entry["width"] = intField(logo, "width", 0, 0, 10000);
 		entry["height"] = intField(logo, "height", 0, 0, 10000);
@@ -934,7 +1005,7 @@ bool SiteLink::writePlayersFile()
 			}
 			mWriteError.clear();
 			if (mLog && version != mWrittenVersion)
-				mLog(false, "the sync " + version + " is written to " + mPaths.playersFile);
+				mLog(false, "the sync " + siteTextForLog(version) + " is written to " + mPaths.playersFile);
 		}
 		mWritten = true;
 		mWrittenXml = xml;
@@ -991,7 +1062,7 @@ void SiteLink::sponsors(unsigned long long now_ms)
 	{
 		for (const auto& w : warnings)
 			mLog(true, w);
-		mLog(false, "the sponsors " + version + " are stored in " + mPaths.sponsorsFolder);
+		mLog(false, "the sponsors " + siteTextForLog(version) + " are stored in " + mPaths.sponsorsFolder);
 	}
 	mSponsorsVersion = version;
 }
@@ -1204,7 +1275,7 @@ void SiteReporter::run()
 		{
 			// keep going, but slower, so a repeating error does not spin
 			++failures;
-			pause = std::min(30000u, 1000u << std::min(failures, 5u));
+			pause = siteFailurePause(SiteTiming(), failures);
 			if (mLogLine)
 				mLogLine(true, "the tournament site link failed with " + problem + ", trying again in "
 					+ std::to_string(pause / 1000) + " s");

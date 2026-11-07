@@ -990,4 +990,130 @@ BOOST_AUTO_TEST_CASE( live_score_is_throttled_and_never_queued )
 	BOOST_CHECK_EQUAL(http.posts("/api/server/live").size(), 2u);
 }
 
+BOOST_AUTO_TEST_CASE( outbox_loads_only_known_paths )
+{
+	const std::string path = inFolder("outbox_paths.jsonl");
+	std::string error;
+	BOOST_REQUIRE(writeFileAtomically(path,
+		"{\"seq\":1,\"kind\":\"connected\",\"matchId\":7,\"path\":\"/api/server/matches/7/connected\",\"body\":{\"playerIds\":[12,17]}}\n"
+		"{\"seq\":2,\"kind\":\"connected\",\"matchId\":7,\"path\":\"/api/server/matches/8/connected\",\"body\":{\"playerIds\":[12,17]}}\n"
+		"{\"seq\":3,\"kind\":\"game\",\"matchId\":7,\"path\":\"@example.com/api/server/games\",\"body\":{\"game\":1}}\n"
+		"{\"seq\":4,\"kind\":\"game\",\"matchId\":7,\"path\":\"/api/server/games\",\"body\":{\"game\":1}}\n", error));
+	Outbox outbox(path, [](bool, const std::string&){});
+	outbox.load();
+	auto entries = outbox.entries();
+	BOOST_REQUIRE_EQUAL(entries.size(), 2u);
+	BOOST_CHECK_EQUAL(entries[0].seq, 1u);
+	BOOST_CHECK_EQUAL(entries[1].seq, 4u);
+	std::remove(path.c_str());
+	std::remove((path + ".bad").c_str());
+}
+
+BOOST_AUTO_TEST_CASE( site_paths_start_with_a_slash )
+{
+	BOOST_CHECK(isSitePath("/api/server/sync"));
+	BOOST_CHECK(!isSitePath(""));
+	BOOST_CHECK(!isSitePath("@example.com/api"));
+	BOOST_CHECK(!isSitePath("api/server/sync"));
+}
+
+BOOST_AUTO_TEST_CASE( site_text_is_made_safe_for_logs )
+{
+	BOOST_CHECK_EQUAL(siteTextForLog("bad\ntoken\x1b[31m"), "bad?token?[31m");
+	BOOST_CHECK_EQUAL(siteTextForLog(std::string(1000, 'a')).size(), 200u);
+	// a UTF-8 character is not cut in half
+	BOOST_CHECK_EQUAL(siteTextForLog(std::string(199, 'a') + "\xc3\xa9"), std::string(199, 'a'));
+
+	std::string detail;
+	BOOST_CHECK(classifySiteAnswer("game", answer(401, "{\"error\":\"no\\nway\"}"), detail) == SiteAnswer::AUTH);
+	BOOST_CHECK_EQUAL(detail, "no?way");
+	BOOST_CHECK(classifySiteAnswer("game", answer(200, "{\"status\":\"refused\",\"reason\":\"x\\ry\"}"), detail) == SiteAnswer::REFUSED);
+	BOOST_CHECK_EQUAL(detail, "refused x?y");
+}
+
+BOOST_AUTO_TEST_CASE( site_failures_back_off_with_the_retry_timing )
+{
+	SiteTiming timing;
+	BOOST_CHECK_EQUAL(siteFailurePause(timing, 1), timing.firstRetry);
+	BOOST_CHECK_EQUAL(siteFailurePause(timing, 2), timing.firstRetry * 2);
+	BOOST_CHECK_EQUAL(siteFailurePause(timing, 3), timing.firstRetry * 4);
+	BOOST_CHECK_EQUAL(siteFailurePause(timing, 20), timing.maxRetry);
+	BOOST_CHECK_EQUAL(siteFailurePause(timing, 4000000000u), timing.maxRetry);
+}
+
+BOOST_AUTO_TEST_CASE( sync_next_game_delay_is_clamped )
+{
+	const std::string match = matchJson(1, false, 0, 0);
+	const std::string slow = match.substr(0, match.size() - 1) + ",\"nextGameDelay\":500}";
+	const std::string fast = match.substr(0, match.size() - 1) + ",\"nextGameDelay\":1}";
+	for (const auto& m : {std::make_pair(slow, MAX_NEXT_GAME_DELAY), std::make_pair(fast, MIN_NEXT_GAME_DELAY)})
+	{
+		std::string xml;
+		std::string version;
+		std::vector<std::string> warnings;
+		std::string error;
+		BOOST_REQUIRE(buildPlayersFile(syncJson("d1", m.first), {}, xml, version, warnings, error));
+		BOOST_CHECK_EQUAL(warnings.size(), 1u);
+		auto matches = matchesOf(xml);
+		BOOST_REQUIRE_EQUAL(matches.size(), 1u);
+		BOOST_CHECK_EQUAL(matches[0].nextGameDelay, m.second);
+	}
+}
+
+BOOST_AUTO_TEST_CASE( sponsors_with_bad_base64_are_skipped )
+{
+	const std::string folder = inFolder("sq");
+	const std::string bmp = makeBmp(2, 1);
+	const std::string data = encode(bmp.data(), bmp.data() + bmp.size());
+	const std::string hash = sha256Hex(bmp);
+	const std::string json = "{\"gameBoard\":\"led\",\"sponsorsVersion\":\"b1\",\"sponsors\":["
+		"{\"sponsorId\":1,\"name\":\"Broken\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + std::string(64, 'd') + "\",\"data\":\"!!!!\"}},"
+		"{\"sponsorId\":2,\"name\":\"Acme\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + hash + "\",\"data\":\"" + data + "\"}}]}";
+
+	std::string version;
+	std::vector<std::string> warnings;
+	std::string error;
+	BOOST_REQUIRE_MESSAGE(storeSponsors(folder, json, version, warnings, error), error);
+	BOOST_CHECK_EQUAL(warnings.size(), 1u);
+	const std::string board = readFile(folder + "/board.json");
+	BOOST_CHECK(contains(board, "\"name\": \"Acme\""));
+	BOOST_CHECK(!contains(board, "Broken"));
+	std::remove((folder + "/logos/" + hash + ".bmp").c_str());
+	std::remove((folder + "/board.json").c_str());
+}
+
+BOOST_AUTO_TEST_CASE( sponsors_are_capped_and_names_are_cut )
+{
+	const std::string folder = inFolder("sr");
+	const std::string bmp = makeBmp(2, 1);
+	const std::string data = encode(bmp.data(), bmp.data() + bmp.size());
+	const std::string hash = sha256Hex(bmp);
+	std::string list;
+	for (int i = 0; i < 40; ++i)
+	{
+		if (i > 0)
+			list += ",";
+		list += "{\"sponsorId\":" + std::to_string(i + 1) + ",\"name\":\"" + std::string(100, 'n')
+			+ "\",\"logo\":{\"format\":\"bmp\",\"hash\":\"" + hash + "\",\"data\":\"" + data + "\"}}";
+	}
+	const std::string json = "{\"gameBoard\":\"led\",\"sponsorsVersion\":\"c1\",\"sponsors\":[" + list + "]}";
+
+	std::string version;
+	std::vector<std::string> warnings;
+	std::string error;
+	BOOST_REQUIRE_MESSAGE(storeSponsors(folder, json, version, warnings, error), error);
+	BOOST_CHECK_EQUAL(warnings.size(), 1u);
+
+	sponsors::Board board;
+	std::vector<std::string> loadWarnings;
+	BOOST_REQUIRE_MESSAGE(loadStoredSponsors(folder, board, loadWarnings, error), error);
+	BOOST_CHECK_EQUAL(board.logos.size(), sponsors::MAX_LOGOS);
+	BOOST_CHECK(loadWarnings.empty());
+	const std::string stored = readFile(folder + "/board.json");
+	BOOST_CHECK(contains(stored, "\"" + std::string(64, 'n') + "\""));
+	BOOST_CHECK(!contains(stored, std::string(65, 'n')));
+	std::remove((folder + "/logos/" + hash + ".bmp").c_str());
+	std::remove((folder + "/board.json").c_str());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

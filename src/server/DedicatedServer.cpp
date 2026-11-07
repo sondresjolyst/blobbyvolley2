@@ -49,8 +49,10 @@ extern std::atomic<int> SWLS_Games;
 
 namespace
 {
-	// time a refused client gets to receive the reason before the connection closes
-	const std::chrono::milliseconds REFUSED_CLOSE_DELAY(1000);
+	// A refused connection closes once the client confirmed the reason, but not before the
+	// first delay, so the reason is surely queued, and at the latest after the second.
+	const std::chrono::milliseconds REFUSED_MIN_DELAY(100);
+	const std::chrono::milliseconds REFUSED_MAX_DELAY(5000);
 
 	// wait before an assigned game whose player could not be found is tried again
 	const unsigned TOURNAMENT_RETRY_DELAY_MS = 1000;
@@ -108,9 +110,19 @@ DedicatedServer::~DedicatedServer()
 
 void DedicatedServer::queuePackets()
 {
+	// this runs on the update thread of the server. When another thread holds the server, the packets
+	// are taken on the next update, so the destructor can stop that thread while it holds the server.
 	packet_ptr packet;
-	while ((packet = mServer->access( [](RakServer& srv){ return srv.Receive(); })))
+	while (true)
 	{
+		if (!mServer->tryAccess( [&](RakServer& srv){ packet = srv.Receive(); } ))
+		{
+			++mBusyUpdates;
+			break;
+		}
+		if (!packet)
+			break;
+
 		SWLS_PacketCount++;
 
 		switch(packet->data[0])
@@ -187,6 +199,8 @@ void DedicatedServer::processPackets()
 			// connection status changes
 			case ID_NEW_INCOMING_CONNECTION:
 				SWLS_Connections++;
+				// a new connection from an address that was refused before starts clean
+				mRefusedConnections.erase(packet->playerId);
 				if ( !mAcceptNewPlayers )
 				{
 					RakNet::BitStream stream;
@@ -196,6 +210,7 @@ void DedicatedServer::processPackets()
 					syslog(LOG_DEBUG, "Connection not accepted (%d) from %s.",
 						   packet_id, packet->playerId.toString().c_str());
 				} else if( addConnection(packet->playerId) ) {
+					mEntryDeadlines.connected( packet->playerId, std::chrono::steady_clock::now() );
 					syslog(LOG_DEBUG, "Connection incoming (%d) from %s, %d clients connected now",
 						   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
 				} else {
@@ -205,47 +220,8 @@ void DedicatedServer::processPackets()
 				break;
 			case ID_CONNECTION_LOST:
 			case ID_DISCONNECTION_NOTIFICATION:
-			{
-				mActiveConnections.erase(packet->playerId);
-				mRefusedConnections.erase(packet->playerId);
-				mSentStatus.erase(packet->playerId);
-				mSponsorPlayers.erase(packet->playerId);
-				mSentSponsorVersion.erase(packet->playerId);
-				mSentLogos.erase(packet->playerId);
-				mHeldLogos.erase(packet->playerId);
-				if( mJoinCodes )
-				{
-					if( mTournament )
-						mTournament->playerDisconnected( mJoinCodes->playerIdOf(packet->playerId) );
-					mJoinCodes->release(packet->playerId);
-				}
-
-				auto player = mPlayerMap.find(packet->playerId);
-				// delete the disconnecting player.
-				if( player != mPlayerMap.end() )
-				{
-					const std::string playerName = player->second->getName();
-					if( player->second->getGame() )
-					{
-						player->second->getGame()->injectPacket( packet );
-					}
-
-					// no longer count this player as connected. protect this change with a mutex
-					{
-						std::lock_guard<std::mutex> lock( mPlayerMapMutex );
-						mPlayerMap.erase( player );
-						// player iterator is invalid after erase
-					}
-					mMatchMaker.removePlayer(packet->playerId);
-					syslog(LOG_DEBUG, "Player removed (%d) from %s (%s), %d players available",
-						   packet_id, packet->playerId.toString().c_str(),
-						   playerName.c_str(), (int)mPlayerMap.size());
-				}
-
-				syslog(LOG_DEBUG, "Connection closed (%d) from %s, %d clients connected now",
-					   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
+				removeConnection( packet );
 				break;
-			}
 			case ID_ENTER_SERVER:
 			case ID_LOBBY:
 			case ID_BLOBBY_SERVER_PRESENT:
@@ -268,11 +244,20 @@ void DedicatedServer::processPackets()
 
 void DedicatedServer::updateGames()
 {
-	if( mJoinCodes )
+	// how often packets waited for the next update, at most once a minute
+	const unsigned long long nowMs = steadyMilliseconds();
+	if( nowMs >= mBusyLoggedAt + 60000 )
 	{
-		mJoinCodes->poll( steadyMilliseconds() );
-		closeRefusedConnections();
+		mBusyLoggedAt = nowMs;
+		const unsigned busy = mBusyUpdates.exchange( 0 );
+		if( busy > 0 )
+			syslog(LOG_NOTICE, "The server was busy %u times in the last minute, packets waited for the next update", busy);
 	}
+
+	if( mJoinCodes )
+		mJoinCodes->poll( steadyMilliseconds() );
+	closeConnectionsThatDidNotEnter();
+	closeRefusedConnections();
 
 	if( isTournament() )
 	{
@@ -445,6 +430,8 @@ void DedicatedServer::processBlobbyServerPresent( PlayerID source, RakNet::BitSt
 }
 
 void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& data) {
+	mEntryDeadlines.remove(source);
+
 	// a connection enters the server only once
 	if( mPlayerMap.find(source) != mPlayerMap.end() )
 	{
@@ -469,6 +456,24 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		{
 			refuseEntry( source, EntryRefusedReason::OUTDATED_CLIENT );
 			return;
+		}
+
+		// a known code entered again moves to the new connection, the old one is closed
+		PlayerID holder;
+		// a player in a running game keeps the code, so nobody can end a match by entering it.
+		// A connection that is really gone times out and frees the code by itself.
+		auto canLeave = [this](const PlayerID& id){ return !inRunningGame( id ); };
+		switch( mJoinCodes->checkHandover( source, newplayer->getName(), steadyMilliseconds(), canLeave, holder ) )
+		{
+			case JoinCodeGate::Handover::HAND_OVER:
+				handOverJoinCode( holder );
+				break;
+			case JoinCodeGate::Handover::TOO_SOON:
+			case JoinCodeGate::Handover::HOLDER_BUSY:
+				refuseEntry( source, EntryRefusedReason::CODE_IN_USE );
+				return;
+			case JoinCodeGate::Handover::NONE:
+				break;
 		}
 
 		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
@@ -515,6 +520,75 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	}
 }
 
+void DedicatedServer::removeConnection(const packet_ptr& packet)
+{
+	const int packet_id = packet->data[0];
+	mActiveConnections.erase(packet->playerId);
+	mRefusedConnections.erase(packet->playerId);
+	mEntryDeadlines.remove(packet->playerId);
+	mSentStatus.erase(packet->playerId);
+	mSponsorPlayers.erase(packet->playerId);
+	mSentSponsorVersion.erase(packet->playerId);
+	mSentLogos.erase(packet->playerId);
+	mHeldLogos.erase(packet->playerId);
+	if( mJoinCodes )
+	{
+		if( mTournament )
+			mTournament->playerDisconnected( mJoinCodes->playerIdOf(packet->playerId) );
+		mJoinCodes->release(packet->playerId);
+	}
+
+	auto player = mPlayerMap.find(packet->playerId);
+	// delete the disconnecting player.
+	if( player != mPlayerMap.end() )
+	{
+		const std::string playerName = player->second->getName();
+		if( player->second->getGame() )
+		{
+			player->second->getGame()->injectPacket( packet );
+		}
+
+		// no longer count this player as connected. protect this change with a mutex
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			mPlayerMap.erase( player );
+			// player iterator is invalid after erase
+		}
+		mMatchMaker.removePlayer(packet->playerId);
+		syslog(LOG_DEBUG, "Player removed (%d) from %s (%s), %d players available",
+			   packet_id, packet->playerId.toString().c_str(),
+			   playerName.c_str(), (int)mPlayerMap.size());
+	}
+
+	syslog(LOG_DEBUG, "Connection closed (%d) from %s, %d clients connected now",
+		   packet_id, packet->playerId.toString().c_str(), getConnectedClients());
+}
+
+void DedicatedServer::handOverJoinCode(PlayerID holder)
+{
+	// the old holder learns why it is closed
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_LOBBY);
+	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
+	stream.Write((unsigned char)EntryRefusedReason::CODE_IN_USE);
+	// the same priority as the other lobby packets, so the reason does not wait in the
+	// client behind an earlier packet of this channel that is still on its way
+	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, holder);
+
+	// then it leaves like a lost connection, so lobby, game and tournament forget it
+	packet_ptr lost(new Packet(), [](Packet* p){ delete[] p->data; delete p; });
+	lost->playerIndex = UNASSIGNED_PLAYER_INDEX;
+	lost->playerId = holder;
+	lost->data = new unsigned char[1]{ (unsigned char)ID_CONNECTION_LOST };
+	lost->length = 1;
+	lost->bitSize = 8;
+	removeConnection( lost );
+
+	// the connection closes once the reason arrived
+	mRefusedConnections[holder] = std::chrono::steady_clock::now();
+	syslog(LOG_NOTICE, "Join code handed over, closing the connection from %s", holder.toString().c_str());
+}
+
 
 void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
 {
@@ -522,10 +596,23 @@ void DedicatedServer::refuseEntry(PlayerID source, EntryRefusedReason reason)
 	stream.Write((unsigned char)ID_LOBBY);
 	stream.Write((unsigned char)LobbyPacketType::ENTRY_REFUSED);
 	stream.Write((unsigned char)reason);
-	mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, source);
+	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, source);
 
-	mRefusedConnections[source] = std::chrono::steady_clock::now() + REFUSED_CLOSE_DELAY;
+	mRefusedConnections[source] = std::chrono::steady_clock::now();
 	syslog(LOG_NOTICE, "Entry refused for %s", source.toString().c_str());
+}
+
+void DedicatedServer::closeConnectionsThatDidNotEnter()
+{
+	auto now = std::chrono::steady_clock::now();
+	for( PlayerID target : mEntryDeadlines.takeExpired(now) )
+	{
+		if( isConnected(target) && mRefusedConnections.count(target) == 0 )
+		{
+			mRefusedConnections[target] = now;
+			syslog(LOG_NOTICE, "Connection from %s did not enter in time", target.toString().c_str());
+		}
+	}
 }
 
 void DedicatedServer::closeRefusedConnections()
@@ -533,9 +620,25 @@ void DedicatedServer::closeRefusedConnections()
 	auto now = std::chrono::steady_clock::now();
 	for( auto it = mRefusedConnections.begin(); it != mRefusedConnections.end(); )
 	{
-		if( it->second <= now )
+		const PlayerID target = it->first;
+		bool close = now >= it->second + REFUSED_MAX_DELAY;
+		if( !close && now >= it->second + REFUSED_MIN_DELAY )
 		{
-			PlayerID target = it->first;
+			// everything sent to the client, the reason included, has arrived
+			close = mServer->access( [&](RakServer& srv){
+				RakNetStatisticsStruct* stats = srv.GetStatistics( target );
+				if( !stats )
+					return true;
+				for( unsigned waiting : stats->messageSendBuffer )
+				{
+					if( waiting != 0 )
+						return false;
+				}
+				return stats->messagesOnResendQueue == 0;
+			} );
+		}
+		if( close )
+		{
 			mServer->access( [&](RakServer& srv){ srv.CloseConnection( target, true ); } );
 			mActiveConnections.erase( target );
 			it = mRefusedConnections.erase( it );
@@ -884,6 +987,9 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 	// each player gets the announcement once per board version
 	for( const auto& player : mSponsorPlayers )
 	{
+		// players accept the board only after their tournament status
+		if( mSentStatus.count(player) == 0 )
+			continue;
 		std::string& sent = mSentSponsorVersion[player];
 		if( sent == mSponsors.version() )
 			continue;

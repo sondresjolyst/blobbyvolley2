@@ -152,8 +152,12 @@ void IGameLogic::setState(GameLogicState gls)
 	setScore(RIGHT_PLAYER, gls.rightScore);
 	mTouches[LEFT_PLAYER] = gls.hitCount[LEFT_PLAYER];
 	mTouches[RIGHT_PLAYER] = gls.hitCount[RIGHT_PLAYER];
-	setServingPlayer(gls.servingPlayer);
-	mWinningPlayer = gls.winningPlayer;
+	// a state from the network can hold any value, so unknown sides become NO_PLAYER
+	auto validSide = [](PlayerSide side) {
+		return side == LEFT_PLAYER || side == RIGHT_PLAYER ? side : NO_PLAYER;
+	};
+	setServingPlayer(validSide(gls.servingPlayer));
+	mWinningPlayer = validSide(gls.winningPlayer);
 	mSquish[LEFT_PLAYER] = gls.squish[LEFT_PLAYER];
 	mSquish[RIGHT_PLAYER] = gls.squish[RIGHT_PLAYER];
 	mSquishWall = gls.squishWall;

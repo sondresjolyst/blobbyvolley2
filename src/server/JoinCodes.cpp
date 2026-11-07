@@ -391,6 +391,21 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 
 	mTable = std::move(table);
 	mMatches.swap(matches);
+
+	// A code that left the file no longer belongs to anybody, so it cannot be handed over and its
+	// player id is 0. The connection that held it stays as it is, the server does not close it.
+	// It keeps its lobby place and a running game, and it gets no new tournament games.
+	for (auto it = mCodeOwners.begin(); it != mCodeOwners.end(); )
+	{
+		if (mTable.find(it->first))
+		{
+			++it;
+			continue;
+		}
+		mPlayerCodes.erase(it->second);
+		mHandedOverAt.erase(it->first);
+		it = mCodeOwners.erase(it);
+	}
 	++mGeneration;
 	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
 		+ std::to_string(mMatches.size()) + " matches");
@@ -430,6 +445,34 @@ JoinCodeGate::Result JoinCodeGate::admit(NetworkPlayer& player)
 	if (result == Result::ACCEPTED)
 		player.setName(nickname);
 	return result;
+}
+
+JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const std::string& name,
+												unsigned long long now_ms, const HolderCheck& holderCanLeave,
+												PlayerID& holder)
+{
+	const std::string code = normalizeJoinCode(name);
+	auto owner = mCodeOwners.find(code);
+	// only a code of the current table moves, admit refuses any other
+	if (owner == mCodeOwners.end() || owner->second == player || !mTable.find(code))
+		return Handover::NONE;
+
+	auto last = mHandedOverAt.find(code);
+	if (last != mHandedOverAt.end() && now_ms < last->second + JOIN_CODE_HANDOVER_COOLDOWN_MS)
+	{
+		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
+		return Handover::TOO_SOON;
+	}
+	if (holderCanLeave && !holderCanLeave(owner->second))
+	{
+		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
+		return Handover::HOLDER_BUSY;
+	}
+
+	holder = owner->second;
+	mHandedOverAt[code] = now_ms;
+	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
+	return Handover::HAND_OVER;
 }
 
 void JoinCodeGate::release(const PlayerID& player)

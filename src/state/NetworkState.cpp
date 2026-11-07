@@ -336,7 +336,15 @@ void NetworkGameState::step_impl()
 				unsigned char type = 0;
 				in->byte(type);	// ID_LOBBY
 				in->byte(type);
-				if ((LobbyPacketType)type == LobbyPacketType::TOURNAMENT_STATUS)
+				if ((LobbyPacketType)type == LobbyPacketType::ENTRY_REFUSED)
+				{
+					// the join code moved to another connection, which closes this one
+					unsigned char reason = 0xFF;
+					in->byte(reason);
+					mCodeInUse = reason == (unsigned char)EntryRefusedReason::CODE_IN_USE;
+					mNetworkState = DISCONNECTED;
+				}
+				else if ((LobbyPacketType)type == LobbyPacketType::TOURNAMENT_STATUS)
 				{
 					mTournamentStatus = readTournamentStatus(*in);
 					mHasTournamentStatus = true;
@@ -375,7 +383,9 @@ void NetworkGameState::step_impl()
 				break;
 			}
 			case ID_SPONSORS:
-				getApp().handleSponsorPacket(packet->data, packet->length, mClient);
+				// only a tournament server sends the board, after the tournament status
+				if (mTournamentLobby || mHasTournamentStatus)
+					getApp().handleSponsorPacket(packet->data, packet->length, mClient);
 				break;
 			// status messages we don't care about
 			case ID_REMOTE_DISCONNECTION_NOTIFICATION:
@@ -551,7 +561,7 @@ void NetworkGameState::step_impl()
 			imgui.doOverlay(GEN_ID, Vector2(100.0, 210.0),
 					Vector2(700.0, 370.0));
 			imgui.doText(GEN_ID, Vector2(120.0, 250.0),
-					TextManager::NET_DISCONNECT);
+					mCodeInUse ? TextManager::NET_CODE_IN_USE : TextManager::NET_DISCONNECT);
 			if (imgui.doButton(GEN_ID, Vector2(230.0, 320.0),
 					TextManager::LBL_OK))
 			{

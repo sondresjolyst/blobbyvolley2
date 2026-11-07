@@ -202,11 +202,14 @@ namespace detail
 	//  iterate over all elements and read/write
 
 
-	// bool elements need one bit on the wire, everything else at least one byte
+	// bool elements need one bit on the wire, strings at least their 32 bit length,
+	// everything else at least one byte
 	template<class T>
 	unsigned int minElementBits()
 	{
-		return std::is_same<T, bool>::value ? 1 : 8;
+		if( std::is_same<T, bool>::value )
+			return 1;
+		return std::is_same<T, std::string>::value ? 32 : 8;
 	}
 
 	template<class T>

@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <iosfwd>
 #include <memory>
 #include <set>
+#include <atomic>
 #include <chrono>
 #include <functional>
 
@@ -35,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkMessage.h"
 #include "server/MatchMaker.h"
 #include "server/JoinCodes.h"
+#include "server/EntryDeadlines.h"
 #include "server/Tournament.h"
 #include "SponsorSync.h"
 
@@ -110,6 +112,11 @@ class DedicatedServer
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		void closeRefusedConnections();
+		void closeConnectionsThatDidNotEnter();
+		// forgets a connection that closed: lobby, game, tournament and every per connection map
+		void removeConnection(const packet_ptr& packet);
+		// closes the connection that held a join code that another connection entered
+		void handOverJoinCode(PlayerID holder);
 
 		// tournament matches
 		bool isTournament() const;
@@ -157,8 +164,14 @@ class DedicatedServer
 
 		// tournament mode, empty on a casual server
 		std::unique_ptr<JoinCodeGate> mJoinCodes;
-		// refused connections and when to close them
+		// updates of the network thread that found the server busy, and when that was last logged
+		std::atomic<unsigned> mBusyUpdates{0};
+		unsigned long long mBusyLoggedAt = 0;
+
+		// connections to close and when each was refused
 		std::map<PlayerID, std::chrono::steady_clock::time_point> mRefusedConnections;
+		// a new connection has to send ID_ENTER_SERVER within ten seconds
+		EntryDeadlines mEntryDeadlines{ std::chrono::seconds(10) };
 
 		// starts assigned matches, empty on a casual server
 		std::unique_ptr<TournamentDirector> mTournament;

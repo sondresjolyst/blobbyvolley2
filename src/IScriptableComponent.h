@@ -69,6 +69,8 @@ class IScriptableComponent
 
 		void setMatchState(const DuelMatchState& state);
 
+		/// bytes the lua state has allocated. Declared before mState, so it is set up before the state.
+		std::size_t mLuaMemory = 0;
 		lua_State* mState;
 
 	private:
