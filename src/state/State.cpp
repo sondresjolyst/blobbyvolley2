@@ -108,7 +108,7 @@ void MainMenuState::step_impl()
 	imgui.doOverlay(GEN_ID, Vector2(0.0, 0.0), Vector2(800.0, 600.0));
 	imgui.doImage(GEN_ID, Vector2(400.0, 175.0), "gfx/titel.bmp");
 	// eight buttons 36 apart fit between the title, which ends at 298, and the bottom of the screen
-	if (imgui.doButton(GEN_ID, Vector2(34.0, 300.0), TextManager::MNU_LABEL_PASTE_LINK))
+	if (imgui.doButton(GEN_ID, Vector2(34.0, 300.0), TextManager::MNU_LABEL_JOIN_LINK))
 	{
 		pasteJoinLink();
 	}

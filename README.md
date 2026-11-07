@@ -61,7 +61,7 @@ The tournament site shows each player a join link of the form `blobby://join?ser
 To join a match:
 1. Copy your join link on the tournament site.
 2. Open Blobby Volley.
-3. Click "paste join link" in the main menu.
+3. Click "join link" at the top of the main menu.
 4. Answer Yes when the game asks whether to join the server.
 
 The game then connects and sends the code as player name. If the clipboard holds no join link, or the link is not valid, the game says so and stays in the main menu.
@@ -141,7 +141,7 @@ Open the workflow run on the Actions page of the fork, download the artifact and
 Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
 Start the game from its own folder, as Explorer and shortcuts do.
-To join a tournament match, copy your join link and click "paste join link" in the game. See [Join links](#join-links).
+To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.

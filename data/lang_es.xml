@@ -14,7 +14,7 @@
 	<string english = "watch replay" translation = "ver la repetición" />
 	<string english = "credits" translation = "créditos" />
 	<string english = "exit" translation = "salir" />
-	<string english = "paste join link" translation = "pegar enlace" />
+	<string english = "join link" translation = "enlace" />
 	<string english = "no join link in the clipboard" translation = "no hay enlace en el portapapeles" />
 	
 	<string english = "programmers:" translation = "programadores:" />

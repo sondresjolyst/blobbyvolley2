@@ -56,7 +56,7 @@ class TextManager
 			MNU_LABEL_REPLAY,
 			MNU_LABEL_CREDITS,
 			MNU_LABEL_EXIT,
-			MNU_LABEL_PASTE_LINK,
+			MNU_LABEL_JOIN_LINK,
 			MNU_NO_JOIN_LINK,
 
 			// credits
