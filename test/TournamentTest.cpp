@@ -526,11 +526,12 @@ BOOST_AUTO_TEST_CASE( abandoned_game_holds_the_match_until_the_organizer_decides
 	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
 
 	f.director.playerDisconnected(17);
-	f.director.gameAbandoned(7, 4, 6, f.start, f.end);
+	f.director.gameAbandoned(7, 4, 6, f.start, f.end, 17);
 	BOOST_REQUIRE_EQUAL(f.events->games.size(), 1u);
 	const GameReport& r = f.events->games[0];
 	BOOST_CHECK(!r.finished);
 	BOOST_CHECK_EQUAL(r.winnerId, 0);
+	BOOST_CHECK_EQUAL(r.leftPlayerId, 17);
 	BOOST_CHECK_EQUAL(r.game, 1);
 	BOOST_CHECK_EQUAL(r.points1, 4);
 	BOOST_CHECK_EQUAL(r.points2, 6);
@@ -879,8 +880,9 @@ BOOST_AUTO_TEST_CASE( tournament_status_carries_the_own_nickname )
 	};
 
 	RakNet::BitStream stream;
-	writeTournamentStatus(stream, status, "Ola", "Kari");
+	writeTournamentStatus(stream, status, "Ola", "Kari", 4200);
 	TournamentStatusData data = read(stream);
+	BOOST_CHECK_EQUAL(data.nextGameInMs, 4200u);
 	BOOST_CHECK(data.status == TournamentStatus::NEXT_GAME);
 	BOOST_CHECK_EQUAL(data.opponent, "Ola");
 	BOOST_CHECK_EQUAL(data.ownName, "Kari");
@@ -890,14 +892,14 @@ BOOST_AUTO_TEST_CASE( tournament_status_carries_the_own_nickname )
 
 	// UTF-8 nicknames up to 15 bytes are kept
 	RakNet::BitStream utf;
-	writeTournamentStatus(utf, status, "Ola", "Bj\xC3\xB8rn");
+	writeTournamentStatus(utf, status, "Ola", "Bj\xC3\xB8rn", 0);
 	BOOST_CHECK_EQUAL(read(utf).ownName, "Bj\xC3\xB8rn");
 
 	// names that are too long, broken UTF-8 or hold control characters are dropped
 	for (const std::string& bad : { std::string(16, 'a'), std::string("Bj\xC3"), std::string("a\nb") })
 	{
 		RakNet::BitStream s;
-		writeTournamentStatus(s, status, bad, bad);
+		writeTournamentStatus(s, status, bad, bad, 0);
 		TournamentStatusData d = read(s);
 		BOOST_CHECK(d.ownName.empty());
 		BOOST_CHECK(d.opponent.empty());
@@ -918,6 +920,93 @@ BOOST_AUTO_TEST_CASE( tournament_status_carries_the_own_nickname )
 		out->uint32(0);
 	}
 	BOOST_CHECK(read(older).ownName.empty());
+	BOOST_CHECK_EQUAL(read(older).nextGameInMs, 0u);
+
+	// a server cannot make a client wait for ever
+	RakNet::BitStream slow;
+	writeTournamentStatus(slow, status, "Ola", "Kari", 3600000);
+	BOOST_CHECK_EQUAL(read(slow).nextGameInMs, MAX_NEXT_GAME_DELAY_MS);
+}
+
+BOOST_AUTO_TEST_CASE( next_game_status_tells_when_the_next_game_starts )
+{
+	DirectorFixture f(0, 5000);
+	f.director.setAssignments({ makeMatch(7, 12, 17, 3) });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(1000).size(), 1u);
+	BOOST_CHECK_EQUAL(f.director.statusOf(12, 1000).nextGameAt, 0u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 1000);
+	PlayerTournamentStatus s = f.director.statusOf(17, 2000);
+	BOOST_CHECK(s.status == TournamentStatus::NEXT_GAME);
+	BOOST_CHECK_EQUAL(s.nextGameAt, 6000u);
+	// the status stays the same while the clock runs, so the server does not send it again
+	BOOST_CHECK(s == f.director.statusOf(17, 3000));
+}
+
+BOOST_AUTO_TEST_CASE( abandoned_report_names_the_player_who_left )
+{
+	DirectorFixture f;
+	f.director.setAssignments({ makeMatch(7, 12, 17, 3) });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	// an id that is not a player of the game is not reported
+	f.director.gameAbandoned(7, 1, 0, f.start, f.end, 99);
+	BOOST_REQUIRE_EQUAL(f.events->games.size(), 1u);
+	BOOST_CHECK_EQUAL(f.events->games[0].leftPlayerId, 0);
+	BOOST_CHECK(gameReportJson(f.events->games[0]).find("leftPlayerId") == std::string::npos);
+}
+
+BOOST_AUTO_TEST_CASE( parse_reads_the_next_game_delay )
+{
+	std::vector<std::string> warnings;
+	auto matches = parse(
+		"<match id=\"1\" player1=\"12\" player2=\"17\" nextGameDelay=\"3\"/>\n"
+		"<match id=\"2\" player1=\"21\" player2=\"25\" nextGameDelay=\"120\"/>\n"
+		"<match id=\"3\" player1=\"12\" player2=\"21\"/>\n"
+		"<match id=\"4\" player1=\"12\" player2=\"25\" nextGameDelay=\"2\"/>\n"
+		"<match id=\"5\" player1=\"17\" player2=\"21\" nextGameDelay=\"121\"/>\n"
+		"<match id=\"6\" player1=\"17\" player2=\"25\" nextGameDelay=\"soon\"/>\n", warnings);
+	BOOST_REQUIRE_EQUAL(matches.size(), 3u);
+	BOOST_CHECK_EQUAL(matches[0].nextGameDelay, 3);
+	BOOST_CHECK_EQUAL(matches[1].nextGameDelay, 120);
+	BOOST_CHECK_EQUAL(matches[2].nextGameDelay, -1);
+	BOOST_CHECK_EQUAL(warnings.size(), 3u);
+}
+
+BOOST_AUTO_TEST_CASE( next_game_delay_is_clamped )
+{
+	BOOST_CHECK_EQUAL(clampNextGameDelay(10), 10);
+	BOOST_CHECK_EQUAL(clampNextGameDelay(3), 3);
+	BOOST_CHECK_EQUAL(clampNextGameDelay(120), 120);
+	BOOST_CHECK_EQUAL(clampNextGameDelay(0), 3);
+	BOOST_CHECK_EQUAL(clampNextGameDelay(-5), 3);
+	BOOST_CHECK_EQUAL(clampNextGameDelay(500), 120);
+	BOOST_CHECK_EQUAL(DEFAULT_NEXT_GAME_DELAY, 10);
+}
+
+BOOST_AUTO_TEST_CASE( match_delay_overrides_the_server_delay )
+{
+	DirectorFixture f(0, 10000);
+	MatchAssignment own = makeMatch(7, 12, 17, 3);
+	own.nextGameDelay = 4;
+	f.director.setAssignments({ own, makeMatch(8, 21, 25, 3) });
+	for (int id : {12, 17, 21, 25})
+		f.director.playerConnected(id);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 2u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 1000);
+	f.director.gameFinished(8, 1, 15, 3, f.start, f.end, 1000);
+
+	BOOST_CHECK_EQUAL(f.director.statusOf(12, 1000).nextGameAt, 5000u);
+	BOOST_CHECK_EQUAL(f.director.statusOf(21, 1000).nextGameAt, 11000u);
+
+	// match 7 starts after its own 4 seconds, match 8 waits for the server's 10
+	std::vector<int> early = f.startedIds(5000);
+	BOOST_REQUIRE_EQUAL(early.size(), 1u);
+	BOOST_CHECK_EQUAL(early[0], 7);
+	BOOST_CHECK(f.startedIds(10999).empty());
+	BOOST_CHECK_EQUAL(f.startedIds(11000).size(), 1u);
 }
 
 BOOST_AUTO_TEST_CASE( reports_for_unknown_or_idle_matches_are_ignored )
@@ -977,7 +1066,16 @@ BOOST_AUTO_TEST_CASE( game_report_json_matches_the_site )
 
 	r.finished = false;
 	r.winnerId = 0;
-	BOOST_CHECK(gameReportJson(r).find("\"status\":\"abandoned\",\"winnerId\":null,") != std::string::npos);
+	BOOST_CHECK(gameReportJson(r).find("\"status\":\"abandoned\",\"winnerId\":null,\"points\"") != std::string::npos);
+
+	// the player who left comes after the missing winner
+	r.leftPlayerId = 12;
+	BOOST_CHECK(gameReportJson(r).find("\"status\":\"abandoned\",\"winnerId\":null,\"leftPlayerId\":12,\"points\"") != std::string::npos);
+
+	// a finished game never names a player who left
+	r.finished = true;
+	r.winnerId = 17;
+	BOOST_CHECK(gameReportJson(r).find("leftPlayerId") == std::string::npos);
 }
 
 BOOST_AUTO_TEST_CASE( tournament_log_appends_json_lines )
@@ -998,6 +1096,13 @@ BOOST_AUTO_TEST_CASE( tournament_log_appends_json_lines )
 		r.points1 = 15;
 		r.player2 = 17;
 		log.gameEnded(r);
+		GameReport abandoned = r;
+		abandoned.reportId = "id2";
+		abandoned.game = 2;
+		abandoned.finished = false;
+		abandoned.winnerId = 0;
+		abandoned.leftPlayerId = 17;
+		log.gameEnded(abandoned);
 		SeriesResult s;
 		s.matchId = 7;
 		s.winnerId = 12;
@@ -1015,11 +1120,13 @@ BOOST_AUTO_TEST_CASE( tournament_log_appends_json_lines )
 	file.close();
 	std::remove(path.c_str());
 
-	BOOST_REQUIRE_EQUAL(lines.size(), 3u);
+	BOOST_REQUIRE_EQUAL(lines.size(), 4u);
 	BOOST_CHECK_EQUAL(lines[0].find("{\"event\":\"connected\",\"matchId\":7,\"playerIds\":[12,17]"), 0u);
 	BOOST_CHECK_EQUAL(lines[1].find("{\"event\":\"game\",\"report\":{\"reportId\":\"id\",\"matchId\":7"), 0u);
-	BOOST_CHECK_EQUAL(lines[2].find("{\"event\":\"series\",\"matchId\":7,\"bestOf\":1,\"winnerId\":12"), 0u);
-	BOOST_CHECK_EQUAL(logged.size(), 3u);
+	BOOST_CHECK(lines[2].find("\"status\":\"abandoned\",\"winnerId\":null,\"leftPlayerId\":17,") != std::string::npos);
+	BOOST_CHECK_EQUAL(lines[3].find("{\"event\":\"series\",\"matchId\":7,\"bestOf\":1,\"winnerId\":12"), 0u);
+	BOOST_REQUIRE_EQUAL(logged.size(), 4u);
+	BOOST_CHECK(logged[2].find("player 17 left") != std::string::npos);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

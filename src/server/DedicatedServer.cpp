@@ -662,9 +662,15 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 			else if( !entry.game->isGameValid() )
 			{
 				entry.reported = true;
+				// the player who left is no longer in the player map. Player 1 plays on the left.
+				int left = 0;
+				const bool leftGone = mPlayerMap.count( entry.game->getPlayerID(LEFT_PLAYER) ) == 0;
+				const bool rightGone = mPlayerMap.count( entry.game->getPlayerID(RIGHT_PLAYER) ) == 0;
+				if( leftGone != rightGone )
+					left = leftGone ? entry.player1 : entry.player2;
 				mTournament->gameAbandoned( entry.matchId,
 							entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER),
-							entry.startedAt, std::chrono::system_clock::now() );
+							entry.startedAt, std::chrono::system_clock::now(), left );
 			}
 		}
 
@@ -783,7 +789,8 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 
 	SWLS_Games++;
 	mGameList.push_back( game );
-	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false } );
+	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
+												match.player1, match.player2 } );
 
 	syslog(LOG_NOTICE, "Match %d game %d started: '%s' vs. '%s', rules %s, %d points, speed %d, best of %d",
 		   match.matchId, order.game, left.getName().c_str(), right.getName().c_str(),
@@ -808,7 +815,8 @@ void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
 
 		// the player's name is the nickname from the players file since the join code was accepted
 		RakNet::BitStream stream;
-		writeTournamentStatus( stream, status, opponent, p.second->getName() );
+		unsigned nextGameIn = status.nextGameAt > now_ms ? (unsigned)(status.nextGameAt - now_ms) : 0;
+		writeTournamentStatus( stream, status, opponent, p.second->getName(), nextGameIn );
 		mServer->Send( stream, LOW_PRIORITY, RELIABLE_ORDERED, p.first );
 	}
 }

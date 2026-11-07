@@ -83,6 +83,8 @@ std::string gameReportJson(const GameReport& r)
 	json += ",\"game\":" + std::to_string(r.game);
 	json += std::string(",\"status\":\"") + (r.finished ? "finished" : "abandoned") + "\"";
 	json += ",\"winnerId\":" + (r.finished ? std::to_string(r.winnerId) : std::string("null"));
+	if (!r.finished && r.leftPlayerId > 0)
+		json += ",\"leftPlayerId\":" + std::to_string(r.leftPlayerId);
 	json += ",\"points\":[{\"playerId\":" + std::to_string(r.player1) + ",\"points\":" + std::to_string(r.points1) + "}";
 	json += ",{\"playerId\":" + std::to_string(r.player2) + ",\"points\":" + std::to_string(r.points2) + "}]";
 	json += ",\"startedAt\":\"" + formatUtcTime(r.startedAt) + "\"";
@@ -91,7 +93,7 @@ std::string gameReportJson(const GameReport& r)
 }
 
 void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStatus& status,
-						const std::string& opponent, const std::string& ownName)
+						const std::string& opponent, const std::string& ownName, unsigned nextGameInMs)
 {
 	stream.Write( (unsigned char)ID_LOBBY );
 	stream.Write( (unsigned char)LobbyPacketType::TOURNAMENT_STATUS );
@@ -103,6 +105,7 @@ void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStat
 	out->uint32( status.ownWins );
 	out->uint32( status.opponentWins );
 	out->string( ownName );
+	out->uint32( nextGameInMs );
 }
 
 TournamentStatusData readTournamentStatus(GenericIn& in)
@@ -118,6 +121,9 @@ TournamentStatusData readTournamentStatus(GenericIn& in)
 	in.uint32(data.ownWins);
 	in.uint32(data.opponentWins);
 	in.string(data.ownName);
+	in.uint32(data.nextGameInMs);
+	if (data.nextGameInMs > MAX_NEXT_GAME_DELAY_MS)
+		data.nextGameInMs = MAX_NEXT_GAME_DELAY_MS;
 	if (!isValidNickname(data.opponent))
 		data.opponent.clear();
 	if (!isValidNickname(data.ownName))
@@ -156,7 +162,11 @@ void TournamentLog::gameEnded(const GameReport& r)
 			text += " finished " + std::to_string(r.points1) + ":" + std::to_string(r.points2)
 				+ ", winner " + std::to_string(r.winnerId);
 		else
+		{
 			text += " abandoned at " + std::to_string(r.points1) + ":" + std::to_string(r.points2);
+			if (r.leftPlayerId > 0)
+				text += ", player " + std::to_string(r.leftPlayerId) + " left";
+		}
 		mLog(false, text);
 	}
 	append("{\"event\":\"game\",\"report\":" + gameReportJson(r) + "}");
@@ -193,7 +203,8 @@ void TournamentLog::append(const std::string& line)
 bool PlayerTournamentStatus::operator==(const PlayerTournamentStatus& o) const
 {
 	return status == o.status && matchId == o.matchId && opponentId == o.opponentId && game == o.game
-		&& bestOf == o.bestOf && ownWins == o.ownWins && opponentWins == o.opponentWins;
+		&& bestOf == o.bestOf && ownWins == o.ownWins && opponentWins == o.opponentWins
+		&& nextGameAt == o.nextGameAt;
 }
 
 TournamentDirector::TournamentDirector(unsigned maxRunning, unsigned nextGameDelayMs)
@@ -457,11 +468,14 @@ void TournamentDirector::gameFinished(int matchId, int winner, int points1, int 
 	else
 	{
 		s.cooling = true;
-		s.cooldownUntil = now_ms + mNextGameDelayMs;
+		// a match may set its own pause, otherwise the server config decides
+		const unsigned delay = s.playing.nextGameDelay > 0 ? (unsigned)s.playing.nextGameDelay * 1000u : mNextGameDelayMs;
+		s.cooldownUntil = now_ms + delay;
 	}
 }
 
-void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt)
+void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt,
+									int leftPlayerId)
 {
 	auto found = mSeries.find(matchId);
 	if (found == mSeries.end() || !found->second.running)
@@ -474,6 +488,8 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	report.matchId = matchId;
 	report.game = s.playingGame;
 	report.finished = false;
+	if (s.playing.hasPlayer(leftPlayerId))
+		report.leftPlayerId = leftPlayerId;
 	report.player1 = s.playing.player1;
 	report.points1 = points1;
 	report.player2 = s.playing.player2;
@@ -526,6 +542,7 @@ PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long 
 		if (s.cooling && now_ms < s.cooldownUntil)
 		{
 			fill(s, TournamentStatus::NEXT_GAME);
+			result.nextGameAt = s.cooldownUntil;
 			return result;
 		}
 	}

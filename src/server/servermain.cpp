@@ -65,8 +65,6 @@ static bool g_run_in_foreground = false;
 static bool g_print_syslog_to_stderr = false;
 static std::string g_config_file = "server.xml";
 static std::atomic<bool> g_run_server(true); // set this variable to false to stop the server
-// pause between two games of a best-of series in tournament mode
-static const unsigned TOURNAMENT_NEXT_GAME_DELAY_MS = 5000;
 
 // ...
 void printHelp();
@@ -112,6 +110,7 @@ int main(int argc, char** argv)
 	std::string tournamentPlayersFile;
 	std::string tournamentResultsFile;
 	int tournamentMaxMatches = 0;
+	int tournamentNextGameDelay = DEFAULT_NEXT_GAME_DELAY;
 
 	UserConfig config;
 	try
@@ -128,6 +127,13 @@ int main(int argc, char** argv)
 			tournamentMaxMatches = config.getInteger("tournament_max_matches", 0);
 			if(tournamentMaxMatches < 0)
 				tournamentMaxMatches = 0;
+			tournamentNextGameDelay = config.getInteger("tournament_next_game_delay", DEFAULT_NEXT_GAME_DELAY);
+			if(tournamentNextGameDelay != clampNextGameDelay(tournamentNextGameDelay))
+			{
+				syslog(LOG_ERR, "tournament_next_game_delay must be %d to %d seconds, using %d",
+					   MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, clampNextGameDelay(tournamentNextGameDelay));
+				tournamentNextGameDelay = clampNextGameDelay(tournamentNextGameDelay);
+			}
 		}
 
 		// bring that value into a sane range
@@ -156,7 +162,7 @@ int main(int argc, char** argv)
 		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
 		server.setJoinCodeGate(std::move(gate));
 
-		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, TOURNAMENT_NEXT_GAME_DELAY_MS));
+		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
 		director->setEvents(std::make_shared<TournamentLog>(tournamentResultsFile, [](bool problem, const std::string& message){
 			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
 		}));

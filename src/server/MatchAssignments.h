@@ -31,6 +31,10 @@ constexpr int MIN_MATCH_SPEED = 30;
 constexpr int MAX_MATCH_SPEED = 120;
 constexpr int MAX_MATCH_BEST_OF = 99;
 constexpr int MAX_MATCH_WINS = 99;
+/// Pause between two games of a series, in seconds.
+constexpr int MIN_NEXT_GAME_DELAY = 3;
+constexpr int MAX_NEXT_GAME_DELAY = 120;
+constexpr int DEFAULT_NEXT_GAME_DELAY = 10;
 
 /// A match that the tournament site assigned to two players.
 /// The fields have the names and meanings of a match in the sync of the site.
@@ -54,6 +58,8 @@ struct MatchAssignment
 	/// Games player 1 and player 2 have won so far, as the site counts them. -1 when the file does not say.
 	int wins1 = -1;
 	int wins2 = -1;
+	/// Seconds between two games of the series. -1 when the file does not say, then the server config decides.
+	int nextGameDelay = -1;
 
 	bool hasPlayer(int playerId) const { return playerId == player1 || playerId == player2; }
 	int opponentOf(int playerId) const { return playerId == player1 ? player2 : player1; }
@@ -64,6 +70,9 @@ bool operator!=(const MatchAssignment& a, const MatchAssignment& b);
 
 /// True if a score to win, from a file or from a server, is in the range a match can have.
 bool isValidScoreToWin(int scoreToWin);
+
+/// Brings a pause between two games, in seconds, into the allowed range.
+int clampNextGameDelay(int seconds);
 
 /// True if name is a plain rules file name such as default.lua, without a folder.
 bool isValidRuleFileName(const std::string& name);

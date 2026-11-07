@@ -206,6 +206,7 @@ enum MessageType
 //		games won by the player (uint32)
 //		games won by the opponent (uint32)
 //		own nickname (string), shown instead of the name in the options
+//		milliseconds until the next game of the series starts (uint32), 0 when none waits
 //
 // ID_RULES_CHECKSUM
 //	In tournament mode the server also sends this to a player in a finished game,

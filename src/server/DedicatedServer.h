@@ -157,6 +157,9 @@ class DedicatedServer
 			std::shared_ptr<NetworkGame> game;
 			WallTime startedAt;
 			bool reported;
+			// player ids on the left and the right
+			int player1;
+			int player2;
 		};
 		std::vector<TournamentGame> mTournamentGames;
 		// status each player got last

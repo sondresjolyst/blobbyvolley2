@@ -50,6 +50,8 @@ struct GameReport
 	bool finished = false;
 	/// Player id of the winner, 0 for an abandoned game.
 	int winnerId = 0;
+	/// Player id of the player who left an abandoned game, 0 when it is not known.
+	int leftPlayerId = 0;
 	int player1 = 0;
 	int points1 = 0;
 	int player2 = 0;
@@ -125,6 +127,8 @@ struct PlayerTournamentStatus
 	int bestOf = 0;
 	int ownWins = 0;
 	int opponentWins = 0;
+	/// Monotonic time in milliseconds when the next game starts, 0 unless the status is NEXT_GAME.
+	unsigned long long nextGameAt = 0;
 
 	bool operator==(const PlayerTournamentStatus& o) const;
 	bool operator!=(const PlayerTournamentStatus& o) const { return !(*this == o); }
@@ -141,11 +145,16 @@ struct TournamentStatusData
 	unsigned opponentWins = 0;
 	/// The nickname of the player who gets the packet, empty when the server did not send one.
 	std::string ownName;
+	/// Milliseconds until the next game starts, as the server counted when it sent the packet.
+	unsigned nextGameInMs = 0;
 };
+
+/// Longest wait for the next game that a client accepts from a server.
+constexpr unsigned MAX_NEXT_GAME_DELAY_MS = 60000;
 
 /// Writes a whole TOURNAMENT_STATUS packet, from ID_LOBBY on.
 void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStatus& status,
-						const std::string& opponent, const std::string& ownName);
+						const std::string& opponent, const std::string& ownName, unsigned nextGameInMs);
 
 /// Reads the body of a TOURNAMENT_STATUS packet, after the packet type.
 /// A name that is not a valid nickname is read as empty.
@@ -197,7 +206,7 @@ class TournamentDirector
 		};
 
 		/// \param maxRunning most matches that play at the same time, 0 for no limit
-		/// \param nextGameDelayMs pause between two games of a series
+		/// \param nextGameDelayMs pause between two games of a series, unless the match sets its own
 		TournamentDirector(unsigned maxRunning, unsigned nextGameDelayMs);
 
 		void setEvents(std::shared_ptr<TournamentEvents> events);
@@ -229,7 +238,8 @@ class TournamentDirector
 
 		/// A running game ended without a winner, for example because a player left.
 		/// The match then waits until its assignment brings a new nextGame or awaitingDecision false.
-		void gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt);
+		void gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt,
+						int leftPlayerId = 0);
 
 		PlayerTournamentStatus statusOf(int playerId, unsigned long long now_ms) const;
 

@@ -49,7 +49,7 @@ bool operator==(const MatchAssignment& a, const MatchAssignment& b)
 	return a.matchId == b.matchId && a.player1 == b.player1 && a.player2 == b.player2
 		&& a.ruleFile == b.ruleFile && a.scoreToWin == b.scoreToWin && a.speed == b.speed
 		&& a.bestOf == b.bestOf && a.nextGame == b.nextGame && a.awaitingDecision == b.awaitingDecision
-		&& a.wins1 == b.wins1 && a.wins2 == b.wins2;
+		&& a.wins1 == b.wins1 && a.wins2 == b.wins2 && a.nextGameDelay == b.nextGameDelay;
 }
 
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
@@ -60,6 +60,15 @@ bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
 bool isValidScoreToWin(int scoreToWin)
 {
 	return scoreToWin >= MIN_MATCH_SCORE_TO_WIN && scoreToWin <= MAX_MATCH_SCORE_TO_WIN;
+}
+
+int clampNextGameDelay(int seconds)
+{
+	if (seconds < MIN_NEXT_GAME_DELAY)
+		return MIN_NEXT_GAME_DELAY;
+	if (seconds > MAX_NEXT_GAME_DELAY)
+		return MAX_NEXT_GAME_DELAY;
+	return seconds;
 }
 
 bool isValidRuleFileName(const std::string& name)
@@ -171,6 +180,11 @@ bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPla
 			|| !readInt(element, "wins2", 0, MAX_MATCH_WINS, match.wins2))
 		{
 			warnings.push_back(named + " has invalid wins, skipped");
+			continue;
+		}
+		if (!readInt(element, "nextGameDelay", MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, match.nextGameDelay))
+		{
+			warnings.push_back(named + " has an invalid nextGameDelay, skipped");
 			continue;
 		}
 		const int needed = match.bestOf / 2 + 1;

@@ -13,6 +13,8 @@
 	<var name="tournament_players_file" value="tournament_players.xml"/>
 	<!-- Most assigned matches that play at the same time in tournament mode. 1 plays one match at a time, 0 means no limit. -->
 	<var name="tournament_max_matches" value="0"/>
+	<!-- Seconds between two games of a series, 3 to 120. A match in the players file can set its own with nextGameDelay. -->
+	<var name="tournament_next_game_delay" value="10"/>
 	<!-- Each finished game and series is added to this file as a line of JSON. Leave it empty to only log them. -->
 	<var name="tournament_results_file" value="tournament_results.jsonl"/>
 </userconfig>
