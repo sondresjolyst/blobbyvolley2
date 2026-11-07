@@ -26,6 +26,10 @@ RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
+# The release workflow passes the release version, such as 0.1.0. Builds of main pass dev.
+ARG BLOBBY_VERSION=dev
+LABEL org.opencontainers.image.title="blobby-server"       org.opencontainers.image.version="${BLOBBY_VERSION}"       org.opencontainers.image.source="https://github.com/sondresjolyst/blobbyvolley2"       org.opencontainers.image.licenses="GPL-2.0-or-later"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libsdl2-2.0-0 \
