@@ -65,8 +65,15 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		~NetworkGame();
 
 		/// Sends the rules checksum to the players and starts the game thread. Call it once the
-		/// players know this game, so that their answer reaches it.
+		/// players know this game, so that their answer reaches it. A second call does nothing.
 		void start();
+
+		/// A player who has not answered the checksum gets it again after interval, at most maxSends
+		/// times in all. Then the game ends without starting. Call it before start().
+		void setRulesChecksumRepeat(std::chrono::milliseconds interval, int maxSends);
+
+		/// True if the game ended because a player never answered the checksum.
+		bool didNotStart() const { return mNotStarted; }
 
 		void injectPacket(const packet_ptr& packet);
 
@@ -142,7 +149,14 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		bool mRulesSent[MAX_PLAYERS];
 		int mRulesChecksum = 0;
 		std::chrono::steady_clock::time_point mRulesChecksumSentAt;
+		// by default about 15 s in all before the game gives up
+		std::chrono::milliseconds mRulesChecksumRepeat{3000};
+		int mMaxRulesChecksumSends = 5;
+		int mRulesChecksumSends = 0;
+		bool mStartCalled = false;
+		std::atomic<bool> mNotStarted{false};
 		void sendRulesChecksum();
+		void giveUpStart();
 		std::vector<char> mRulesString;
 };
 

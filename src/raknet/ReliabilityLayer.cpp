@@ -2338,7 +2338,9 @@ bool ReliabilityLayer::IsExpiredTime(unsigned int input, unsigned int currentTim
 	if (IsReceivedPacketHole(input, currentTime))
 		input -= TIMEOUT_TIME*100;
 
-	// the clock starts at 0 on some systems and wraps, so compare the difference
+	// The clock starts at 0 on some systems and wraps, so compare the difference. A signed
+	// difference is right for ages below 2^31 ms. Entries leave the list after about 10 s,
+	// and holes are stored TIMEOUT_TIME * 100 ms ahead, both far below that limit.
 	return static_cast<int>(currentTime - input) > static_cast<int>(TIMEOUT_TIME);
 }
 

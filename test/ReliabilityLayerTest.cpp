@@ -290,6 +290,27 @@ BOOST_FIXTURE_TEST_CASE( late_packet_across_the_clock_wrap_is_delivered, Reliabi
 	BOOST_CHECK(result[1] == first.bytes);
 }
 
+BOOST_FIXTURE_TEST_CASE( a_packet_seen_after_a_gap_is_dropped_once, ReliabilityLayerFixture )
+{
+	// packet 1 leaves a hole for packet 0. A second packet 1 finds a received time in its
+	// slot, not a hole, and is dropped. Packet 0 still fills its hole.
+	now = 1000;
+	Part late{UNRELIABLE, 0, 0, 0, makeBytes(4, 71)};
+	Part early{UNRELIABLE, 0, 0, 0, makeBytes(4, 73)};
+	packetNumber = 1;
+	receive(late);
+	now = 1500;
+	packetNumber = 1;
+	receive(late);
+	packetNumber = 0;
+	receive(early);
+
+	auto result = delivered();
+	BOOST_REQUIRE_EQUAL(result.size(), 2u);
+	BOOST_CHECK(result[0] == late.bytes);
+	BOOST_CHECK(result[1] == early.bytes);
+}
+
 BOOST_FIXTURE_TEST_CASE( a_packet_seen_before_is_still_dropped, ReliabilityLayerFixture )
 {
 	now = 1000;

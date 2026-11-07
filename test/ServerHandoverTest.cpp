@@ -51,7 +51,8 @@ namespace
 {
 	// RakNet binds its sockets with SO_REUSEADDR, so a server can start on a port that another
 	// socket uses and then miss its packets. A plain socket finds out whether the port is free.
-	// The ports are below the ephemeral range of Linux, macOS and Windows, so no client gets them.
+	// Ports 20000 to 32000 lie below the ephemeral ranges, which start at 32768 on Linux and at
+	// 49152 on macOS and Windows, so no client socket gets one of them.
 	unsigned short freeTestPort()
 	{
 		static std::mt19937 random{std::random_device{}()};
@@ -247,6 +248,8 @@ namespace
 			{
 				ServerInfo info("test");
 				info.port = freeTestPort();
+				if (info.port == 0)
+					continue;
 				try
 				{
 					server.reset(new DedicatedServer(info, {"default.lua"}, {75.f}, 8));
@@ -421,67 +424,112 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE( NetworkGameStartTest )
 
-BOOST_AUTO_TEST_CASE( rules_checksum_goes_out_when_the_game_starts )
+namespace
 {
-	FileSystem fs("./test");
-	fs.addToSearchPath(BLOBBY_TEST_DATA_DIR);
-
-	// a bare server, so the test decides when the game starts
-	ThreadSafeRakServer server;
-	unsigned short port = 0;
-	for (int attempt = 0; attempt < 50 && port == 0; ++attempt)
+	// a bare server with two connected clients, so a test decides when a game starts
+	struct BareServerFixture
 	{
-		unsigned short candidate = freeTestPort();
-		if (server.access([&](RakServer& srv){ return srv.Start(4, 1, candidate); }))
-			port = candidate;
-	}
-	BOOST_REQUIRE(port != 0);
+		FileSystem fs;
+		ThreadSafeRakServer server;
+		Client left;
+		Client right;
+		std::vector<PlayerID> ids;
+		// gets the packets of the clients, as the server does for a running game
+		std::shared_ptr<NetworkGame> game;
 
-	Client left;
-	Client right;
-	BOOST_REQUIRE(left.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
-	BOOST_REQUIRE(right.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
-
-	// the ids of the clients as the server sees them
-	std::vector<PlayerID> ids;
-	auto pump = [&](const std::function<bool()>& done, int timeout_ms)
-	{
-		auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-		while (std::chrono::steady_clock::now() < end)
+		BareServerFixture() : fs("./test")
 		{
-			while (packet_ptr packet = server.access([](RakServer& srv){ return srv.Receive(); }))
+			fs.addToSearchPath(BLOBBY_TEST_DATA_DIR);
+			unsigned short port = 0;
+			for (int attempt = 0; attempt < 50 && port == 0; ++attempt)
 			{
-				if (packet->data[0] == ID_NEW_INCOMING_CONNECTION)
-					ids.push_back(packet->playerId);
+				unsigned short candidate = freeTestPort();
+				if (candidate == 0)
+					continue;
+				if (server.access([&](RakServer& srv){ return srv.Start(4, 1, candidate); }))
+					port = candidate;
 			}
-			left.drain();
-			right.drain();
-			if (done())
-				return true;
-			std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		}
-		return false;
-	};
-	BOOST_REQUIRE(pump([&](){ return ids.size() == 2 && left.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0
-		&& right.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0; }, 8000));
+			BOOST_REQUIRE(port != 0);
 
+			BOOST_REQUIRE(left.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
+			BOOST_REQUIRE(right.rak.Connect("127.0.0.1", port, 0, 0, RAKNET_THREAD_SLEEP_TIME));
+			// the ids of the clients as the server sees them
+			BOOST_REQUIRE(pump([&](){ return ids.size() == 2 && left.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0
+				&& right.count(ID_CONNECTION_REQUEST_ACCEPTED) > 0; }, 8000));
+		}
+
+		~BareServerFixture()
+		{
+			if (game)
+				game->finish();
+			left.rak.Disconnect(0);
+			right.rak.Disconnect(0);
+			server.access([](RakServer& srv){ srv.Disconnect(0); });
+		}
+
+		bool pump(const std::function<bool()>& done, int timeout_ms)
+		{
+			auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+			while (std::chrono::steady_clock::now() < end)
+			{
+				while (packet_ptr packet = server.access([](RakServer& srv){ return srv.Receive(); }))
+				{
+					if (packet->data[0] == ID_NEW_INCOMING_CONNECTION)
+						ids.push_back(packet->playerId);
+					else if (game)
+						game->injectPacket(packet);
+				}
+				left.drain();
+				right.drain();
+				if (done())
+					return true;
+				std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			}
+			return false;
+		}
+	};
+}
+
+BOOST_FIXTURE_TEST_CASE( rules_checksum_goes_out_when_the_game_starts, BareServerFixture )
+{
 	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
 	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
-	{
-		auto game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "default.lua", 15, 75.f);
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "default.lua", 15, 75.f);
 
-		// nothing goes out before start, so an answer cannot come before the players know the game
-		pump([](){ return false; }, 500);
-		BOOST_CHECK_EQUAL(left.count(ID_RULES_CHECKSUM) + right.count(ID_RULES_CHECKSUM), 0);
+	// nothing goes out before start, so an answer cannot come before the players know the game
+	pump([](){ return false; }, 500);
+	BOOST_CHECK_EQUAL(left.count(ID_RULES_CHECKSUM) + right.count(ID_RULES_CHECKSUM), 0);
 
-		game->start();
-		BOOST_CHECK(pump([&](){ return left.count(ID_RULES_CHECKSUM) == 1 && right.count(ID_RULES_CHECKSUM) == 1; }, 8000));
-		game->finish();
-	}
+	game->start();
+	BOOST_CHECK(pump([&](){ return left.count(ID_RULES_CHECKSUM) == 1 && right.count(ID_RULES_CHECKSUM) == 1; }, 8000));
 
-	left.rak.Disconnect(0);
-	right.rak.Disconnect(0);
-	server.access([](RakServer& srv){ srv.Disconnect(0); });
+	// a second start does nothing
+#ifdef NDEBUG
+	game->start();
+	pump([](){ return false; }, 300);
+	BOOST_CHECK_EQUAL(left.count(ID_RULES_CHECKSUM), 1);
+#endif
+	game->finish();
+}
+
+BOOST_FIXTURE_TEST_CASE( game_ends_when_a_player_never_answers, BareServerFixture )
+{
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
+	right.checksumsToIgnore = 100;
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "default.lua", 15, 75.f);
+	game->setRulesChecksumRepeat(std::chrono::milliseconds(200), 3);
+	game->start();
+
+	BOOST_REQUIRE(pump([&](){ return !game->isGameValid(); }, 8000));
+	BOOST_CHECK(game->didNotStart());
+	// the silent player was asked three times, the other one once, and learns the game is off
+	BOOST_CHECK(pump([&](){ return left.count(ID_OPPONENT_DISCONNECTED) == 1; }, 2000));
+	BOOST_CHECK_EQUAL(right.count(ID_RULES_CHECKSUM), 3);
+	BOOST_CHECK_EQUAL(left.count(ID_RULES_CHECKSUM), 1);
+	BOOST_CHECK_EQUAL(right.count(ID_OPPONENT_DISCONNECTED), 0);
+	BOOST_CHECK_EQUAL(left.count(ID_GAME_READY) + right.count(ID_GAME_READY), 0);
+	game->finish();
 }
 
 BOOST_AUTO_TEST_CASE( game_starts_when_the_first_checksum_gets_no_answer )
