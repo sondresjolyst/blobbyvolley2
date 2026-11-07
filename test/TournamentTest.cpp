@@ -15,6 +15,7 @@
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
 #include "GenericIO.h"
+#include "TestServer.h"
 
 namespace
 {
@@ -48,30 +49,6 @@ namespace
 		m.bestOf = bestOf;
 		return m;
 	}
-
-	PlayerID makeID(unsigned short port)
-	{
-		PlayerID id;
-		id.binaryAddress = 0x0100007F;
-		id.port = port;
-		return id;
-	}
-
-	// remembers every event
-	struct RecordingEvents : public TournamentEvents
-	{
-		struct Connected { int matchId, player1, player2; };
-		std::vector<Connected> connected;
-		std::vector<GameReport> games;
-		std::vector<SeriesResult> series;
-
-		void matchConnected(int matchId, int player1, int player2) override
-		{
-			connected.push_back(Connected{matchId, player1, player2});
-		}
-		void gameEnded(const GameReport& report) override { games.push_back(report); }
-		void seriesEnded(const SeriesResult& result) override { series.push_back(result); }
-	};
 
 	struct DirectorFixture
 	{

@@ -10,6 +10,7 @@
 #include "server/JoinCodes.h"
 #include "server/NetworkPlayer.h"
 #include "TestDir.h"
+#include "TestServer.h"
 
 namespace
 {
@@ -19,14 +20,6 @@ namespace
 		"\t<player id=\"12\" nickname=\"Ola\" code=\"K7QM2XPR4T\"/>\n"
 		"\t<player id=\"17\" nickname=\"Kari\" code=\"B9HNZ3WD6F\"/>\n"
 		"</tournament>\n";
-
-	PlayerID makeID(unsigned short port)
-	{
-		PlayerID id;
-		id.binaryAddress = 0x0100007F;
-		id.port = port;
-		return id;
-	}
 
 	struct LogCapture
 	{

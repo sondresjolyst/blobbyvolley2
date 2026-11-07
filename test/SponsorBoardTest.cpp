@@ -4,21 +4,10 @@
 #include <cstdint>
 #include <vector>
 #include "SponsorBoard.h"
+#include "TestBmp.h"
 
 namespace
 {
-	void putU16(std::vector<char>& d, std::size_t at, std::uint16_t v)
-	{
-		d[at] = char(v & 0xFF);
-		d[at + 1] = char(v >> 8);
-	}
-
-	void putU32(std::vector<char>& d, std::size_t at, std::uint32_t v)
-	{
-		for(int i = 0; i < 4; ++i)
-			d[at + i] = char((v >> (8 * i)) & 0xFF);
-	}
-
 	// builds an uncompressed BMP with a BITMAPINFOHEADER
 	std::vector<char> makeBmp(std::int32_t width, std::int32_t height, std::uint16_t bpp = 24)
 	{
@@ -32,16 +21,7 @@ namespace
 		const std::uint32_t stride = (clampSize(width) * bpp / 8 + 3) / 4 * 4;
 		const std::uint32_t size = 54 + stride * absHeight;
 		std::vector<char> d(size, 0);
-		d[0] = 'B';
-		d[1] = 'M';
-		putU32(d, 2, size);
-		putU32(d, 10, 54);
-		putU32(d, 14, 40);
-		putU32(d, 18, width);
-		putU32(d, 22, height);
-		putU16(d, 26, 1);
-		putU16(d, 28, bpp);
-		putU32(d, 30, 0);
+		writeBmpHeader(d, size, 54, 40, width, height, bpp, 0);
 		return d;
 	}
 
@@ -53,16 +33,7 @@ namespace
 		const std::uint32_t offset = 14 + infoSize;
 		const std::uint32_t size = offset + std::uint32_t(width) * 4 * std::uint32_t(height < 0 ? -height : height);
 		std::vector<char> d(size, 0);
-		d[0] = 'B';
-		d[1] = 'M';
-		putU32(d, 2, size);
-		putU32(d, 10, offset);
-		putU32(d, 14, infoSize);
-		putU32(d, 18, width);
-		putU32(d, 22, height);
-		putU16(d, 26, 1);
-		putU16(d, 28, 32);
-		putU32(d, 30, 3);
+		writeBmpHeader(d, size, offset, infoSize, width, height, 32, 3);
 		putU32(d, 54, r);
 		putU32(d, 58, g);
 		putU32(d, 62, b);

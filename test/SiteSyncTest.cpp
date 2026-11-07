@@ -13,6 +13,7 @@
 #include "server/JoinCodes.h"
 #include "server/MatchAssignments.h"
 #include "base64.h"
+#include "TestBmp.h"
 #include "TestDir.h"
 
 namespace
@@ -68,27 +69,13 @@ namespace
 		return r;
 	}
 
-	void putU32(std::string& d, std::size_t at, std::uint32_t v)
-	{
-		for (int i = 0; i < 4; ++i)
-			d[at + i] = char((v >> (8 * i)) & 0xFF);
-	}
-
 	// a 24-bit BMP that the game accepts
 	std::string makeBmp(int width, int height)
 	{
 		const std::uint32_t stride = (std::uint32_t(width) * 3 + 3) / 4 * 4;
 		const std::uint32_t size = 54 + stride * std::uint32_t(height);
 		std::string d(size, '\0');
-		d[0] = 'B';
-		d[1] = 'M';
-		putU32(d, 2, size);
-		putU32(d, 10, 54);
-		putU32(d, 14, 40);
-		putU32(d, 18, std::uint32_t(width));
-		putU32(d, 22, std::uint32_t(height));
-		d[26] = 1;
-		d[28] = 24;
+		writeBmpHeader(d, size, 54, 40, width, height, 24, 0);
 		for (std::uint32_t i = 54; i < size; ++i)
 			d[i] = char(i * 7);
 		return d;
