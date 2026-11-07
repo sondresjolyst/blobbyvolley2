@@ -312,7 +312,11 @@ namespace
 					{
 						RulesChecksumData rules;
 						if (!readRulesChecksum(stream, rules))
+						{
+							// the client ignores such a packet too, so no game starts
+							logEvent("rules_rejected", "\"scoreToWin\":" + std::to_string(rules.scoreToWin));
 							break;
+						}
 						// answer at once, like the client does in the frame that reads the packet.
 						// The bot does not simulate the game, so it never asks for the rules file.
 						RakNet::BitStream answer;
@@ -333,8 +337,8 @@ namespace
 					}
 					case ID_GAME_UPDATE:
 					{
-						unsigned inputTime = 0;
-						readGameUpdate(stream, inputTime, state);
+						unsigned inputTime = readGameUpdateTime(stream);
+						readGameUpdateState(stream, state);
 						haveState = true;
 						if (playing)
 							stats.update(ticks(), inputTime);

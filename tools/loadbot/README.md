@@ -14,6 +14,7 @@ Each event is one line of JSON on stdout. Every line has the time `t` in seconds
 - `refused`: the server refused the join code, with the reason in `reason`. The bot stops with exit code 3.
 - `status`: the tournament status the server sent, such as the opponent and the series score.
 - `game_offered`: the server starts a game and sent the rules checksum.
+- `rules_rejected`: the rules checksum could not be read or its points to win are not valid. The game client ignores such a packet too, so the bot does not answer and no game starts.
 - `game_start`: the game runs, with the game speed and the opponent.
 - `game_end`: the game is over. `why` is `won_notification` for a game played out, `opponent_disconnected` when the opponent left, `disconnected` when the bot lost its connection and `stopped` when the bot was stopped. `won` is 1 or 0 for a game played out, -1 otherwise. The line also holds the length of the game, the number of state updates, the largest gap between two updates, the round trip of the input and the score.
 - `disconnected`: the connection was lost. The bot connects again after 2 seconds.

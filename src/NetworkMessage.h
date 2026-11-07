@@ -335,9 +335,10 @@ struct GameReadyData
 };
 GameReadyData readGameReady(RakNet::BitStream& stream);
 
-/// Reads an ID_GAME_UPDATE packet into the time of the last input the server got from this client
-/// and the state of the game.
-void readGameUpdate(RakNet::BitStream& stream, unsigned& inputTime, DuelMatchState& state);
+/// Reads the start of an ID_GAME_UPDATE packet: the time of the last input the server got from this client.
+unsigned readGameUpdateTime(RakNet::BitStream& stream);
+/// Reads the state of the game that follows the time in an ID_GAME_UPDATE packet.
+void readGameUpdateState(RakNet::BitStream& stream, DuelMatchState& state);
 
 /// Reads the winning side of an ID_WIN_NOTIFICATION packet. False when it is not a side.
 bool readWinNotification(RakNet::BitStream& stream, int& winner);

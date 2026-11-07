@@ -173,11 +173,18 @@ GameReadyData readGameReady(RakNet::BitStream& stream)
 	return data;
 }
 
-void readGameUpdate(RakNet::BitStream& stream, unsigned& inputTime, DuelMatchState& state)
+unsigned readGameUpdateTime(RakNet::BitStream& stream)
 {
 	stream.IgnoreBytes(1);	// ID_GAME_UPDATE
-	inputTime = 0;
+	unsigned inputTime = 0;
 	stream.Read(inputTime);
+	return inputTime;
+}
+
+void readGameUpdateState(RakNet::BitStream& stream, DuelMatchState& state)
+{
+	/// \todo this is a performance nightmare: we create a new reader for every packet!
+	///			there should be a better way to do that
 	auto in = createGenericReader(&stream);
 	in->generic<DuelMatchState>(state);
 }

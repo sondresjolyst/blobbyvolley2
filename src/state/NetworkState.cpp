@@ -179,10 +179,10 @@ void NetworkGameState::step_impl()
 			case ID_GAME_UPDATE:
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
-				unsigned timeBack = 0;
-				DuelMatchState ms;
-				readGameUpdate(stream, timeBack, ms);
+				unsigned timeBack = readGameUpdateTime(stream);
 				CURRENT_NETWORK_LAG = SDL_GetTicks() - timeBack;
+				DuelMatchState ms;
+				readGameUpdateState(stream, ms);
 				// inject network data into game
 				mMatch->setState( ms );
 				break;
