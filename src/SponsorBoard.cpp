@@ -278,15 +278,24 @@ namespace
 namespace sponsors
 {
 
+bool tryParseBoardStyle(const std::string& name, BoardStyle& style)
+{
+	for(BoardStyle known : {BoardStyle::OFF, BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
+	{
+		if(name == boardStyleName(known))
+		{
+			style = known;
+			return true;
+		}
+	}
+	return false;
+}
+
 BoardStyle parseBoardStyle(const std::string& name)
 {
-	const std::string lower = lowerAscii(trim(name));
-	for(BoardStyle style : {BoardStyle::OFF, BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
-	{
-		if(lower == boardStyleName(style))
-			return style;
-	}
-	return BoardStyle::LED;
+	BoardStyle style = BoardStyle::LED;
+	tryParseBoardStyle(lowerAscii(trim(name)), style);
+	return style;
 }
 
 const char* boardStyleName(BoardStyle style)
