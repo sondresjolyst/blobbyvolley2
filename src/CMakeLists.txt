@@ -40,6 +40,7 @@ set(common_SRC
 	Sha256.cpp Sha256.h
 	SponsorBoard.cpp SponsorBoard.h
 	SponsorSync.cpp SponsorSync.h
+	StringUtil.cpp StringUtil.h
 	server/DedicatedServer.cpp server/DedicatedServer.h
 	server/NetworkPlayer.cpp server/NetworkPlayer.h
 	server/NetworkGame.cpp server/NetworkGame.h

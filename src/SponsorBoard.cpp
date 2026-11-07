@@ -23,12 +23,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* includes */
 #include <algorithm>
-#include <cctype>
 #include <exception>
 #include <iostream>
 
 #include "FileRead.h"
 #include "FileSystem.h"
+#include "StringUtil.h"
 
 /* implementation */
 namespace
@@ -56,9 +56,7 @@ namespace
 	{
 		if(name.size() < 4)
 			return false;
-		std::string ext = name.substr(name.size() - 4);
-		std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-		return ext == ".bmp";
+		return lowerAscii(name.substr(name.size() - 4)) == ".bmp";
 	}
 }
 
@@ -282,12 +280,7 @@ namespace sponsors
 
 BoardStyle parseBoardStyle(const std::string& name)
 {
-	std::string lower = name;
-	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-	const auto first = lower.find_first_not_of(" \t\r\n");
-	const auto last = lower.find_last_not_of(" \t\r\n");
-	lower = first == std::string::npos ? std::string() : lower.substr(first, last - first + 1);
-
+	const std::string lower = lowerAscii(trim(name));
 	for(BoardStyle style : {BoardStyle::OFF, BoardStyle::LED, BoardStyle::PRINTED, BoardStyle::WOOD, BoardStyle::SLIM, BoardStyle::PADDED})
 	{
 		if(lower == boardStyleName(style))

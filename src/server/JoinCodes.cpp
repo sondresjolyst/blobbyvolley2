@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "tinyxml2.h"
 
 #include "NetworkPlayer.h"
+#include "StringUtil.h"
 
 namespace
 {
@@ -74,26 +75,11 @@ namespace
 		}
 		return true;
 	}
-
-	std::string lowerAscii(std::string text)
-	{
-		for (auto& c : text)
-		{
-			if (c >= 'A' && c <= 'Z')
-				c = static_cast<char>(c - 'A' + 'a');
-		}
-		return text;
-	}
 }
 
 std::string normalizeJoinCode(const std::string& raw)
 {
-	std::size_t begin = raw.find_first_not_of(' ');
-	if (begin == std::string::npos)
-		return "";
-	std::size_t end = raw.find_last_not_of(' ');
-	std::string code = raw.substr(begin, end - begin + 1);
-
+	std::string code = trim(raw, " ");
 	for (auto& c : code)
 	{
 		if (c >= 'a' && c <= 'z')

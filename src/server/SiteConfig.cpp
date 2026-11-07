@@ -36,18 +36,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <unistd.h>
 #endif
 
+#include "StringUtil.h"
+
 namespace
 {
-	std::string lower(std::string text)
-	{
-		for (auto& c : text)
-		{
-			if (c >= 'A' && c <= 'Z')
-				c = static_cast<char>(c - 'A' + 'a');
-		}
-		return text;
-	}
-
 	bool isHostChar(char c)
 	{
 		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-';
@@ -55,16 +47,8 @@ namespace
 
 	bool isPort(const std::string& text)
 	{
-		if (text.empty() || text.size() > 5)
-			return false;
-		long value = 0;
-		for (char c : text)
-		{
-			if (c < '0' || c > '9')
-				return false;
-			value = value * 10 + (c - '0');
-		}
-		return value >= 1 && value <= 65535;
+		uint16_t port = 0;
+		return parsePort(text, port, true);
 	}
 
 	// a value from the environment, or nullptr when it is not set or empty
@@ -97,7 +81,7 @@ bool checkSiteUrl(const std::string& url, bool allowHttpLocalhost, std::string& 
 		error = "the site address must start with https://";
 		return false;
 	}
-	const std::string scheme = lower(url.substr(0, schemeEnd));
+	const std::string scheme = lowerAscii(url.substr(0, schemeEnd));
 	if (scheme != "https" && scheme != "http")
 	{
 		error = "the site address must start with https://";
@@ -181,7 +165,7 @@ bool checkSiteUrl(const std::string& url, bool allowHttpLocalhost, std::string& 
 
 	if (scheme == "http")
 	{
-		const std::string h = lower(host);
+		const std::string h = lowerAscii(host);
 		const bool local = h == "localhost" || h == "127.0.0.1" || h == "[::1]";
 		if (!allowHttpLocalhost || !local)
 		{
@@ -190,7 +174,7 @@ bool checkSiteUrl(const std::string& url, bool allowHttpLocalhost, std::string& 
 		}
 	}
 
-	origin = scheme + "://" + lower(host) + (port.empty() ? std::string() : ":" + port);
+	origin = scheme + "://" + lowerAscii(host) + (port.empty() ? std::string() : ":" + port);
 	return true;
 }
 
@@ -216,7 +200,7 @@ bool loadSiteConfig(const SiteConfigFile& file, const EnvironmentFunction& env, 
 	result.tournamentMode = file.tournamentMode;
 	if (const char* mode = fromEnv(env, "BLOBBY_TOURNAMENT"))
 	{
-		const std::string value = lower(mode);
+		const std::string value = lowerAscii(mode);
 		if (value == "1" || value == "true")
 			result.tournamentMode = true;
 		else if (value == "0" || value == "false")
