@@ -12,6 +12,7 @@
 #include "raknet/BitStream.h"
 
 #include "FileSystem.h"
+#include "TestDir.h"
 #include "NetworkMessage.h"
 #include "Sha256.h"
 #include "SponsorSync.h"
@@ -139,8 +140,7 @@ namespace
 	{
 		PhysfsFixture() : fs("./test/")
 		{
-			fs.setWriteDir(".");
-			fs.addToSearchPath(".", true);
+			fs.setWriteDir(testDir());
 		}
 		FileSystem fs;
 	};

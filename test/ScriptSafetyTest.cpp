@@ -5,6 +5,7 @@
 #include "FileRead.h"
 #include "FileSystem.h"
 #include "FileWrite.h"
+#include "TestDir.h"
 #include "GameLogic.h"
 #include "GameLogicState.h"
 
@@ -37,8 +38,7 @@ namespace
 	{
 		ScriptFixture() : mFS("./test")
 		{
-			mFS.setWriteDir(".");
-			mFS.addToSearchPath(".");
+			mFS.setWriteDir(testDir());
 			mFS.addToSearchPath(BLOBBY_TEST_DATA_DIR);
 			mFS.mkdir("rules");
 		}

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "server/SiteConfig.h"
+#include "TestDir.h"
 
 namespace
 {
@@ -205,7 +206,7 @@ BOOST_AUTO_TEST_CASE( paths_go_below_the_data_dir )
 
 BOOST_AUTO_TEST_CASE( atomic_write_replaces_the_whole_file )
 {
-	const std::string path = "blobbytest_atomic.txt";
+	const std::string path = testPath("atomic.txt");
 	std::string error;
 	BOOST_REQUIRE(writeFileAtomically(path, "first version, which is longer", error));
 	BOOST_REQUIRE(writeFileAtomically(path, "second", error));
@@ -223,7 +224,7 @@ BOOST_AUTO_TEST_CASE( atomic_write_replaces_the_whole_file )
 BOOST_AUTO_TEST_CASE( atomic_write_fails_cleanly_in_a_missing_folder )
 {
 	std::string error;
-	BOOST_CHECK(!writeFileAtomically("no_such_folder_blobbytest/file.txt", "x", error));
+	BOOST_CHECK(!writeFileAtomically(testPath("no_such_folder/file.txt"), "x", error));
 	BOOST_CHECK(!error.empty());
 }
 

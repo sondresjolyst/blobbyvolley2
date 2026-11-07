@@ -24,6 +24,7 @@ add_subdirectory(linux)
 add_subdirectory(macos)
 
 if(BUILD_TESTS)
+	enable_testing()
 	add_subdirectory(test)
 endif()
 
