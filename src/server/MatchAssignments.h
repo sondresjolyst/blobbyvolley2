@@ -62,6 +62,9 @@ struct MatchAssignment
 bool operator==(const MatchAssignment& a, const MatchAssignment& b);
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b);
 
+/// True if a score to win, from a file or from a server, is in the range a match can have.
+bool isValidScoreToWin(int scoreToWin);
+
 /// True if name is a plain rules file name such as default.lua, without a folder.
 bool isValidRuleFileName(const std::string& name);
 

@@ -181,25 +181,11 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 	for (const auto& m : matches)
 		listed.insert(m.matchId);
 
-	// forget matches that are gone, but let a running game end first
-	for (auto it = mSeries.begin(); it != mSeries.end(); )
+	// keep matches that are gone, so they are not played again if they come back
+	for (auto& entry : mSeries)
 	{
-		if (listed.count(it->first) == 0)
-		{
-			if (it->second.running)
-			{
-				it->second.listed = false;
-				++it;
-			}
-			else
-			{
-				it = mSeries.erase(it);
-			}
-		}
-		else
-		{
-			++it;
-		}
+		if (listed.count(entry.first) == 0)
+			entry.second.listed = false;
 	}
 
 	for (const auto& m : matches)
@@ -216,7 +202,37 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 		}
 
 		Series& series = found->second;
+		const bool returning = !series.listed;
 		series.listed = true;
+
+		if (m.player1 != series.match.player1 || m.player2 != series.match.player2)
+		{
+			// other players, or the same players on other sides, make a new series.
+			// A running game ends and is reported with the players it started with.
+			++series.epoch;
+			series.match = m;
+			series.nextGame = m.nextGame;
+			series.wins1 = 0;
+			series.wins2 = 0;
+			series.decided = false;
+			series.failed = false;
+			series.held = false;
+			series.cooling = false;
+			series.connectedSent = false;
+			takeWins(series, m);
+			continue;
+		}
+
+		if (returning)
+		{
+			// the file is the truth for a match that comes back
+			if (!series.running && m.nextGame > series.nextGame)
+				series.nextGame = m.nextGame;
+			series.match = m;
+			takeWins(series, m);
+			continue;
+		}
+
 		if (series.match != m)
 		{
 			const MatchAssignment old = series.match;
@@ -283,7 +299,9 @@ bool TournamentDirector::isBusy(int playerId) const
 {
 	for (const auto& s : mSeries)
 	{
-		if ((s.second.running || s.second.cooling) && s.second.match.hasPlayer(playerId))
+		if (s.second.running && s.second.playing.hasPlayer(playerId))
+			return true;
+		if (s.second.cooling && s.second.match.hasPlayer(playerId))
 			return true;
 	}
 	return false;
@@ -307,6 +325,8 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 		Series& s = entry.second;
 		if (!s.listed || s.running || s.cooling || s.decided || s.failed || s.held || s.match.awaitingDecision)
 			continue;
+		if (now_ms < s.retryAt)
+			continue;
 		if (!isConnected(s.match.player1) || !isConnected(s.match.player2))
 			continue;
 		if (isBusy(s.match.player1) || isBusy(s.match.player2))
@@ -315,6 +335,9 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 			break;
 
 		s.running = true;
+		s.playing = s.match;
+		s.playingGame = s.nextGame;
+		s.playingEpoch = s.epoch;
 		++active;
 		if (!s.connectedSent)
 		{
@@ -327,14 +350,14 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 	return orders;
 }
 
-void TournamentDirector::gameNotStarted(int matchId, bool canRetry)
+void TournamentDirector::gameNotStarted(int matchId, bool canRetry, unsigned long long retryAt_ms)
 {
 	auto found = mSeries.find(matchId);
 	if (found == mSeries.end())
 		return;
 	found->second.running = false;
 	found->second.failed = !canRetry;
-	forgetIfUnlisted(matchId);
+	found->second.retryAt = canRetry ? retryAt_ms : 0;
 }
 
 void TournamentDirector::gameFinished(int matchId, int winner, int points1, int points2,
@@ -349,15 +372,23 @@ void TournamentDirector::gameFinished(int matchId, int winner, int points1, int 
 	GameReport report;
 	report.reportId = mMakeReportId();
 	report.matchId = matchId;
-	report.game = s.nextGame;
+	report.game = s.playingGame;
 	report.finished = true;
-	report.winnerId = winner == 1 ? s.match.player1 : s.match.player2;
-	report.player1 = s.match.player1;
+	report.winnerId = winner == 1 ? s.playing.player1 : s.playing.player2;
+	report.player1 = s.playing.player1;
 	report.points1 = points1;
-	report.player2 = s.match.player2;
+	report.player2 = s.playing.player2;
 	report.points2 = points2;
 	report.startedAt = startedAt;
 	report.endedAt = endedAt;
+
+	if (s.playingEpoch != s.epoch)
+	{
+		// the series started over while this game ran, so the game does not count for it
+		if (mEvents)
+			mEvents->gameEnded(report);
+		return;
+	}
 
 	++s.nextGame;
 	if (winner == 1)
@@ -390,8 +421,6 @@ void TournamentDirector::gameFinished(int matchId, int winner, int points1, int 
 		s.cooling = true;
 		s.cooldownUntil = now_ms + mNextGameDelayMs;
 	}
-
-	forgetIfUnlisted(matchId);
 }
 
 void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, WallTime startedAt, WallTime endedAt)
@@ -405,31 +434,25 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	GameReport report;
 	report.reportId = mMakeReportId();
 	report.matchId = matchId;
-	report.game = s.nextGame;
+	report.game = s.playingGame;
 	report.finished = false;
-	report.player1 = s.match.player1;
+	report.player1 = s.playing.player1;
 	report.points1 = points1;
-	report.player2 = s.match.player2;
+	report.player2 = s.playing.player2;
 	report.points2 = points2;
 	report.startedAt = startedAt;
 	report.endedAt = endedAt;
+
+	if (mEvents)
+		mEvents->gameEnded(report);
+
+	if (s.playingEpoch != s.epoch)
+		return;
 
 	// the game is played again under the next number, as after a restart on the site,
 	// but only once the organizer decided
 	++s.nextGame;
 	s.held = true;
-
-	if (mEvents)
-		mEvents->gameEnded(report);
-
-	forgetIfUnlisted(matchId);
-}
-
-void TournamentDirector::forgetIfUnlisted(int matchId)
-{
-	auto found = mSeries.find(matchId);
-	if (found != mSeries.end() && !found->second.listed && !found->second.running)
-		mSeries.erase(found);
 }
 
 PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long long now_ms) const
@@ -453,13 +476,15 @@ PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long 
 	for (const auto& entry : mSeries)
 	{
 		const Series& s = entry.second;
-		if (!s.match.hasPlayer(playerId))
-			continue;
-		if (s.running)
+		if (s.running && s.playing.hasPlayer(playerId))
 		{
 			fill(s, TournamentStatus::PLAYING);
+			result.opponentId = s.playing.opponentOf(playerId);
+			result.game = s.playingGame;
 			return result;
 		}
+		if (!s.match.hasPlayer(playerId))
+			continue;
 		if (s.cooling && now_ms < s.cooldownUntil)
 		{
 			fill(s, TournamentStatus::NEXT_GAME);

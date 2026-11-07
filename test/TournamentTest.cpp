@@ -11,6 +11,9 @@
 #include "server/JoinCodes.h"
 #include "server/MatchAssignments.h"
 #include "server/Tournament.h"
+#include "server/NetworkPlayer.h"
+#include "NetworkMessage.h"
+#include "PlayerIdentity.h"
 
 namespace
 {
@@ -686,9 +689,171 @@ BOOST_AUTO_TEST_CASE( removed_match_finishes_its_running_game )
 	BOOST_REQUIRE(f.director.getSeries(7) != nullptr);
 	f.director.gameFinished(7, 1, 15, 0, f.start, f.end, 0);
 	BOOST_CHECK_EQUAL(f.events->games.size(), 1u);
-	BOOST_CHECK(f.director.getSeries(7) == nullptr);
+	// the series is kept, so the match goes on where it was if it comes back
+	BOOST_REQUIRE(f.director.getSeries(7) != nullptr);
+	BOOST_CHECK(!f.director.getSeries(7)->listed);
+	BOOST_CHECK_EQUAL(f.director.getSeries(7)->wins1, 1);
 	BOOST_CHECK(f.startedIds(100000).empty());
 	BOOST_CHECK(f.director.statusOf(12, 100000).status == TournamentStatus::NO_MATCH);
+}
+
+BOOST_AUTO_TEST_CASE( changed_players_start_a_new_series )
+{
+	DirectorFixture f(0, 0);
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	f.director.setAssignments({ m });
+	for (int id : {12, 17, 21})
+		f.director.playerConnected(id);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+
+	// while game 2 runs, the file swaps the players
+	MatchAssignment swapped = makeMatch(7, 17, 12, 3);
+	f.director.setAssignments({ swapped });
+	const TournamentDirector::Series* s = f.director.getSeries(7);
+	BOOST_CHECK_EQUAL(s->wins1, 0);
+	BOOST_CHECK_EQUAL(s->wins2, 0);
+	BOOST_CHECK_EQUAL(s->nextGame, 1);
+
+	// the running game is reported with the players it started with and does not count
+	f.director.gameFinished(7, 1, 15, 9, f.start, f.end, 0);
+	BOOST_REQUIRE_EQUAL(f.events->games.size(), 2u);
+	BOOST_CHECK_EQUAL(f.events->games[1].game, 2);
+	BOOST_CHECK_EQUAL(f.events->games[1].player1, 12);
+	BOOST_CHECK_EQUAL(f.events->games[1].winnerId, 12);
+	BOOST_CHECK_EQUAL(s->wins1 + s->wins2, 0);
+	BOOST_CHECK(f.events->series.empty());
+
+	// the new series starts at its own first game, with player 17 on the left
+	auto orders = f.director.takeGamesToStart(0);
+	BOOST_REQUIRE_EQUAL(orders.size(), 1u);
+	BOOST_CHECK_EQUAL(orders[0].game, 1);
+	BOOST_CHECK_EQUAL(orders[0].match.player1, 17);
+
+	// another opponent is a new series too
+	f.director.gameAbandoned(7, 0, 0, f.start, f.end);
+	f.director.setAssignments({ makeMatch(7, 17, 21, 3) });
+	BOOST_CHECK(!f.director.getSeries(7)->held);
+	BOOST_CHECK_EQUAL(f.startedIds(0).size(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE( decided_match_that_comes_back_is_not_played_again )
+{
+	DirectorFixture f;
+	MatchAssignment m = makeMatch(7, 12, 17);
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	BOOST_REQUIRE_EQUAL(f.events->series.size(), 1u);
+
+	// the match leaves the file and comes back, as from an old sync
+	f.director.setAssignments({});
+	f.director.setAssignments({ m });
+	BOOST_CHECK(f.startedIds(100000).empty());
+	BOOST_CHECK_EQUAL(f.events->games.size(), 1u);
+	BOOST_CHECK(f.director.statusOf(12, 100000).status == TournamentStatus::MATCH_OVER);
+}
+
+BOOST_AUTO_TEST_CASE( returning_match_takes_the_wins_of_the_file )
+{
+	DirectorFixture f;
+	MatchAssignment m = makeMatch(7, 12, 17, 3);
+	f.director.setAssignments({ m });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameFinished(7, 1, 15, 3, f.start, f.end, 0);
+	f.director.setAssignments({});
+
+	// the site reset the score while the match was away
+	m.wins1 = 0;
+	m.wins2 = 0;
+	m.nextGame = 3;
+	f.director.setAssignments({ m });
+	const TournamentDirector::Series* s = f.director.getSeries(7);
+	BOOST_CHECK_EQUAL(s->wins1, 0);
+	BOOST_CHECK_EQUAL(s->nextGame, 3);
+}
+
+BOOST_AUTO_TEST_CASE( missing_player_is_tried_again_later )
+{
+	DirectorFixture f;
+	f.director.setAssignments({ makeMatch(7, 12, 17) });
+	f.director.playerConnected(12);
+	f.director.playerConnected(17);
+	BOOST_REQUIRE_EQUAL(f.startedIds(0).size(), 1u);
+	f.director.gameNotStarted(7, true, 1000);
+	BOOST_CHECK(f.startedIds(500).empty());
+	BOOST_CHECK(f.startedIds(999).empty());
+	BOOST_CHECK_EQUAL(f.startedIds(1000).size(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE( duplicate_player_ids_are_dropped )
+{
+	JoinCodeTable table;
+	std::vector<std::string> warnings;
+	std::string error;
+	BOOST_REQUIRE(table.parse(
+		"<tournament>\n"
+		"\t<player id=\"12\" nickname=\"Ola\" code=\"K7QM2XPR4T\"/>\n"
+		"\t<player id=\"12\" nickname=\"Olav\" code=\"B9HNZ3WD6F\"/>\n"
+		"\t<player id=\"21\" nickname=\"Per\" code=\"C2DEFGHJKM\"/>\n"
+		"\t<player nickname=\"Anon\" code=\"N3PQRSTUVW\"/>\n"
+		"</tournament>\n", warnings, error));
+	BOOST_CHECK_EQUAL(table.size(), 2u);
+	BOOST_CHECK(table.find("K7QM2XPR4T") == nullptr);
+	BOOST_CHECK(table.find("B9HNZ3WD6F") == nullptr);
+	BOOST_CHECK(table.findById(12) == nullptr);
+	BOOST_CHECK(table.find("N3PQRSTUVW") != nullptr);
+	BOOST_CHECK_EQUAL(warnings.size(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE( score_to_win_from_a_server_is_checked )
+{
+	BOOST_CHECK(isValidScoreToWin(1));
+	BOOST_CHECK(isValidScoreToWin(99));
+	BOOST_CHECK(!isValidScoreToWin(0));
+	BOOST_CHECK(!isValidScoreToWin(100));
+	BOOST_CHECK(!isValidScoreToWin(-5));
+}
+
+BOOST_AUTO_TEST_CASE( enter_server_announces_tournament_support )
+{
+	PlayerIdentity player("K7QM2XPR4T", Color(255, 0, 0), false, RIGHT_PLAYER);
+	RakNet::BitStream stream;
+	makeEnterServerPacket(stream, player);
+
+	// the fields an old server reads come first and are unchanged
+	RakNet::BitStream in(stream.GetData(), stream.GetNumberOfBytesUsed(), false);
+	in.IgnoreBytes(1);
+	NetworkPlayer read(makeID(1000), in);
+	BOOST_CHECK_EQUAL(read.getName(), "K7QM2XPR4T");
+	BOOST_CHECK(read.getDesiredSide() == RIGHT_PLAYER);
+	BOOST_CHECK_EQUAL(readClientFeatures(in) & CLIENT_FEATURE_TOURNAMENT, (uint32_t)CLIENT_FEATURE_TOURNAMENT);
+
+	// an old client sends nothing after the colour
+	RakNet::BitStream old;
+	old.Write((int)RIGHT_PLAYER);
+	char name[16] = "K7QM2XPR4T";
+	old.Write(name, sizeof(name));
+	old.Write((int)0xFF0000);
+	RakNet::BitStream oldIn(old.GetData(), old.GetNumberOfBytesUsed(), false);
+	NetworkPlayer oldPlayer(makeID(1001), oldIn);
+	BOOST_CHECK_EQUAL(readClientFeatures(oldIn), 0u);
+
+	// something else after the colour is not a feature announcement
+	RakNet::BitStream other;
+	other.Write((int)RIGHT_PLAYER);
+	other.Write(name, sizeof(name));
+	other.Write((int)0xFF0000);
+	other.Write((uint32_t)12345);
+	other.Write((uint32_t)CLIENT_FEATURE_TOURNAMENT);
+	RakNet::BitStream otherIn(other.GetData(), other.GetNumberOfBytesUsed(), false);
+	NetworkPlayer otherPlayer(makeID(1002), otherIn);
+	BOOST_CHECK_EQUAL(readClientFeatures(otherIn), 0u);
 }
 
 BOOST_AUTO_TEST_CASE( reports_for_unknown_or_idle_matches_are_ignored )

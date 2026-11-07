@@ -68,6 +68,7 @@ struct JoinCodeEntry
 	\endcode
 	Entries with a bad code or nickname are skipped. A code that appears more than
 	once is dropped for every entry that uses it, since it is not clear who it belongs to.
+	The same goes for a player id.
 	Other elements below the root are ignored, so later versions can add to the file.
 	The match elements of the same file are read by parseMatchAssignments().
 */

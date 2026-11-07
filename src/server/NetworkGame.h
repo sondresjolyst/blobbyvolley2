@@ -85,6 +85,13 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		/// The score of a side, as of the last step. Safe to call from any thread.
 		int getScore( PlayerSide side ) const;
 
+		/// Stops the game thread and handles the packets that are still queued, such as a replay request.
+		void finish();
+		/// The ID_REPLAY packet with the replay of this game. Call it after finish().
+		std::vector<unsigned char> makeReplayPacket() const;
+		/// A replay of the game before this one, sent to a player who asks before this game starts.
+		void setPreviousReplay( PlayerSide side, std::vector<unsigned char> packet );
+
 	private:
 		void broadcastBitstream(const RakNet::BitStream& stream, const RakNet::BitStream& switchedstream);
 		void broadcastBitstream(const RakNet::BitStream& stream);
@@ -119,6 +126,9 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		std::atomic<bool> mGameValid;
 		std::atomic<int> mWinner;
 		std::atomic<int> mScore[MAX_PLAYERS];
+
+		std::mutex mPreviousReplayMutex;
+		std::vector<unsigned char> mPreviousReplay[MAX_PLAYERS];
 
 		bool mRulesSent[MAX_PLAYERS];
 		std::vector<char> mRulesString;

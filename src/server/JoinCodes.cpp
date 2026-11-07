@@ -200,15 +200,32 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 	for (const auto& e : entries)
 		++code_count[e.code];
 
+	// a player id that appears more than once is not clear either
+	std::map<int, int> id_count;
+	for (const auto& e : entries)
+	{
+		if (e.playerId > 0)
+			++id_count[e.playerId];
+	}
+
 	std::map<std::string, JoinCodeEntry> result;
 	std::set<std::string> nicknames;
 	for (const auto& e : entries)
 	{
 		if (code_count[e.code] > 1)
 			continue;
+		if (e.playerId > 0 && id_count[e.playerId] > 1)
+			continue;
 		if (!nicknames.insert(lowerAscii(e.nickname)).second)
 			warnings.push_back("nickname " + e.nickname + " is used by more than one player");
 		result[e.code] = e;
+	}
+
+	for (const auto& c : id_count)
+	{
+		if (c.second > 1)
+			warnings.push_back("player id " + std::to_string(c.first) + " is used by "
+				+ std::to_string(c.second) + " entries, all of them skipped");
 	}
 
 	for (const auto& c : code_count)

@@ -110,6 +110,8 @@ class DedicatedServer
 		void checkTournamentGames(unsigned long long now_ms);
 		void startTournamentGame(const TournamentDirector::GameOrder& order);
 		void endGameOf(NetworkPlayer& player);
+		// stops a finished game and returns its replay packet, empty without a game
+		std::vector<unsigned char> finishForNextGame(const std::shared_ptr<NetworkGame>& game);
 		void sendTournamentStatus(unsigned long long now_ms);
 
 		// raknet server used
@@ -159,4 +161,6 @@ class DedicatedServer
 		std::vector<TournamentGame> mTournamentGames;
 		// status each player got last
 		std::map<PlayerID, PlayerTournamentStatus> mSentStatus;
+		// matches whose missing player was logged already
+		std::set<int> mMissingPlayerLogged;
 };

@@ -52,6 +52,9 @@ namespace
 	// time a refused client gets to receive the reason before the connection closes
 	const std::chrono::milliseconds REFUSED_CLOSE_DELAY(1000);
 
+	// wait before an assigned game whose player could not be found is tried again
+	const unsigned TOURNAMENT_RETRY_DELAY_MS = 1000;
+
 	unsigned long long steadyMilliseconds()
 	{
 		auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -444,9 +447,17 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	}
 
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
+	const uint32_t features = readClientFeatures(data);
 
 	if( mJoinCodes )
 	{
+		// an older client would get stuck at the second game of a series
+		if( (features & CLIENT_FEATURE_TOURNAMENT) == 0 )
+		{
+			refuseEntry( source, EntryRefusedReason::OUTDATED_CLIENT );
+			return;
+		}
+
 		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
 		if( result != JoinCodeGate::Result::ACCEPTED )
 		{
@@ -692,6 +703,14 @@ void DedicatedServer::endGameOf(NetworkPlayer& player)
 	// the game thread stops when the last reference goes away
 }
 
+std::vector<unsigned char> DedicatedServer::finishForNextGame(const std::shared_ptr<NetworkGame>& game)
+{
+	if( !game )
+		return std::vector<unsigned char>();
+	game->finish();
+	return game->makeReplayPacket();
+}
+
 void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& order)
 {
 	const MatchAssignment& match = order.match;
@@ -705,15 +724,21 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 		player2 = mPlayerMap.find( id2 );
 	if( player1 == mPlayerMap.end() || player2 == mPlayerMap.end() )
 	{
-		syslog(LOG_ERR, "Match %d: a player is not connected after all, the game waits", match.matchId);
-		mTournament->gameNotStarted( match.matchId, true );
+		// log once and try again a little later, not on every tick
+		if( mMissingPlayerLogged.insert( match.matchId ).second )
+			syslog(LOG_ERR, "Match %d: a player is not connected after all, the game waits", match.matchId);
+		mTournament->gameNotStarted( match.matchId, true, steadyMilliseconds() + TOURNAMENT_RETRY_DELAY_MS );
 		return;
 	}
+	mMissingPlayerLogged.erase( match.matchId );
 
 	NetworkPlayer& left = *player1->second;
 	NetworkPlayer& right = *player2->second;
 
-	// an earlier game of these players is over, the director only starts free players
+	// an earlier game of these players is over, the director only starts free players.
+	// Its queued packets are handled first, so a replay asked for in time still arrives.
+	std::vector<unsigned char> replayLeft = finishForNextGame( left.getGame() );
+	std::vector<unsigned char> replayRight = left.getGame() == right.getGame() ? replayLeft : finishForNextGame( right.getGame() );
 	endGameOf( left );
 	endGameOf( right );
 
@@ -721,8 +746,9 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	mMatchMaker.removePlayer( id2 );
 
 	// player 1 plays on the left. Each player still sees itself on its own side.
-	bool switchLeft = left.getDesiredSide() != LEFT_PLAYER;
-	bool switchRight = right.getDesiredSide() != RIGHT_PLAYER;
+	// As in the casual lobby, a player without a side is never mirrored.
+	bool switchLeft = left.getDesiredSide() == RIGHT_PLAYER;
+	bool switchRight = right.getDesiredSide() == LEFT_PLAYER;
 
 	std::shared_ptr<NetworkGame> game;
 	try
@@ -744,6 +770,10 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 		mTournament->gameNotStarted( match.matchId );
 		return;
 	}
+
+	// a late replay request reaches the new game, which answers with the old replay
+	game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
+	game->setPreviousReplay( RIGHT_PLAYER, std::move(replayRight) );
 
 	{
 		std::lock_guard<std::mutex> lock( mPlayerMapMutex );

@@ -130,7 +130,33 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 NetworkGame::~NetworkGame()
 {
 	mGameValid = false;
-	mGameThread.join();
+	if (mGameThread.joinable())
+		mGameThread.join();
+}
+
+void NetworkGame::finish()
+{
+	mGameValid = false;
+	if (mGameThread.joinable())
+		mGameThread.join();
+	processPackets();
+}
+
+std::vector<unsigned char> NetworkGame::makeReplayPacket() const
+{
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_REPLAY);
+	std::shared_ptr<GenericOut> out = createGenericWriter( &stream );
+	mRecorder->send( *out );
+	return std::vector<unsigned char>(stream.GetData(), stream.GetData() + stream.GetNumberOfBytesUsed());
+}
+
+void NetworkGame::setPreviousReplay( PlayerSide side, std::vector<unsigned char> packet )
+{
+	if (side != LEFT_PLAYER && side != RIGHT_PLAYER)
+		return;
+	std::lock_guard<std::mutex> lock(mPreviousReplayMutex);
+	mPreviousReplay[side] = std::move(packet);
 }
 
 void NetworkGame::injectPacket(const packet_ptr& packet)
@@ -272,6 +298,19 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 
 		case ID_REPLAY:
 		{
+			// before this game starts, a player asking for a replay means the game before
+			if (!isGameStarted())
+			{
+				std::lock_guard<std::mutex> lock(mPreviousReplayMutex);
+				const auto& previous = mPreviousReplay[packet->playerId == mLeftPlayer ? LEFT_PLAYER : RIGHT_PLAYER];
+				if (!previous.empty())
+				{
+					RakNet::BitStream old(const_cast<unsigned char*>(previous.data()), previous.size(), true);
+					mServer->Send(old, LOW_PRIORITY, RELIABLE_ORDERED, packet->playerId);
+					break;
+				}
+			}
+
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_REPLAY);
 			std::shared_ptr<GenericOut> out = createGenericWriter( &stream );

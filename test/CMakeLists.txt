@@ -30,6 +30,7 @@ set(SRC
 	../src/server/JoinCodes.cpp     ../src/server/JoinCodes.h
 	../src/server/MatchAssignments.cpp ../src/server/MatchAssignments.h
 	../src/server/Tournament.cpp    ../src/server/Tournament.h
+	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
 	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
 	../src/replays/ReplayRecorder.cpp  ../src/replays/ReplayRecorder.h

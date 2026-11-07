@@ -57,6 +57,11 @@ bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
 	return !(a == b);
 }
 
+bool isValidScoreToWin(int scoreToWin)
+{
+	return scoreToWin >= MIN_MATCH_SCORE_TO_WIN && scoreToWin <= MAX_MATCH_SCORE_TO_WIN;
+}
+
 bool isValidRuleFileName(const std::string& name)
 {
 	const std::string ending = ".lua";

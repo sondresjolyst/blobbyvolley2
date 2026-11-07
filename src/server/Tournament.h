@@ -155,11 +155,19 @@ class TournamentDirector
 			int wins1 = 0;
 			int wins2 = 0;
 			bool running = false;
+			// the assignment and game number of the running game, taken when it started
+			MatchAssignment playing;
+			int playingGame = 0;
+			// grows when the players of the match change, which starts a new series
+			unsigned epoch = 0;
+			unsigned playingEpoch = 0;
 			bool decided = false;
 			// the last game could not be created, wait for a changed assignment
 			bool failed = false;
 			// the last game was abandoned, wait until the organizer decides in the file
 			bool held = false;
+			// a game that could not start is not tried again before this time
+			unsigned long long retryAt = 0;
 			bool connectedSent = false;
 			// the next game of the series waits until this time
 			bool cooling = false;
@@ -173,6 +181,8 @@ class TournamentDirector
 		void setEvents(std::shared_ptr<TournamentEvents> events);
 
 		/// Replaces the assignments. A match that is no longer assigned plays its running game to the end.
+		/// The director keeps every series it has seen, so a match that comes back is not played again.
+		/// When the players of a match change, its series starts over.
 		/// When the wins of a match in the file change, they replace the local series score,
 		/// since the site is the source of truth. A local win stays until then.
 		void setAssignments(const std::vector<MatchAssignment>& matches);
@@ -188,8 +198,8 @@ class TournamentDirector
 		std::vector<GameOrder> takeGamesToStart(unsigned long long now_ms);
 
 		/// The server could not create the game. Unless canRetry is set, the match waits
-		/// until its assignment changes.
-		void gameNotStarted(int matchId, bool canRetry = false);
+		/// until its assignment changes. With canRetry it is tried again from retryAt_ms on.
+		void gameNotStarted(int matchId, bool canRetry = false, unsigned long long retryAt_ms = 0);
 
 		/// A running game was played out. winner is 1 or 2.
 		void gameFinished(int matchId, int winner, int points1, int points2,
@@ -210,7 +220,6 @@ class TournamentDirector
 	private:
 		void updateCooldowns(unsigned long long now_ms);
 		bool isBusy(int playerId) const;
-		void forgetIfUnlisted(int matchId);
 		static void takeWins(Series& series, const MatchAssignment& match);
 
 		unsigned mMaxRunning;
