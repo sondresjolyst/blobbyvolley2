@@ -35,6 +35,12 @@ namespace
 		bool tooLarge;
 	};
 
+	// a nonzero return stops the transfer, which lets a shutdown cut off a slow request
+	int progress(void* user, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+	{
+		return static_cast<const HttpClient*>(user)->cancelled() ? 1 : 0;
+	}
+
 	size_t collect(char* data, size_t size, size_t count, void* user)
 	{
 		Download* download = static_cast<Download*>(user);
@@ -74,6 +80,11 @@ CurlHttpClient::~CurlHttpClient()
 HttpResponse CurlHttpClient::send(const HttpRequest& request)
 {
 	HttpResponse response;
+	if (cancelled())
+	{
+		response.error = "stopped for shutdown";
+		return response;
+	}
 	if (!mHandle)
 		mHandle = curl_easy_init();
 	CURL* curl = static_cast<CURL*>(mHandle);
@@ -117,6 +128,9 @@ HttpResponse CurlHttpClient::send(const HttpRequest& request)
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "blobby-server");
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collect);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &download);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, static_cast<HttpClient*>(this));
 	if (request.post)
 	{
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);
@@ -133,7 +147,9 @@ HttpResponse CurlHttpClient::send(const HttpRequest& request)
 
 	if (result != CURLE_OK)
 	{
-		if (download.tooLarge || result == CURLE_FILESIZE_EXCEEDED)
+		if (result == CURLE_ABORTED_BY_CALLBACK)
+			response.error = "stopped for shutdown";
+		else if (download.tooLarge || result == CURLE_FILESIZE_EXCEEDED)
 			response.error = "the answer is larger than " + std::to_string(request.maxBytes) + " bytes";
 		else
 			response.error = curl_easy_strerror(result);

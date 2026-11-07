@@ -81,5 +81,14 @@ bool makeFolder(const std::string& path);
 /// so a reader never sees half a file. Returns false and sets error when it fails.
 bool writeFileAtomically(const std::string& path, const std::string& content, std::string& error);
 
+/// Removes an empty folder. Returns false when it fails.
+bool removeFolder(const std::string& path);
+
+/// Renames a file, replacing a file of the new name. Returns false when it fails.
+bool renameFile(const std::string& from, const std::string& to);
+
+/// Lists the file names in a folder, without . and .. Returns false when the folder cannot be read.
+bool listFolder(const std::string& path, std::vector<std::string>& names);
+
 /// Reads a whole file of at most maxBytes. Returns false when it cannot be read or is larger.
 bool readWholeFile(const std::string& path, std::size_t maxBytes, std::string& content);

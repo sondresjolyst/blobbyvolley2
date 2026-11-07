@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "tinyxml2.h"
 
 #include "SiteConfig.h"
+#include "SponsorBoard.h"
 #include "base64.h"
 
 using nlohmann::json;
@@ -42,10 +43,6 @@ namespace
 	const std::size_t MAX_SYNC_BYTES = 1024 * 1024;
 	const std::size_t MAX_SPONSORS_BYTES = 8 * 1024 * 1024;
 	const std::size_t MAX_ANSWER_BYTES = 64 * 1024;
-	// largest outbox file that is read
-	const std::size_t MAX_OUTBOX_BYTES = 16 * 1024 * 1024;
-	// largest logo, a 160 by 40 BMP with alpha is about 26 KB
-	const std::size_t MAX_LOGO_BYTES = 256 * 1024;
 	const unsigned LIVE_TIMEOUT_MS = 2000;
 
 	bool isInt(const json& value, long long min, long long max)
@@ -77,21 +74,6 @@ namespace
 	{
 		value = json::parse(text, nullptr, false);
 		return !value.is_discarded() && value.is_object();
-	}
-
-	// the nextGame of each match in a sync
-	std::map<int, int> syncNextGames(const std::string& syncJson)
-	{
-		std::map<int, int> result;
-		json sync;
-		if (!parseObject(syncJson, sync) || !sync.contains("matches") || !sync["matches"].is_array())
-			return result;
-		for (const auto& m : sync["matches"])
-		{
-			if (m.is_object() && isInt(m.value("matchId", json()), 1, 2147483647))
-				result[m["matchId"].get<int>()] = intField(m, "nextGame", 1, 1);
-		}
-		return result;
 	}
 
 	std::string nowText()
@@ -132,6 +114,8 @@ namespace
 		entry.path = stringField(line, "path");
 		entry.matchId = intField(line, "matchId", 0, 1);
 		entry.body = body->dump();
+		auto delivered = line.find("delivered");
+		entry.delivered = delivered != line.end() && delivered->is_boolean() && delivered->get<bool>();
 		if (entry.kind == "game")
 		{
 			entry.game = intField(*body, "game", 0, 1);
@@ -151,6 +135,8 @@ namespace
 		line["matchId"] = entry.matchId;
 		line["path"] = entry.path;
 		line["body"] = json::parse(entry.body);
+		if (entry.delivered)
+			line["delivered"] = true;
 		return line;
 	}
 }
@@ -161,9 +147,10 @@ namespace
 
 HttpClient::~HttpClient() = default;
 
-Outbox::Outbox(std::string path, LogFunction log)
+Outbox::Outbox(std::string path, LogFunction log, std::size_t maxBytes)
 : mPath(std::move(path))
 , mLog(std::move(log))
+, mMaxBytes(maxBytes)
 {
 }
 
@@ -173,10 +160,19 @@ void Outbox::load()
 	if (mPath.empty())
 		return;
 	std::string content;
-	if (!readWholeFile(mPath, MAX_OUTBOX_BYTES, content))
+	if (!readWholeFile(mPath, mMaxBytes, content))
 	{
-		if (fileExists(mPath) && mLog)
-			mLog(true, "cannot read the outbox " + mPath + ", it is larger than 16 MB or not readable");
+		// move it away before anything is saved, so the reports in it are not overwritten
+		if (fileExists(mPath))
+		{
+			const bool moved = renameFile(mPath, mPath + ".bad");
+			if (mLog)
+				mLog(true, "cannot read the outbox " + mPath + ", it is too large or not readable. "
+					+ (moved ? "It is kept as " + mPath + ".bad, send its reports by hand"
+							: std::string("It could not be moved, new reports stay in memory")));
+			if (!moved)
+				mPath.clear();
+		}
 		return;
 	}
 
@@ -213,7 +209,7 @@ void Outbox::load()
 		save();
 	}
 	if (mLog && !mEntries.empty())
-		mLog(false, std::to_string(mEntries.size()) + " reports wait in the outbox");
+		mLog(false, std::to_string(mEntries.size()) + " reports wait in the outbox or for a sync that shows them");
 }
 
 void Outbox::addConnected(int matchId, int player1, int player2)
@@ -256,6 +252,12 @@ std::vector<OutboxEntry> Outbox::entries() const
 	return mEntries;
 }
 
+void Outbox::withEntries(const std::function<void(const std::vector<OutboxEntry>&)>& use) const
+{
+	std::lock_guard<std::mutex> lock(mMutex);
+	use(mEntries);
+}
+
 std::vector<OutboxEntry> Outbox::sendable() const
 {
 	std::lock_guard<std::mutex> lock(mMutex);
@@ -263,10 +265,42 @@ std::vector<OutboxEntry> Outbox::sendable() const
 	std::set<int> seen;
 	for (const auto& e : mEntries)
 	{
-		if (seen.insert(e.matchId).second)
+		if (!e.delivered && seen.insert(e.matchId).second)
 			result.push_back(e);
 	}
 	return result;
+}
+
+void Outbox::markDelivered(unsigned long long seq)
+{
+	std::lock_guard<std::mutex> lock(mMutex);
+	auto it = std::find_if(mEntries.begin(), mEntries.end(), [seq](const OutboxEntry& e){ return e.seq == seq; });
+	if (it == mEntries.end())
+		return;
+	// only a game changes the players file
+	if (it->kind == "game")
+		it->delivered = true;
+	else
+		mEntries.erase(it);
+	++mGeneration;
+	save();
+}
+
+bool Outbox::removeSynced(const std::map<int, int>& nextGames)
+{
+	std::lock_guard<std::mutex> lock(mMutex);
+	const std::size_t before = mEntries.size();
+	mEntries.erase(std::remove_if(mEntries.begin(), mEntries.end(), [&](const OutboxEntry& e){
+		if (!e.delivered)
+			return false;
+		auto found = nextGames.find(e.matchId);
+		return found == nextGames.end() || found->second > e.game;
+	}), mEntries.end());
+	if (mEntries.size() == before)
+		return false;
+	++mGeneration;
+	save();
+	return true;
 }
 
 void Outbox::remove(unsigned long long seq)
@@ -283,7 +317,8 @@ void Outbox::remove(unsigned long long seq)
 std::size_t Outbox::size() const
 {
 	std::lock_guard<std::mutex> lock(mMutex);
-	return mEntries.size();
+	return static_cast<std::size_t>(std::count_if(mEntries.begin(), mEntries.end(),
+		[](const OutboxEntry& e){ return !e.delivered; }));
 }
 
 unsigned long long Outbox::generation() const
@@ -345,8 +380,9 @@ SiteAnswer classifySiteAnswer(const std::string& kind, const HttpResponse& respo
 	json body;
 	if (!parseObject(response.body, body) || !body.contains("status") || !body["status"].is_string())
 	{
+		// probably not the site, such as a proxy page, so try again later
 		detail = "an answer that cannot be read";
-		return SiteAnswer::REFUSED;
+		return SiteAnswer::RETRY;
 	}
 	const std::string status = body["status"].get<std::string>();
 	if (status == "refused")
@@ -493,12 +529,88 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 	return true;
 }
 
-std::string syncSponsorsVersion(const std::string& syncJson)
+std::map<int, int> syncNextGames(const std::string& syncJson)
 {
+	std::map<int, int> result;
 	json sync;
-	if (!parseObject(syncJson, sync))
-		return std::string();
-	return stringField(sync, "sponsorsVersion");
+	if (!parseObject(syncJson, sync) || !sync.contains("matches") || !sync["matches"].is_array())
+		return result;
+	for (const auto& m : sync["matches"])
+	{
+		if (m.is_object() && isInt(m.value("matchId", json()), 1, 2147483647))
+			result[m["matchId"].get<int>()] = intField(m, "nextGame", 1, 1);
+	}
+	return result;
+}
+
+std::string sha256Hex(const std::string& data)
+{
+	static const std::uint32_t K[64] = {
+		0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+		0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+		0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+		0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+		0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+		0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+		0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+		0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+	std::uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+	auto rotr = [](std::uint32_t x, int n){ return (x >> n) | (x << (32 - n)); };
+
+	std::string msg = data;
+	const std::uint64_t bits = static_cast<std::uint64_t>(data.size()) * 8;
+	msg.push_back(static_cast<char>(0x80));
+	while (msg.size() % 64 != 56)
+		msg.push_back(0);
+	for (int i = 7; i >= 0; --i)
+		msg.push_back(static_cast<char>((bits >> (8 * i)) & 0xff));
+
+	for (std::size_t chunk = 0; chunk < msg.size(); chunk += 64)
+	{
+		std::uint32_t w[64];
+		for (int i = 0; i < 16; ++i)
+		{
+			const unsigned char* b = reinterpret_cast<const unsigned char*>(msg.data() + chunk + 4 * i);
+			w[i] = (std::uint32_t(b[0]) << 24) | (std::uint32_t(b[1]) << 16) | (std::uint32_t(b[2]) << 8) | std::uint32_t(b[3]);
+		}
+		for (int i = 16; i < 64; ++i)
+		{
+			const std::uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
+			const std::uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
+			w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+		}
+		std::uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], k = h[7];
+		for (int i = 0; i < 64; ++i)
+		{
+			const std::uint32_t t1 = k + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i];
+			const std::uint32_t t2 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+			k = g;
+			g = f;
+			f = e;
+			e = d + t1;
+			d = c;
+			c = b;
+			b = a;
+			a = t1 + t2;
+		}
+		h[0] += a;
+		h[1] += b;
+		h[2] += c;
+		h[3] += d;
+		h[4] += e;
+		h[5] += f;
+		h[6] += g;
+		h[7] += k;
+	}
+
+	static const char* const HEX = "0123456789abcdef";
+	std::string out;
+	for (std::uint32_t v : h)
+	{
+		for (int i = 28; i >= 0; i -= 4)
+			out.push_back(HEX[(v >> i) & 0xf]);
+	}
+	return out;
 }
 
 // - - - - - - - - - - - - - - - - - -
@@ -567,19 +679,27 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 		if (!fileExists(path))
 		{
 			const std::string data = stringField(logo, "data");
-			if (data.size() > MAX_LOGO_BYTES * 4 / 3 + 4)
+			if (data.size() > sponsors::MAX_FILE_SIZE * 4 / 3 + 4)
 			{
 				warnings.push_back(where + " has a logo that is too large, skipped");
 				continue;
 			}
-			std::vector<uint8_t> bytes = decode(data);
-			if (bytes.size() < 54 || bytes[0] != 'B' || bytes[1] != 'M')
+			std::vector<uint8_t> decoded = decode(data);
+			const std::string bytes(decoded.begin(), decoded.end());
+			if (sha256Hex(bytes) != hash)
 			{
-				warnings.push_back(where + " has a logo that is not a BMP, skipped");
+				warnings.push_back(where + " has a logo that does not match its hash, skipped");
+				continue;
+			}
+			// the same check as the game, so only a logo it can show is kept
+			std::string bmpError;
+			if (!sponsors::validateBmp(bytes.data(), bytes.size(), &bmpError))
+			{
+				warnings.push_back(where + " has a logo the game cannot show: " + bmpError + ", skipped");
 				continue;
 			}
 			std::string writeError;
-			if (!writeFileAtomically(path, std::string(bytes.begin(), bytes.end()), writeError))
+			if (!writeFileAtomically(path, bytes, writeError))
 			{
 				error = writeError;
 				return false;
@@ -598,6 +718,21 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 	if (!writeFileAtomically(pathInDataDir(folder, "board.json"), board.dump(1, '\t') + "\n", error))
 		return false;
 	version = newVersion;
+
+	// logos that the list no longer names
+	std::set<std::string> kept;
+	for (const auto& entry : board["sponsors"])
+		kept.insert(entry["logo"].get<std::string>().substr(6));
+	std::vector<std::string> names;
+	if (listFolder(logos, names))
+	{
+		for (const auto& name : names)
+		{
+			const bool logoFile = name.size() == 68 && isHash(name.substr(0, 64)) && name.substr(64) == ".bmp";
+			if (logoFile && kept.count(name) == 0)
+				std::remove(pathInDataDir(logos, name).c_str());
+		}
+	}
 	return true;
 }
 
@@ -650,16 +785,21 @@ void SiteLink::step(unsigned long long now_ms)
 		mStarted = true;
 		loadSavedSync();
 	}
-	if (now_ms >= mSyncAt)
+	// the players file also reflects the reports in the outbox, and a failed write is tried again
+	auto writeIfNeeded = [this](){
+		if (!mSyncJson.empty() && (!mWritten || mSyncVersion != mWrittenVersion || mOutbox.generation() != mWrittenGeneration))
+			writePlayersFile();
+	};
+	writeIfNeeded();
+	if (!stopping() && now_ms >= mSyncAt)
 		sync(now_ms);
-	if (!mPaths.sponsorsFolder.empty() && now_ms >= mSponsorsAt)
+	if (!stopping() && !mPaths.sponsorsFolder.empty() && now_ms >= mSponsorsAt)
 		sponsors(now_ms);
-	if (now_ms >= mOutboxAt && mOutbox.size() > 0)
+	if (!stopping() && now_ms >= mOutboxAt && mOutbox.size() > 0)
 		sendOutbox(now_ms);
-	// the players file also reflects the reports that wait in the outbox
-	if (!mSyncJson.empty() && mOutbox.generation() != mWrittenGeneration)
-		writePlayersFile();
-	sendLive(now_ms);
+	writeIfNeeded();
+	if (!stopping())
+		sendLive(now_ms);
 }
 
 void SiteLink::sync(unsigned long long now_ms)
@@ -704,34 +844,26 @@ void SiteLink::sync(unsigned long long now_ms)
 	mSyncAt = now_ms + mTiming.syncInterval;
 
 	// a delivered game counts until the sync has moved past it or the match left the list
-	const std::size_t deliveredBefore = mDelivered.size();
-	const std::map<int, int> nextGames = syncNextGames(response.body);
-	mDelivered.erase(std::remove_if(mDelivered.begin(), mDelivered.end(), [&](const OutboxEntry& e){
-		auto found = nextGames.find(e.matchId);
-		return e.kind != "game" || found == nextGames.end() || found->second > e.game;
-	}), mDelivered.end());
-	const bool deliveredChanged = mDelivered.size() != deliveredBefore;
+	mOutbox.removeSynced(syncNextGames(response.body));
 
-	// the sponsors are read again when the sync says they changed
-	const std::string sponsorsVersion = syncSponsorsVersion(response.body);
-	if (!sponsorsVersion.empty() && mSponsorsLoaded && sponsorsVersion != mSponsorsVersion)
-		mSponsorsAt = now_ms;
-
-	if (version == mSyncVersion && mWritten && mOutbox.generation() == mWrittenGeneration && !deliveredChanged)
-		return;
-	if (version != mSyncVersion)
+	if (version != mSyncVersion && mLog)
 	{
-		if (mLog)
-		{
-			for (const auto& w : warnings)
-				mLog(true, w);
-		}
-		// kept on disk, so a restart during an outage still knows the matches
-		if (!mPaths.syncFile.empty() && !writeFileAtomically(mPaths.syncFile, response.body, error) && mLog)
+		for (const auto& w : warnings)
+			mLog(true, w);
+	}
+	// kept on disk, so a restart during an outage still knows the matches
+	if (!mPaths.syncFile.empty() && version != mSavedSyncVersion)
+	{
+		if (writeFileAtomically(mPaths.syncFile, response.body, error))
+			mSavedSyncVersion = version;
+		else if (mLog)
 			mLog(true, "cannot save the sync: " + error);
 	}
 	mSyncJson = response.body;
 	mSyncVersion = version;
+	// the version only counts as written once the players file is on disk
+	if (version == mWrittenVersion && mWritten && mOutbox.generation() == mWrittenGeneration)
+		return;
 	writePlayersFile();
 }
 
@@ -747,39 +879,43 @@ void SiteLink::loadSavedSync()
 		return;
 	mSyncJson = saved;
 	mSyncVersion = version;
+	mSavedSyncVersion = version;
 }
 
-void SiteLink::writePlayersFile()
+bool SiteLink::writePlayersFile()
 {
-	const unsigned long long generation = mOutbox.generation();
-	std::string xml;
-	std::string version;
-	std::vector<std::string> warnings;
-	std::string error;
-	// reports the site took after the last sync still count, until a newer sync has them
-	std::vector<OutboxEntry> pending = mDelivered;
-	for (const auto& e : mOutbox.entries())
-		pending.push_back(e);
-	if (!buildPlayersFile(mSyncJson, pending, xml, version, warnings, error))
-		return;
-	if (!mWritten || xml != mWrittenXml)
-	{
-		if (!writeFileAtomically(mPaths.playersFile, xml, error))
-		{
-			// log once, the next round tries again
-			if (mLog && error != mWriteError)
-				mLog(true, "cannot write the players file: " + error);
-			mWriteError = error;
+	bool ok = false;
+	// no report is added or removed meanwhile, so the file matches the outbox it was made from.
+	// This only writes a local file, the lock is never held during a request.
+	mOutbox.withEntries([&](const std::vector<OutboxEntry>& entries){
+		const unsigned long long generation = mOutbox.generationLocked();
+		std::string xml;
+		std::string version;
+		std::vector<std::string> warnings;
+		std::string error;
+		if (!buildPlayersFile(mSyncJson, entries, xml, version, warnings, error))
 			return;
+		if (!mWritten || xml != mWrittenXml)
+		{
+			if (!writeFileAtomically(mPaths.playersFile, xml, error))
+			{
+				// log once, the next round tries again
+				if (mLog && error != mWriteError)
+					mLog(true, "cannot write the players file: " + error + ", trying again");
+				mWriteError = error;
+				return;
+			}
+			mWriteError.clear();
+			if (mLog && version != mWrittenVersion)
+				mLog(false, "the sync " + version + " is written to " + mPaths.playersFile);
 		}
-		mWriteError.clear();
-		if (mLog && version != mWrittenVersion)
-			mLog(false, "the sync " + version + " is written to " + mPaths.playersFile);
-	}
-	mWritten = true;
-	mWrittenXml = xml;
-	mWrittenVersion = version;
-	mWrittenGeneration = generation;
+		mWritten = true;
+		mWrittenXml = xml;
+		mWrittenVersion = version;
+		mWrittenGeneration = generation;
+		ok = true;
+	});
+	return ok;
 }
 
 void SiteLink::sponsors(unsigned long long now_ms)
@@ -789,6 +925,7 @@ void SiteLink::sponsors(unsigned long long now_ms)
 		mSponsorsVersion = storedSponsorsVersion(mPaths.sponsorsFolder);
 		mSponsorsLoaded = true;
 	}
+	// sponsors are read once a minute, the answer says whether they changed
 	// no sponsors while the site is down, the sync finds out when it is back
 	if (mDown)
 	{
@@ -837,6 +974,8 @@ void SiteLink::sendOutbox(unsigned long long now_ms)
 	// one report per match at a time, in order. The next one goes in the next round.
 	for (const OutboxEntry& entry : mOutbox.sendable())
 	{
+		if (stopping())
+			return;
 		HttpRequest request;
 		request.post = true;
 		request.path = entry.path;
@@ -857,10 +996,11 @@ void SiteLink::sendOutbox(unsigned long long now_ms)
 			case SiteAnswer::DONE:
 				reachable(true, "");
 				mOutboxRetry = 0;
-				// a closed game did not count on the site
-				if (detail != "game-closed")
-					mDelivered.push_back(entry);
-				mOutbox.remove(entry.seq);
+				// a closed game did not count on the site, a stored game counts until a sync shows it
+				if (detail == "game-closed")
+					mOutbox.remove(entry.seq);
+				else
+					mOutbox.markDelivered(entry.seq);
 				// read the sync again soon, so the players file catches up
 				mSyncAt = std::min(mSyncAt, now_ms + mTiming.firstRetry);
 				if (mLog)
@@ -937,6 +1077,8 @@ void SiteLink::sendLive(unsigned long long now_ms)
 
 	for (const LiveScore& score : due)
 	{
+		if (stopping())
+			return;
 		mLiveSentAt[score.matchId] = now_ms;
 		// best effort, a live score is dropped while the site is down
 		if (mDown)
@@ -966,7 +1108,10 @@ SiteReporter::SiteReporter(std::shared_ptr<TournamentEvents> inner, std::unique_
 , mHttp(std::move(http))
 , mOutbox(std::move(outbox))
 {
+	mLogLine = log;
+	mHttp->setCancelFlag(&mStopping);
 	mLink.reset(new SiteLink(*mHttp, *mOutbox, std::move(paths), std::move(log)));
+	mLink->setStopFlag(&mStopping);
 }
 
 SiteReporter::~SiteReporter()
@@ -986,6 +1131,8 @@ void SiteReporter::stop()
 {
 	if (!mThread.joinable())
 		return;
+	// a running request is cut off, its report stays in the outbox
+	mStopping = true;
 	mRunning = false;
 	wake();
 	mThread.join();
@@ -1003,31 +1150,61 @@ void SiteReporter::wake()
 void SiteReporter::run()
 {
 	auto start = std::chrono::steady_clock::now();
+	unsigned failures = 0;
 	while (mRunning)
 	{
 		const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-		mLink->step(static_cast<unsigned long long>(now) + 1);
+		std::string problem;
+		try
+		{
+			mLink->step(static_cast<unsigned long long>(now) + 1);
+		}
+		catch (const std::exception& e)
+		{
+			problem = e.what();
+		}
+		catch (...)
+		{
+			problem = "an unknown error";
+		}
+
+		unsigned pause = 200;
+		if (problem.empty())
+		{
+			failures = 0;
+		}
+		else
+		{
+			// keep going, but slower, so a repeating error does not spin
+			++failures;
+			pause = std::min(30000u, 1000u << std::min(failures, 5u));
+			if (mLogLine)
+				mLogLine(true, "the tournament site link failed with " + problem + ", trying again in "
+					+ std::to_string(pause / 1000) + " s");
+		}
 
 		std::unique_lock<std::mutex> lock(mWakeMutex);
-		mWakeUp.wait_for(lock, std::chrono::milliseconds(200), [this](){ return mWoken || !mRunning; });
+		mWakeUp.wait_for(lock, std::chrono::milliseconds(pause), [&](){ return (mWoken && failures == 0) || !mRunning; });
 		mWoken = false;
 	}
 }
 
 void SiteReporter::matchConnected(int matchId, int player1, int player2)
 {
+	// the outbox first, it is what reaches the site
+	mOutbox->addConnected(matchId, player1, player2);
 	if (mInner)
 		mInner->matchConnected(matchId, player1, player2);
-	mOutbox->addConnected(matchId, player1, player2);
 	wake();
 }
 
 void SiteReporter::gameEnded(const GameReport& report)
 {
+	// the outbox first, it is what reaches the site
+	mOutbox->addGame(report);
+	mLink->clearLiveScore(report.matchId);
 	if (mInner)
 		mInner->gameEnded(report);
-	mLink->clearLiveScore(report.matchId);
-	mOutbox->addGame(report);
 	wake();
 }
 

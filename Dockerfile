@@ -33,7 +33,7 @@ RUN apt-get update \
         libcurl4t64 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --no-create-home --shell /usr/sbin/nologin blobby \
+    && useradd --system --uid 999 --user-group --no-create-home --shell /usr/sbin/nologin blobby \
     && mkdir /data \
     && chown blobby:blobby /data
 

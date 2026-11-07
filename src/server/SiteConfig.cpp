@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <io.h>
 #include <windows.h>
 #else
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -321,6 +322,55 @@ bool writeFileAtomically(const std::string& path, const std::string& content, st
 	std::remove(temp.c_str());
 	error = "cannot rename " + temp + " to " + path;
 	return false;
+}
+
+bool removeFolder(const std::string& path)
+{
+#ifdef _WIN32
+	return _rmdir(path.c_str()) == 0;
+#else
+	return rmdir(path.c_str()) == 0;
+#endif
+}
+
+bool renameFile(const std::string& from, const std::string& to)
+{
+#ifdef _WIN32
+	return MoveFileExA(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+	return std::rename(from.c_str(), to.c_str()) == 0;
+#endif
+}
+
+bool listFolder(const std::string& path, std::vector<std::string>& names)
+{
+	names.clear();
+#ifdef _WIN32
+	WIN32_FIND_DATAA found;
+	HANDLE handle = FindFirstFileA((path + "/*").c_str(), &found);
+	if (handle == INVALID_HANDLE_VALUE)
+		return false;
+	do
+	{
+		const std::string name = found.cFileName;
+		if (name != "." && name != "..")
+			names.push_back(name);
+	} while (FindNextFileA(handle, &found));
+	FindClose(handle);
+	return true;
+#else
+	DIR* dir = opendir(path.c_str());
+	if (!dir)
+		return false;
+	while (dirent* entry = readdir(dir))
+	{
+		const std::string name = entry->d_name;
+		if (name != "." && name != "..")
+			names.push_back(name);
+	}
+	closedir(dir);
+	return true;
+#endif
 }
 
 bool readWholeFile(const std::string& path, std::size_t maxBytes, std::string& content)

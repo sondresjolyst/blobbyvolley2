@@ -57,7 +57,7 @@ endif (WIN32)
 add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SiteConfigTest.cpp ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
-find_package(nlohmann_json 3.2.0 CONFIG QUIET)
+find_package(nlohmann_json 3.10 CONFIG QUIET)
 if (nlohmann_json_FOUND)
 	target_sources(blobbytest PRIVATE SiteSyncTest.cpp ../src/server/SiteSync.cpp ../src/server/SiteSync.h)
 	target_link_libraries(blobbytest nlohmann_json::nlohmann_json)

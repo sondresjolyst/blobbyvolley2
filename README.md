@@ -39,7 +39,9 @@ To run a tournament server for the tournament site, pass the settings from the a
 ```bash
 docker run -d --name blobby-server --restart unless-stopped -p 1234:1234/udp -v blobby-data:/data -e BLOBBY_TOURNAMENT=1 -e BLOBBY_SITE_URL=https://<site> -e BLOBBY_SITE_TOKEN=<token> sondresjo/blobby-server
 ```
-See [Connect to the tournament site](#connect-to-the-tournament-site).
+See [Connect to the tournament site](#connect-to-the-tournament-site). `docker stop` ends the server cleanly, and reports that wait stay in the volume.
+
+The server runs as the user `blobby` with uid 999. A named volume such as `blobby-data` gets the right owner by itself. To use a folder of the host instead, the folder must be writable by uid 999, for example with `sudo chown 999:999 /srv/blobby-data` before `-v /srv/blobby-data:/data`.
 
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
@@ -90,7 +92,7 @@ The server reads the sync of the site every 3 seconds. When it changed, the serv
 
 The score of each running game goes to the site at most once a second, for the big screen. It is never queued.
 
-The server also reads the sponsors of the site when they change and keeps them in the `sponsors` folder of the data folder. `board.json` holds the board style and the sponsors in order, and the `logos` folder holds each logo as `<hash>.bmp`. The game does not show these yet.
+The server also reads the sponsors of the site once a minute and keeps them in the `sponsors` folder of the data folder when they changed. `board.json` holds the board style and the sponsors in order, and the `logos` folder holds each logo as `<hash>.bmp`. A logo that does not match its hash, or that the game could not show, is skipped. Logos that are no longer listed are removed. The game does not show these yet.
 
 For a test site, `BLOBBY_SITE_CA_FILE` adds certificates to trust, and `BLOBBY_SITE_ALLOW_HTTP=1` allows plain http to localhost. Do not set them at the LAN.
 

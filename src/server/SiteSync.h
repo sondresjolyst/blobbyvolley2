@@ -60,6 +60,14 @@ class HttpClient
 	public:
 		virtual ~HttpClient();
 		virtual HttpResponse send(const HttpRequest& request) = 0;
+
+		/// A running request stops soon after this flag turns true. nullptr never stops.
+		void setCancelFlag(const std::atomic<bool>* cancel) { mCancel = cancel; }
+
+		bool cancelled() const { return mCancel && mCancel->load(); }
+
+	private:
+		const std::atomic<bool>* mCancel = nullptr;
 };
 
 /// A report that waits to be sent to the site.
@@ -78,22 +86,27 @@ struct OutboxEntry
 	std::string path;
 	/// JSON body
 	std::string body;
+	/// The site took this game, but no sync has shown it yet. It is not sent again.
+	bool delivered = false;
 };
 
 /*! \class Outbox
 	\brief Reports on disk that wait for an answer of the site.
 	\details The file has one JSON object per line and is written again as a whole after each
 	change, under a temporary name that is then renamed over the old file. An empty path keeps
-	the reports in memory only. The outbox is safe to use from two threads.
+	the reports in memory only. The outbox is safe to use from two threads. A game the site took
+	stays as delivered until a sync shows it, so the players file counts it also after a restart.
 */
 class Outbox
 {
 	public:
 		typedef std::function<void(bool problem, const std::string&)> LogFunction;
 
-		explicit Outbox(std::string path, LogFunction log = LogFunction());
+		/// \param maxBytes largest file that load() reads
+		explicit Outbox(std::string path, LogFunction log = LogFunction(), std::size_t maxBytes = 16 * 1024 * 1024);
 
 		/// Reads the file. A line that cannot be read is skipped and the file is kept as path.bad.
+		/// A file that cannot be read at all or is too large is renamed to path.bad before anything is saved.
 		void load();
 
 		/// Adds a report that both players of a match are connected.
@@ -101,16 +114,27 @@ class Outbox
 		/// Adds a game report.
 		void addGame(const GameReport& report);
 
-		/// All reports in order.
+		/// All reports in order, delivered games too.
 		std::vector<OutboxEntry> entries() const;
-		/// The reports that may be sent now: per match only the first, since a match sends one report at a time.
+		/// Calls use with all reports while no report can be added or removed.
+		void withEntries(const std::function<void(const std::vector<OutboxEntry>&)>& use) const;
+		/// The reports that may be sent now: per match only the first that is not delivered,
+		/// since a match sends one report at a time.
 		std::vector<OutboxEntry> sendable() const;
 		/// Removes a report that got a final answer.
 		void remove(unsigned long long seq);
+		/// Keeps a game the site took as delivered until a sync shows it.
+		void markDelivered(unsigned long long seq);
+		/// Removes the delivered games that a sync shows. nextGames maps each listed match to its nextGame.
+		/// A game of a match that is not listed is removed too. Returns true when something was removed.
+		bool removeSynced(const std::map<int, int>& nextGames);
 
+		/// Number of reports that wait to be sent, without delivered games.
 		std::size_t size() const;
 		/// Grows with each change.
 		unsigned long long generation() const;
+		/// The same, for use inside withEntries().
+		unsigned long long generationLocked() const { return mGeneration; }
 
 	private:
 		void add(OutboxEntry entry);
@@ -119,6 +143,7 @@ class Outbox
 
 		std::string mPath;
 		LogFunction mLog;
+		std::size_t mMaxBytes;
 		mutable std::mutex mMutex;
 		std::vector<OutboxEntry> mEntries;
 		unsigned long long mNextSeq = 1;
@@ -151,12 +176,17 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 					std::string& xml, std::string& syncVersion, std::vector<std::string>& warnings,
 					std::string& error);
 
-/// The sponsorsVersion of a sync, empty when the sync does not have one.
-std::string syncSponsorsVersion(const std::string& syncJson);
+/// The nextGame of each match in a sync.
+std::map<int, int> syncNextGames(const std::string& syncJson);
+
+/// SHA-256 of data as 64 lower case hex characters.
+std::string sha256Hex(const std::string& data);
 
 /*! Stores the sponsors of the site below a folder, so they survive an outage.
 	\details Logos go to logos/<hash>.bmp and the list to board.json, which is written last.
 	board.json holds sponsorsVersion, gameBoard and the sponsors in order with name and logo file.
+	A logo whose SHA-256 differs from its hash, or that the game could not show, is skipped.
+	Logo files that board.json no longer names are removed.
 	Showing them in the game is a separate step that reads these files.
 */
 bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, std::string& version,
@@ -215,6 +245,9 @@ class SiteLink
 		/// Does what is due. now_ms is any monotonic time in milliseconds.
 		void step(unsigned long long now_ms);
 
+		/// When the flag turns true, step() returns before the next request.
+		void setStopFlag(const std::atomic<bool>* stop) { mStop = stop; }
+
 		/// Remembers the newest score of a game. It is sent at most once per liveInterval and never queued.
 		void setLiveScore(const LiveScore& score);
 		/// Forgets the live score of a match whose game ended.
@@ -228,7 +261,8 @@ class SiteLink
 		void sponsors(unsigned long long now_ms);
 		void sendOutbox(unsigned long long now_ms);
 		void sendLive(unsigned long long now_ms);
-		void writePlayersFile();
+		bool writePlayersFile();
+		bool stopping() const { return mStop && mStop->load(); }
 		void reachable(bool ok, const std::string& what, bool token = false);
 		void loadSavedSync();
 		void logRefused(const OutboxEntry& entry, const std::string& reason);
@@ -240,6 +274,7 @@ class SiteLink
 		LogFunction mLog;
 		SiteTiming mTiming;
 
+		const std::atomic<bool>* mStop = nullptr;
 		bool mStarted = false;
 		bool mDown = false;
 		std::string mLastProblem;
@@ -253,8 +288,7 @@ class SiteLink
 		bool mWritten = false;
 		std::string mWrittenXml;
 		std::string mWriteError;
-		// reports the site took since the last sync was read
-		std::vector<OutboxEntry> mDelivered;
+		std::string mSavedSyncVersion;
 
 		unsigned long long mSponsorsAt = 0;
 		std::string mSponsorsVersion;
@@ -293,6 +327,7 @@ class SiteReporter : public TournamentEvents
 	private:
 		void run();
 		void wake();
+		SiteLink::LogFunction mLogLine;
 
 		std::shared_ptr<TournamentEvents> mInner;
 		std::unique_ptr<HttpClient> mHttp;
@@ -303,5 +338,6 @@ class SiteReporter : public TournamentEvents
 		std::condition_variable mWakeUp;
 		bool mWoken = false;
 		std::atomic<bool> mRunning{false};
+		std::atomic<bool> mStopping{false};
 		std::thread mThread;
 };

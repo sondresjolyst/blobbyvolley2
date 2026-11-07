@@ -218,6 +218,8 @@ class TournamentDirector
 		/// When the players of a match change, its series starts over.
 		/// When the wins of a match in the file change, they replace the local series score,
 		/// since the site is the source of truth. A local win stays until then.
+		/// When nextGame in the file changes and no game of the match runs, it replaces the local
+		/// number, also when it is lower, as after a game report the site refused.
 		void setAssignments(const std::vector<MatchAssignment>& matches);
 
 		void playerConnected(int playerId);

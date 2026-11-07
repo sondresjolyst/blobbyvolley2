@@ -279,7 +279,7 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 		if (returning)
 		{
 			// the file is the truth for a match that comes back
-			if (!series.running && m.nextGame > series.nextGame)
+			if (!series.running)
 				series.nextGame = m.nextGame;
 			series.match = m;
 			takeWins(series, m);
@@ -292,10 +292,11 @@ void TournamentDirector::setAssignments(const std::vector<MatchAssignment>& matc
 			// a changed assignment may fix a game that could not be created
 			series.failed = false;
 			// the organizer decided about an abandoned game
-			if (m.nextGame != old.nextGame || (old.awaitingDecision && !m.awaitingDecision))
+			if (m.nextGame > old.nextGame || (old.awaitingDecision && !m.awaitingDecision))
 				series.held = false;
-			// the site moves the next game on when the organizer restarts a game
-			if (!series.running && m.nextGame > series.nextGame)
+			// the site moves the next game on when the organizer restarts a game. A lower number
+			// means the site refused a game the server played, so the file is the truth then too.
+			if (!series.running && m.nextGame != old.nextGame)
 				series.nextGame = m.nextGame;
 			series.match = m;
 			// new numbers from the site replace the local count

@@ -95,7 +95,7 @@ set(BLOBBY_SITE_SYNC AUTO CACHE STRING "Build the tournament site client into th
 set(BLOBBY_SITE_SYNC_ENABLED OFF)
 if (NOT BLOBBY_SITE_SYNC STREQUAL "OFF" AND NOT SWITCH AND NOT ANDROID)
 	find_package(CURL QUIET)
-	find_package(nlohmann_json 3.2.0 CONFIG QUIET)
+	find_package(nlohmann_json 3.10 CONFIG QUIET)
 	if (CURL_FOUND AND nlohmann_json_FOUND)
 		set(BLOBBY_SITE_SYNC_ENABLED ON)
 		message(STATUS "The server is built with the tournament site client")
@@ -163,7 +163,8 @@ if (UNIX AND (NOT ANDROID) OR WIN32)
 	if (BLOBBY_SITE_SYNC_ENABLED)
 		target_sources(blobby-server PRIVATE
 			server/SiteSync.cpp server/SiteSync.h
-			server/CurlHttpClient.cpp server/CurlHttpClient.h)
+			server/CurlHttpClient.cpp server/CurlHttpClient.h
+			SponsorBoard.cpp SponsorBoard.h)
 		target_compile_definitions(blobby-server PRIVATE BLOBBY_SITE_SYNC)
 		target_link_libraries(blobby-server nlohmann_json::nlohmann_json)
 		if (TARGET CURL::libcurl)

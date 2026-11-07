@@ -28,6 +28,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cstdio>
 #include <ctime>
 #include <future>
+#include <csignal>
+#include <functional>
+#include <thread>
 
 #include <cerrno>
 
@@ -88,6 +91,13 @@ std::atomic<int> SWLS_RunningTime{0};
 const int UPDATE_FREQUENCY = 10;
 
 void main_loop(DedicatedServer& server);
+void read_commands(DedicatedServer& server);
+
+// docker stop and Ctrl+C end the main loop, so the server shuts down cleanly
+extern "C" void stop_on_signal(int)
+{
+	g_run_server = false;
+}
 
 int main(int argc, char** argv)
 {
@@ -244,10 +254,33 @@ int main(int argc, char** argv)
 		siteReporter->start();
 #endif
 
+	std::signal(SIGTERM, stop_on_signal);
+	std::signal(SIGINT, stop_on_signal);
+
 	// main loop
 	auto serverthread = std::async(std::launch::async, [&](){main_loop(server);});
 
-	while(true)
+	// commands are read on their own thread, so a signal can end the server while it waits for input
+	std::thread(read_commands, std::ref(server)).detach();
+
+	// We wait until the dedicated server is shut down
+	serverthread.wait();
+#ifdef BLOBBY_SITE_SYNC
+	if(siteReporter)
+		siteReporter->stop();
+#endif
+
+	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server shutting down");
+	#ifndef WIN32
+	closelog();
+	#endif
+
+	return 0;
+}
+
+void read_commands(DedicatedServer& server)
+{
+	while(g_run_server)
 	{
 		std::string command;
 
@@ -280,20 +313,6 @@ int main(int argc, char** argv)
 		}
 
 	}
-
-	// We wait until the dedicated server is shut down
-	serverthread.wait();
-#ifdef BLOBBY_SITE_SYNC
-	if(siteReporter)
-		siteReporter->stop();
-#endif
-
-	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server shutting down");
-	#ifndef WIN32
-	closelog();
-	#endif
-
-	return 0;
 }
 
 // -----------------------------------------------------------------------------------------
