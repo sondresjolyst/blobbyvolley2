@@ -190,6 +190,21 @@ enum MessageType
 //		ENTRY_REFUSED
 //		reason (EntryRefusedReason)
 //
+//		TOURNAMENT_STATUS is only sent by a server in tournament mode. It tells a
+//		player what the server waits for. Casual lobby requests are ignored there.
+//		ID_LOBBY
+//		TOURNAMENT_STATUS
+//		status (TournamentStatus as unsigned char)
+//		opponent nickname (string, empty when there is no match)
+//		game number (uint32)
+//		best of (uint32)
+//		games won by the player (uint32)
+//		games won by the opponent (uint32)
+//
+// ID_RULES_CHECKSUM
+//	In tournament mode the server also sends this to a player in a finished game,
+//	when the next game of a best-of series starts.
+//
 
 enum class LobbyPacketType : unsigned char
 {
@@ -200,13 +215,25 @@ enum class LobbyPacketType : unsigned char
 	LEAVE_GAME,
 	GAME_STATUS,
 	START_GAME,
-	ENTRY_REFUSED
+	ENTRY_REFUSED,
+	TOURNAMENT_STATUS
 };
 
 enum class EntryRefusedReason : unsigned char
 {
 	UNKNOWN_CODE,
 	CODE_IN_USE
+};
+
+enum class TournamentStatus : unsigned char
+{
+	NO_MATCH,
+	WAITING_FOR_OPPONENT,
+	WAITING_FOR_SLOT,
+	WAITING_FOR_ORGANIZER,
+	PLAYING,
+	NEXT_GAME,
+	MATCH_OVER
 };
 
 class IUserConfigReader;

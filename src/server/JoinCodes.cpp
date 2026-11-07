@@ -230,6 +230,29 @@ const JoinCodeEntry* JoinCodeTable::find(const std::string& code) const
 	return &found->second;
 }
 
+const JoinCodeEntry* JoinCodeTable::findById(int playerId) const
+{
+	if (playerId <= 0)
+		return nullptr;
+	for (const auto& e : mEntries)
+	{
+		if (e.second.playerId == playerId)
+			return &e.second;
+	}
+	return nullptr;
+}
+
+std::set<int> JoinCodeTable::playerIds() const
+{
+	std::set<int> ids;
+	for (const auto& e : mEntries)
+	{
+		if (e.second.playerId > 0)
+			ids.insert(e.second.playerId);
+	}
+	return ids;
+}
+
 std::size_t JoinCodeTable::size() const
 {
 	return mEntries.size();
@@ -334,11 +357,21 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 		return false;
 	}
 
+	std::vector<MatchAssignment> matches;
+	if (!parseMatchAssignments(xml, table.playerIds(), matches, warnings, error))
+	{
+		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+		return false;
+	}
+
 	for (const auto& w : warnings)
 		log(LogLevel::PROBLEM, "players file: " + w);
 
 	mTable = std::move(table);
-	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players");
+	mMatches.swap(matches);
+	++mGeneration;
+	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
+		+ std::to_string(mMatches.size()) + " matches");
 	return true;
 }
 
@@ -394,4 +427,39 @@ const JoinCodeTable& JoinCodeGate::getTable() const
 const std::string& JoinCodeGate::getPath() const
 {
 	return mPath;
+}
+
+const std::vector<MatchAssignment>& JoinCodeGate::getMatches() const
+{
+	return mMatches;
+}
+
+unsigned JoinCodeGate::getGeneration() const
+{
+	return mGeneration;
+}
+
+int JoinCodeGate::playerIdOf(const PlayerID& player) const
+{
+	auto code = mPlayerCodes.find(player);
+	if (code == mPlayerCodes.end())
+		return 0;
+	const JoinCodeEntry* entry = mTable.find(code->second);
+	return entry ? entry->playerId : 0;
+}
+
+bool JoinCodeGate::findConnection(int playerId, PlayerID& player) const
+{
+	if (playerId <= 0)
+		return false;
+	for (const auto& owner : mCodeOwners)
+	{
+		const JoinCodeEntry* entry = mTable.find(owner.first);
+		if (entry && entry->playerId == playerId)
+		{
+			player = owner.second;
+			return true;
+		}
+	}
+	return false;
 }

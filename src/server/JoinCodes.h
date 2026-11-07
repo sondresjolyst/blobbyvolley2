@@ -23,10 +23,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cstddef>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "raknet/NetworkTypes.h"
+#include "MatchAssignments.h"
 
 class NetworkPlayer;
 
@@ -67,6 +69,7 @@ struct JoinCodeEntry
 	Entries with a bad code or nickname are skipped. A code that appears more than
 	once is dropped for every entry that uses it, since it is not clear who it belongs to.
 	Other elements below the root are ignored, so later versions can add to the file.
+	The match elements of the same file are read by parseMatchAssignments().
 */
 class JoinCodeTable
 {
@@ -77,6 +80,12 @@ class JoinCodeTable
 
 		/// Looks up a normalized code. Returns nullptr for an unknown code.
 		const JoinCodeEntry* find(const std::string& code) const;
+
+		/// Looks up a player by the player id of the site. Returns nullptr for an unknown id or 0.
+		const JoinCodeEntry* findById(int playerId) const;
+
+		/// All player ids in the table, without 0.
+		std::set<int> playerIds() const;
 
 		std::size_t size() const;
 
@@ -138,6 +147,16 @@ class JoinCodeGate
 		const JoinCodeTable& getTable() const;
 		const std::string& getPath() const;
 
+		/// Matches of the players file that was read last.
+		const std::vector<MatchAssignment>& getMatches() const;
+		/// Grows by one each time a new players file is in use.
+		unsigned getGeneration() const;
+
+		/// Player id of a connected player, 0 when the player has no code or no id.
+		int playerIdOf(const PlayerID& player) const;
+		/// Finds the connection of the player with this player id. Returns false when the player is not connected.
+		bool findConnection(int playerId, PlayerID& player) const;
+
 	private:
 		void log(LogLevel level, const std::string& message) const;
 
@@ -147,6 +166,8 @@ class JoinCodeGate
 		bool mPolled = false;
 
 		JoinCodeTable mTable;
+		std::vector<MatchAssignment> mMatches;
+		unsigned mGeneration = 0;
 		std::string mLastContent;
 		std::string mLastError;
 		bool mHasContent = false;
