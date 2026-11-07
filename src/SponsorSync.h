@@ -175,6 +175,7 @@ namespace sponsors
 			explicit BoardReceiver(LogoCache& cache);
 
 			/// Handles an ID_SPONSORS packet whose message id was read. For REQUEST, answer holds the packet to send.
+			/// A board with the version of the current one is ignored.
 			Result handle(RakNet::BitStream& packet, RakNet::BitStream& answer);
 
 			bool ready() const { return mReady; }

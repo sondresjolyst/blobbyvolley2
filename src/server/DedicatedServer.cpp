@@ -212,6 +212,7 @@ void DedicatedServer::processPackets()
 				mSponsorPlayers.erase(packet->playerId);
 				mSentSponsorVersion.erase(packet->playerId);
 				mSentLogos.erase(packet->playerId);
+				mHeldLogos.erase(packet->playerId);
 				if( mJoinCodes )
 				{
 					if( mTournament )
@@ -869,6 +870,8 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 		sponsors::Board board;
 		if( mSponsorSource( board ) )
 		{
+			// held logos point into the old board
+			mHeldLogos.clear();
 			mSponsors.setBoard( std::move(board) );
 			syslog(LOG_NOTICE, "Sponsor board %s with %d logos is sent to the players",
 				   sponsors::boardStyleName(mSponsors.board().style), (int)mSponsors.board().logos.size());
@@ -891,6 +894,32 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 		mSponsors.writeAnnouncement( stream );
 		mServer->SendOnChannel( stream, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL, player );
 	}
+
+	// logos asked for during a game go out once the game is over
+	for( auto it = mHeldLogos.begin(); it != mHeldLogos.end(); )
+	{
+		if( inRunningGame( it->first ) )
+		{
+			++it;
+			continue;
+		}
+		for( const sponsors::LogoFile* logo : it->second )
+		{
+			RakNet::BitStream answer;
+			sponsors::writeLogo( answer, *logo );
+			mServer->SendOnChannel( answer, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL, it->first );
+		}
+		it = mHeldLogos.erase( it );
+	}
+}
+
+bool DedicatedServer::inRunningGame(PlayerID player) const
+{
+	auto found = mPlayerMap.find( player );
+	if( found == mPlayerMap.end() )
+		return false;
+	auto game = found->second->getGame();
+	return game && game->isGameValid() && game->getWinner() == NO_PLAYER;
 }
 
 void DedicatedServer::processSponsorRequest(PlayerID source, RakNet::BitStream& stream)
@@ -903,7 +932,15 @@ void DedicatedServer::processSponsorRequest(PlayerID source, RakNet::BitStream& 
 		return;
 
 	// a player gets each logo once, so a request cannot make the server send the same data again and again
-	for( const sponsors::LogoFile* logo : mSponsors.answer( stream, mSentLogos[source] ) )
+	std::vector<const sponsors::LogoFile*> logos = mSponsors.answer( stream, mSentLogos[source] );
+	if( inRunningGame( source ) )
+	{
+		// the logos wait until the game is over, so they do not compete with it
+		auto& held = mHeldLogos[source];
+		held.insert( held.end(), logos.begin(), logos.end() );
+		return;
+	}
+	for( const sponsors::LogoFile* logo : logos )
 	{
 		RakNet::BitStream answer;
 		sponsors::writeLogo( answer, *logo );

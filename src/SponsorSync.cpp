@@ -443,12 +443,20 @@ BoardReceiver::Result BoardReceiver::announce(RakNet::BitStream& packet, RakNet:
 		return Result::NOTHING;
 	}
 
+	// the same board again changes nothing, the logos are shown or on their way
+	if(mAnnounced && announcement.version == mAnnouncement.version)
+		return Result::NOTHING;
+
 	reset();
 	mAnnounced = true;
 	mAnnouncement = std::move(announcement);
 
+	// the cache holds at most the logos of one board, also when a board never completes
+	const std::vector<std::string> hashes = mAnnouncement.uniqueHashes();
+	mCache.keepOnly(std::set<std::string>(hashes.begin(), hashes.end()));
+
 	std::vector<std::string> missing;
-	for(const auto& hash : mAnnouncement.uniqueHashes())
+	for(const auto& hash : hashes)
 	{
 		std::uint32_t size = 0;
 		for(const auto& entry : mAnnouncement.logos)

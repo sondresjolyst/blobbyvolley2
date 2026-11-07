@@ -150,6 +150,8 @@ BOOST_AUTO_TEST_SUITE( sponsor_sync )
 
 BOOST_AUTO_TEST_CASE( the_message_ids_of_older_packets_do_not_move )
 {
+	BOOST_CHECK_EQUAL((int)ID_GAME_READY, ID_RESERVED9 + 6);
+	BOOST_CHECK_EQUAL((int)ID_RULES, ID_RESERVED9 + 18);
 	BOOST_CHECK_EQUAL((int)ID_LOBBY, ID_RESERVED9 + 20);
 	BOOST_CHECK_EQUAL((int)ID_SPONSORS, ID_LOBBY + 1);
 }
@@ -488,6 +490,64 @@ BOOST_AUTO_TEST_CASE( the_player_refuses_bad_logos )
 	auto rightIn = received(right);
 	BOOST_CHECK(receiver.handle(*rightIn, answer) == BoardReceiver::Result::READY);
 	BOOST_CHECK(cache.files[good.hash] == good.data);
+}
+
+BOOST_AUTO_TEST_CASE( the_cache_holds_one_board_even_if_it_never_completes )
+{
+	MemoryCache cache;
+	BoardReceiver receiver(cache);
+	// boards whose logos never arrive
+	for(unsigned char round = 0; round < 5; ++round)
+	{
+		Board board;
+		board.logos = {makeLogo(round), makeLogo(round + 100)};
+		// one logo of each board is cached, as if it arrived before the next board
+		cache.store(board.logos[0].hash, board.logos[0].data);
+		RakNet::BitStream announcement;
+		writeAnnouncement(announcement, board, boardVersion(board));
+		auto in = received(announcement);
+		RakNet::BitStream answer;
+		BOOST_CHECK(receiver.handle(*in, answer) == BoardReceiver::Result::REQUEST);
+		BOOST_CHECK_EQUAL(cache.files.size(), 1u);
+		BOOST_CHECK_EQUAL(cache.files.count(board.logos[0].hash), 1u);
+	}
+}
+
+BOOST_AUTO_TEST_CASE( the_same_board_again_is_ignored )
+{
+	struct CountingCache : public MemoryCache
+	{
+		bool load(const std::string& hash, std::string& data) override
+		{
+			++loads;
+			return MemoryCache::load(hash, data);
+		}
+		int loads = 0;
+	} cache;
+	const LogoFile logo = makeLogo(1);
+	cache.files[logo.hash] = logo.data;
+	BoardReceiver receiver(cache);
+	Board board;
+	board.logos = {logo};
+	RakNet::BitStream announcement;
+	writeAnnouncement(announcement, board, boardVersion(board));
+	RakNet::BitStream answer;
+	auto first = received(announcement);
+	BOOST_REQUIRE(receiver.handle(*first, answer) == BoardReceiver::Result::READY);
+	BOOST_CHECK_EQUAL(cache.loads, 1);
+	auto second = received(announcement);
+	BOOST_CHECK(receiver.handle(*second, answer) == BoardReceiver::Result::NOTHING);
+	BOOST_CHECK_EQUAL(cache.loads, 1);
+	BOOST_CHECK(receiver.ready());
+	BOOST_CHECK_EQUAL(receiver.logoFiles().size(), 1u);
+
+	// a new board is read again
+	board.style = BoardStyle::SLIM;
+	RakNet::BitStream changed;
+	writeAnnouncement(changed, board, boardVersion(board));
+	auto third = received(changed);
+	BOOST_CHECK(receiver.handle(*third, answer) == BoardReceiver::Result::READY);
+	BOOST_CHECK_EQUAL(cache.loads, 2);
 }
 
 BOOST_AUTO_TEST_CASE( style_off_and_unknown_styles )

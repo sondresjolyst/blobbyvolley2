@@ -672,6 +672,8 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 
 	sponsors::Board result;
 	result.style = sponsors::parseBoardStyle(stringField(stored, "gameBoard"));
+	// logos already read, empty data for a logo that cannot be shown
+	std::map<std::string, std::string> read;
 	auto list = stored.find("sponsors");
 	if (list != stored.end() && list->is_array())
 	{
@@ -680,6 +682,11 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 		{
 			++index;
 			const std::string where = "sponsor " + std::to_string(index);
+			if (result.logos.size() >= sponsors::MAX_LOGOS)
+			{
+				warnings.push_back(where + " is skipped, a board shows at most " + std::to_string(sponsors::MAX_LOGOS) + " logos");
+				continue;
+			}
 			const std::string file = s.is_object() ? stringField(s, "logo") : std::string();
 			// only logos/<hash>.bmp, so board.json cannot point to other files
 			const std::string hash = file.size() == 74 ? file.substr(6, 64) : std::string();
@@ -688,19 +695,31 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 				warnings.push_back(where + " has no logo file logos/<hash>.bmp, skipped");
 				continue;
 			}
-			const std::string path = pathInDataDir(folder, file);
-			if (!fileExists(path))
+			auto known = read.find(hash);
+			if (known == read.end())
 			{
-				error = "the logo " + file + " is missing";
-				return false;
+				const std::string path = pathInDataDir(folder, file);
+				if (!fileExists(path))
+				{
+					error = "the logo " + file + " is missing";
+					return false;
+				}
+				std::string data;
+				std::string logoError;
+				if (!readWholeFile(path, sponsors::MAX_FILE_SIZE, data))
+					logoError = "it cannot be read or is too large";
+				else
+					sponsors::checkLogo(hash, data, &logoError);
+				if (!logoError.empty())
+					data.clear();
+				known = read.emplace(hash, data).first;
 			}
-			std::string data;
-			if (!readWholeFile(path, sponsors::MAX_FILE_SIZE, data))
+			if (known->second.empty())
 			{
-				warnings.push_back(where + " has a logo that cannot be read or is too large, skipped");
+				warnings.push_back(where + " has a logo the game cannot show, skipped");
 				continue;
 			}
-			result.logos.push_back(sponsors::LogoFile{hash, data});
+			result.logos.push_back(sponsors::LogoFile{hash, known->second});
 		}
 	}
 

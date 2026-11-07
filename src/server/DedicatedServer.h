@@ -124,6 +124,8 @@ class DedicatedServer
 		// sponsor board
 		void updateSponsors(unsigned long long now_ms);
 		void processSponsorRequest(PlayerID source, RakNet::BitStream& stream);
+		// true while the player plays a game that has no winner yet
+		bool inRunningGame(PlayerID player) const;
 
 		// raknet server used
 		const std::unique_ptr<ThreadSafeRakServer> mServer;
@@ -190,4 +192,6 @@ class DedicatedServer
 		std::set<PlayerID> mSponsorPlayers;
 		std::map<PlayerID, std::string> mSentSponsorVersion;
 		std::map<PlayerID, std::set<std::string>> mSentLogos;
+		// logos a player asked for during a game, sent when the game is over
+		std::map<PlayerID, std::vector<const sponsors::LogoFile*>> mHeldLogos;
 };

@@ -522,6 +522,18 @@ BOOST_AUTO_TEST_CASE( the_stored_board_is_read_for_the_players )
 	BOOST_CHECK_EQUAL(board.logos[0].hash, hash);
 	BOOST_CHECK_EQUAL(warnings.size(), 2u);
 
+	// more than 32 entries stop at 32 logos, a repeated logo is read once,
+	// and the missing logo after the first 32 is never looked at
+	std::string many = "{\"gameBoard\":\"led\",\"sponsors\":[";
+	for (int i = 0; i < 40; ++i)
+		many += std::string(i ? "," : "") + "{\"logo\":\"logos/" + hash + ".bmp\"}";
+	many += ",{\"logo\":\"logos/" + std::string(64, 'f') + ".bmp\"}]}";
+	BOOST_REQUIRE(writeFileAtomically(folder + "/board.json", many, error));
+	warnings.clear();
+	BOOST_REQUIRE_MESSAGE(loadStoredSponsors(folder, board, warnings, error), error);
+	BOOST_CHECK_EQUAL(board.logos.size(), sponsors::MAX_LOGOS);
+	BOOST_CHECK_EQUAL(warnings.size(), 9u);
+
 	// not JSON
 	BOOST_REQUIRE(writeFileAtomically(folder + "/board.json", "nope", error));
 	BOOST_CHECK(!loadStoredSponsors(folder, board, warnings, error));
