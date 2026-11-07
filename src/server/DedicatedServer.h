@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkMessage.h"
 #include "server/MatchMaker.h"
 #include "server/JoinCodes.h"
+#include "server/Tournament.h"
 
 class ThreadSafeRakServer;
 
@@ -85,6 +86,10 @@ class DedicatedServer
 		/// Without a gate the server behaves as a casual server.
 		void setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate );
 
+		/// Starts the matches of the players file in tournament mode. Needs a join code gate.
+		/// Casual games are not possible then.
+		void setTournamentDirector( std::unique_ptr<TournamentDirector> director );
+
 	private:
 		// creates a new game with those players
 		// does not add the game to the active game list
@@ -98,6 +103,16 @@ class DedicatedServer
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		void closeRefusedConnections();
+
+		// tournament matches
+		bool isTournament() const;
+		void updateTournament();
+		void checkTournamentGames(unsigned long long now_ms);
+		void startTournamentGame(const TournamentDirector::GameOrder& order);
+		void endGameOf(NetworkPlayer& player);
+		// stops a finished game and returns its replay packet, empty without a game
+		std::vector<unsigned char> finishForNextGame(const std::shared_ptr<NetworkGame>& game);
+		void sendTournamentStatus(unsigned long long now_ms);
 
 		// raknet server used
 		const std::unique_ptr<ThreadSafeRakServer> mServer;
@@ -131,4 +146,24 @@ class DedicatedServer
 		std::unique_ptr<JoinCodeGate> mJoinCodes;
 		// refused connections and when to close them
 		std::map<PlayerID, std::chrono::steady_clock::time_point> mRefusedConnections;
+
+		// starts assigned matches, empty on a casual server
+		std::unique_ptr<TournamentDirector> mTournament;
+		// players file generation the director knows
+		unsigned mTournamentGeneration = 0;
+		struct TournamentGame
+		{
+			int matchId;
+			std::shared_ptr<NetworkGame> game;
+			WallTime startedAt;
+			bool reported;
+			// player ids on the left and the right
+			int player1;
+			int player2;
+		};
+		std::vector<TournamentGame> mTournamentGames;
+		// status each player got last
+		std::map<PlayerID, PlayerTournamentStatus> mSentStatus;
+		// matches whose missing player was logged already
+		std::set<int> mMissingPlayerLogged;
 };

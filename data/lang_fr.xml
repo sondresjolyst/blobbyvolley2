@@ -54,6 +54,22 @@
 	<string english = "server full" translation = "serveur surcharge" />
 	<string english = " by " translation = " par " />
 	<string english = "challenger: " translation = "adversaire: " />
+	<string english = "the server refused to let you in" translation = "le serveur a refusé ton entrée" />
+	<string english = "unknown join code" translation = "code inconnu" />
+	<string english = "join code already in use" translation = "code déjà utilisé" />
+	<string english = "please update your game" translation = "mets ton jeu à jour" />
+	<string english = "no match for you yet" translation = "pas encore de match pour toi" />
+	<string english = "waiting for your opponent" translation = "attente de ton adversaire" />
+	<string english = "waiting for a free slot" translation = "attente d'une place libre" />
+	<string english = "game stopped. an organizer" translation = "partie arrêtée. l'organisation" />
+	<string english = "decides how it continues" translation = "décide de la suite" />
+	<string english = "your game is starting" translation = "ta partie commence" />
+	<string english = "the next game starts soon" translation = "la prochaine partie arrive" />
+	<string english = "next game in " translation = "prochaine partie dans " />
+	<string english = "your match is over" translation = "ton match est terminé" />
+	<string english = "opponent: " translation = "adversaire : " />
+	<string english = "best of " translation = "au meilleur de " />
+	<string english = "games won: " translation = "parties gagnées : " />
 	<string english = "games: " translation = "ombre de parties: " />
 	<string english = "random" translation = "aléatoire" />
 	<string english = "rules: " translation = "règles: " />

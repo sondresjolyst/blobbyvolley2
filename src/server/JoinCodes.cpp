@@ -117,6 +117,11 @@ bool isValidJoinCode(const std::string& code)
 	return true;
 }
 
+bool isValidNickname(const std::string& name)
+{
+	return !name.empty() && name.size() <= MAX_NICKNAME_BYTES && isCleanUtf8(name);
+}
+
 std::string joinCodeLogPrefix(const std::string& raw)
 {
 	std::string prefix;
@@ -172,7 +177,7 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 		}
 
 		std::string nickname = nick_attr;
-		if (nickname.empty() || nickname.size() > MAX_NICKNAME_BYTES || !isCleanUtf8(nickname))
+		if (!isValidNickname(nickname))
 		{
 			warnings.push_back(where + " has an empty, too long or invalid nickname, skipped");
 			continue;
@@ -200,15 +205,32 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 	for (const auto& e : entries)
 		++code_count[e.code];
 
+	// a player id that appears more than once is not clear either
+	std::map<int, int> id_count;
+	for (const auto& e : entries)
+	{
+		if (e.playerId > 0)
+			++id_count[e.playerId];
+	}
+
 	std::map<std::string, JoinCodeEntry> result;
 	std::set<std::string> nicknames;
 	for (const auto& e : entries)
 	{
 		if (code_count[e.code] > 1)
 			continue;
+		if (e.playerId > 0 && id_count[e.playerId] > 1)
+			continue;
 		if (!nicknames.insert(lowerAscii(e.nickname)).second)
 			warnings.push_back("nickname " + e.nickname + " is used by more than one player");
 		result[e.code] = e;
+	}
+
+	for (const auto& c : id_count)
+	{
+		if (c.second > 1)
+			warnings.push_back("player id " + std::to_string(c.first) + " is used by "
+				+ std::to_string(c.second) + " entries, all of them skipped");
 	}
 
 	for (const auto& c : code_count)
@@ -228,6 +250,29 @@ const JoinCodeEntry* JoinCodeTable::find(const std::string& code) const
 	if (found == mEntries.end())
 		return nullptr;
 	return &found->second;
+}
+
+const JoinCodeEntry* JoinCodeTable::findById(int playerId) const
+{
+	if (playerId <= 0)
+		return nullptr;
+	for (const auto& e : mEntries)
+	{
+		if (e.second.playerId == playerId)
+			return &e.second;
+	}
+	return nullptr;
+}
+
+std::set<int> JoinCodeTable::playerIds() const
+{
+	std::set<int> ids;
+	for (const auto& e : mEntries)
+	{
+		if (e.second.playerId > 0)
+			ids.insert(e.second.playerId);
+	}
+	return ids;
 }
 
 std::size_t JoinCodeTable::size() const
@@ -334,11 +379,21 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 		return false;
 	}
 
+	std::vector<MatchAssignment> matches;
+	if (!parseMatchAssignments(xml, table.playerIds(), matches, warnings, error))
+	{
+		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+		return false;
+	}
+
 	for (const auto& w : warnings)
 		log(LogLevel::PROBLEM, "players file: " + w);
 
 	mTable = std::move(table);
-	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players");
+	mMatches.swap(matches);
+	++mGeneration;
+	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
+		+ std::to_string(mMatches.size()) + " matches");
 	return true;
 }
 
@@ -394,4 +449,39 @@ const JoinCodeTable& JoinCodeGate::getTable() const
 const std::string& JoinCodeGate::getPath() const
 {
 	return mPath;
+}
+
+const std::vector<MatchAssignment>& JoinCodeGate::getMatches() const
+{
+	return mMatches;
+}
+
+unsigned JoinCodeGate::getGeneration() const
+{
+	return mGeneration;
+}
+
+int JoinCodeGate::playerIdOf(const PlayerID& player) const
+{
+	auto code = mPlayerCodes.find(player);
+	if (code == mPlayerCodes.end())
+		return 0;
+	const JoinCodeEntry* entry = mTable.find(code->second);
+	return entry ? entry->playerId : 0;
+}
+
+bool JoinCodeGate::findConnection(int playerId, PlayerID& player) const
+{
+	if (playerId <= 0)
+		return false;
+	for (const auto& owner : mCodeOwners)
+	{
+		const JoinCodeEntry* entry = mTable.find(owner.first);
+		if (entry && entry->playerId == playerId)
+		{
+			player = owner.second;
+			return true;
+		}
+	}
+	return false;
 }

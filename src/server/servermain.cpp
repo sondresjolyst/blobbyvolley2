@@ -108,6 +108,9 @@ int main(int argc, char** argv)
 	std::string gameSpeeds = "75";
 	bool tournamentMode = false;
 	std::string tournamentPlayersFile;
+	std::string tournamentResultsFile;
+	int tournamentMaxMatches = 0;
+	int tournamentNextGameDelay = DEFAULT_NEXT_GAME_DELAY;
 
 	UserConfig config;
 	try
@@ -118,7 +121,20 @@ int main(int argc, char** argv)
 		gameSpeeds = config.getString("speeds", gameSpeeds);
 		tournamentMode = config.getBool("tournament_mode", false);
 		if(tournamentMode)
+		{
 			tournamentPlayersFile = config.getString("tournament_players_file");
+			tournamentResultsFile = config.getString("tournament_results_file");
+			tournamentMaxMatches = config.getInteger("tournament_max_matches", 0);
+			if(tournamentMaxMatches < 0)
+				tournamentMaxMatches = 0;
+			tournamentNextGameDelay = config.getInteger("tournament_next_game_delay", DEFAULT_NEXT_GAME_DELAY);
+			if(tournamentNextGameDelay != clampNextGameDelay(tournamentNextGameDelay))
+			{
+				syslog(LOG_ERR, "tournament_next_game_delay must be %d to %d seconds, using %d",
+					   MIN_NEXT_GAME_DELAY, MAX_NEXT_GAME_DELAY, clampNextGameDelay(tournamentNextGameDelay));
+				tournamentNextGameDelay = clampNextGameDelay(tournamentNextGameDelay);
+			}
+		}
 
 		// bring that value into a sane range
 		if(maxClients <= 0 || maxClients > 150)
@@ -145,7 +161,20 @@ int main(int argc, char** argv)
 	{
 		std::unique_ptr<JoinCodeGate> gate(new JoinCodeGate(tournamentPlayersFile));
 		server.setJoinCodeGate(std::move(gate));
+
+		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
+		director->setEvents(std::make_shared<TournamentLog>(tournamentResultsFile, [](bool problem, const std::string& message){
+			syslog(problem ? LOG_ERR : LOG_NOTICE, "%s", message.c_str());
+		}));
+		server.setTournamentDirector(std::move(director));
+
 		syslog(LOG_NOTICE, "Tournament mode is on, players join with codes from %s", tournamentPlayersFile.c_str());
+		if(tournamentMaxMatches == 0)
+			syslog(LOG_NOTICE, "Assigned matches start as soon as both players are connected");
+		else
+			syslog(LOG_NOTICE, "At most %d assigned matches run at the same time", tournamentMaxMatches);
+		if(!tournamentResultsFile.empty())
+			syslog(LOG_NOTICE, "Game results are added to %s", tournamentResultsFile.c_str());
 	}
 
 	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server version %i.%i started", BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);

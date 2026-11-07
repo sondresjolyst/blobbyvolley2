@@ -120,6 +120,23 @@ void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& play
 
 	// send color settings
 	stream.Write(player.getStaticColor().toInt());
+
+	// tell the server what this client can do
+	stream.Write(CLIENT_FEATURES_MARKER);
+	stream.Write((uint32_t)CLIENT_FEATURE_TOURNAMENT);
+}
+
+uint32_t readClientFeatures(RakNet::BitStream& stream)
+{
+	uint32_t marker = 0;
+	uint32_t features = 0;
+	if (stream.GetNumberOfUnreadBits() < 64)
+		return 0;
+	if (!stream.Read(marker) || marker != CLIENT_FEATURES_MARKER)
+		return 0;
+	if (!stream.Read(features))
+		return 0;
+	return features;
 }
 
 

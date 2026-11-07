@@ -54,6 +54,13 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 					NetworkPlayer& rightPlayer, PlayerSide switchedSide,
 					std::string rules, int scoreToWin, float speed);
 
+		/// Like the constructor above, but each player can be switched on its own.
+		/// A switched player sees the game mirrored. Tournament matches use this to keep
+		/// player 1 on the left while both players see themselves on their own side.
+		NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
+					NetworkPlayer& rightPlayer, bool switchLeft, bool switchRight,
+					std::string rules, int scoreToWin, float speed);
+
 		~NetworkGame();
 
 		void injectPacket(const packet_ptr& packet);
@@ -73,6 +80,18 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		/// gets network IDs of players
 		PlayerID getPlayerID( PlayerSide side ) const;
 
+		/// The player who won, or NO_PLAYER while nobody has won. Safe to call from any thread.
+		PlayerSide getWinner() const;
+		/// The score of a side, as of the last step. Safe to call from any thread.
+		int getScore( PlayerSide side ) const;
+
+		/// Stops the game thread and handles the packets that are still queued, such as a replay request.
+		void finish();
+		/// The ID_REPLAY packet with the replay of this game. Call it after finish().
+		std::vector<unsigned char> makeReplayPacket() const;
+		/// A replay of the game before this one, sent to a player who asks before this game starts.
+		void setPreviousReplay( PlayerSide side, std::vector<unsigned char> packet );
+
 	private:
 		void broadcastBitstream(const RakNet::BitStream& stream, const RakNet::BitStream& switchedstream);
 		void broadcastBitstream(const RakNet::BitStream& stream);
@@ -87,7 +106,9 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		ThreadSafeRakServer* mServer;
 		PlayerID mLeftPlayer;
 		PlayerID mRightPlayer;
-		PlayerSide mSwitchedSide;
+		// a switched player gets mirrored data
+		bool mSwitchLeft;
+		bool mSwitchRight;
 
 		PacketQueue mPacketQueue;
 		std::mutex mPacketQueueMutex;
@@ -103,6 +124,11 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		const std::unique_ptr<ReplayRecorder> mRecorder;
 
 		std::atomic<bool> mGameValid;
+		std::atomic<int> mWinner;
+		std::atomic<int> mScore[MAX_PLAYERS];
+
+		std::mutex mPreviousReplayMutex;
+		std::vector<unsigned char> mPreviousReplay[MAX_PLAYERS];
 
 		bool mRulesSent[MAX_PLAYERS];
 		std::vector<char> mRulesString;

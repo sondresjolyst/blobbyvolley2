@@ -105,6 +105,11 @@ enum MessageType
 // 		side (PlayerSide)
 // 		name (char[16])
 //		color (int)
+//		features marker (uint32, CLIENT_FEATURES_MARKER), only from newer clients
+//		features (uint32, ClientFeature bits), only from newer clients
+//	Servers read only the fields they know, so the two trailing fields do not
+//	bother older servers. A tournament server refuses a client without the
+//	tournament feature, since that client cannot play a best-of series.
 //
 // ID_PAUSE
 // 	Description:
@@ -190,6 +195,23 @@ enum MessageType
 //		ENTRY_REFUSED
 //		reason (EntryRefusedReason)
 //
+//		TOURNAMENT_STATUS is only sent by a server in tournament mode. It tells a
+//		player what the server waits for. Casual lobby requests are ignored there.
+//		ID_LOBBY
+//		TOURNAMENT_STATUS
+//		status (TournamentStatus as unsigned char)
+//		opponent nickname (string, empty when there is no match)
+//		game number (uint32)
+//		best of (uint32)
+//		games won by the player (uint32)
+//		games won by the opponent (uint32)
+//		own nickname (string), shown instead of the name in the options
+//		milliseconds until the next game of the series starts (uint32), 0 when none waits
+//
+// ID_RULES_CHECKSUM
+//	In tournament mode the server also sends this to a player in a finished game,
+//	when the next game of a best-of series starts.
+//
 
 enum class LobbyPacketType : unsigned char
 {
@@ -200,13 +222,35 @@ enum class LobbyPacketType : unsigned char
 	LEAVE_GAME,
 	GAME_STATUS,
 	START_GAME,
-	ENTRY_REFUSED
+	ENTRY_REFUSED,
+	TOURNAMENT_STATUS
 };
 
 enum class EntryRefusedReason : unsigned char
 {
 	UNKNOWN_CODE,
-	CODE_IN_USE
+	CODE_IN_USE,
+	OUTDATED_CLIENT
+};
+
+/// Marks the features field at the end of ID_ENTER_SERVER. The bytes spell BTRN.
+constexpr uint32_t CLIENT_FEATURES_MARKER = 0x4E525442;
+
+enum ClientFeature : uint32_t
+{
+	/// The client shows the tournament status and plays the next game of a series.
+	CLIENT_FEATURE_TOURNAMENT = 1
+};
+
+enum class TournamentStatus : unsigned char
+{
+	NO_MATCH,
+	WAITING_FOR_OPPONENT,
+	WAITING_FOR_SLOT,
+	WAITING_FOR_ORGANIZER,
+	PLAYING,
+	NEXT_GAME,
+	MATCH_OVER
 };
 
 class IUserConfigReader;
@@ -237,6 +281,8 @@ struct ServerInfo : public ObjectCounter<ServerInfo>
 // convenience functions for building packets
 class PlayerIdentity;
 void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& player );
+/// Reads the features at the end of an ID_ENTER_SERVER packet whose other fields were read. 0 when there are none.
+uint32_t readClientFeatures(RakNet::BitStream& stream);
 
 bool operator == (const ServerInfo& lval, const ServerInfo& rval);
 std::ostream& operator<<(std::ostream& stream, const ServerInfo& val);

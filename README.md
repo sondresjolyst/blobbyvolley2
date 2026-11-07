@@ -51,9 +51,25 @@ A relative path starts in the working directory of the server. The players file 
 	<player id="17" nickname="Kari" code="B9HNZ3WD6F"/>
 </tournament>
 ```
-A code has 10 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Players may type it in lower case. A nickname is 1 to 15 bytes of UTF-8. The `id` is the player id on the site and may be left out. The server skips an entry with a bad code or nickname, and it skips every entry of a code that appears more than once. Other elements below `<tournament>` are ignored.
+A code has 10 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`. Players may type it in lower case. A nickname is 1 to 15 bytes of UTF-8. The `id` is the player id on the site and may be left out. The server skips an entry with a bad code or nickname, and it skips every entry of a code or an `id` that appears more than once. Other elements below `<tournament>` are ignored.
 
 The server reads the file again within a few seconds after it changes. If the file is missing or is not valid XML, the server keeps the players it read last and logs an error. Write a new file under another name and rename it over the old one, so the server never reads half a file. The log shows only the first 3 characters of a code.
+
+The same file assigns matches. The fields have the names and meanings of a match in the sync of the tournament site:
+```xml
+<match id="7" player1="12" player2="17" ruleFile="default.lua" scoreToWin="15" speed="75" bestOf="3"/>
+```
+`player1` and `player2` are player ids from the `<player>` entries. Only `id`, `player1` and `player2` are required. The others default to `default.lua`, 15 points, speed 75 and best of 1. `scoreToWin` is 1 to 99, `speed` is 30 to 120 frames per second and `bestOf` is an odd number. `ruleFile` names a file in the `rules` folder of the server. `nextGame` sets the number of the next game and `awaitingDecision="true"` holds a match until the organizer decides. `wins1` and `wins2` are the games player 1 and player 2 have won so far, 0 to 99. `nextGameDelay` is the pause between two games of the series, 3 to 120 seconds. The server skips a match with a bad value, an unknown player or wins that already decide the series.
+
+The site is the source of truth for the series score. When the wins of a match change in the file, the server uses them instead of its own count, also when a correction lowers them. After a restart the server starts from the wins in the file. A game the server finished counts until the file brings new wins.
+
+Tournament mode needs a game from this fork. The game tells the server that it can play a tournament, and the server refuses an older game with the message "please update your game". Casual servers do not change, and the game still plays on older servers.
+
+In tournament mode players cannot open or join games in the lobby. The lobby shows what each player waits for. When both players of a match are connected, the server starts the game. Player 1 plays on the left, and each player still sees their own blob on the side they picked in the options. When a game of a series ends, the win screen counts down to the next game. Games go on until a player has won more than half of them. The pause is 10 seconds unless `tournament_next_game_delay` in the server config sets 3 to 120 seconds, and `nextGameDelay` on a `<match>` sets it for that match. After the last game, OK takes the player back to the tournament lobby without leaving the server. A player who leaves during a game ends that game as abandoned, and the report names that player in `leftPlayerId`. The lobby then says that the game stopped and that an organizer decides how it continues. The match then waits for the organizer until the file brings a new `nextGame` or changes `awaitingDecision` to false. By default every match starts as soon as its players are connected. To play one match at a time, set:
+```xml
+<var name="tournament_max_matches" value="1"/>
+```
+The server logs each started match and each game result, and adds them as lines of JSON to `tournament_results.jsonl`. A game line holds the report body that the game server API of the site expects. Set `tournament_results_file` to an empty value to only log them.
 
 #### Join links
 The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. It works the same on Windows and Linux.

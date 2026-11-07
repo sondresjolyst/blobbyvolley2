@@ -217,6 +217,19 @@ void TextManager::setDefault()
 	mStrings[NET_ENTRY_REFUSED] = "the server refused to let you in";
 	mStrings[NET_UNKNOWN_CODE] = "unknown join code";
 	mStrings[NET_CODE_IN_USE] = "join code already in use";
+	mStrings[NET_UPDATE_GAME] = "please update your game";
+	mStrings[TNM_NO_MATCH] = "no match for you yet";
+	mStrings[TNM_WAITING_OPPONENT] = "waiting for your opponent";
+	mStrings[TNM_WAITING_SLOT] = "waiting for a free slot";
+	mStrings[TNM_GAME_STOPPED] = "game stopped. an organizer";
+	mStrings[TNM_ORGANIZER_DECIDES] = "decides how it continues";
+	mStrings[TNM_PLAYING] = "your game is starting";
+	mStrings[TNM_NEXT_GAME] = "the next game starts soon";
+	mStrings[TNM_NEXT_GAME_IN] = "next game in ";
+	mStrings[TNM_MATCH_OVER] = "your match is over";
+	mStrings[TNM_OPPONENT] = "opponent: ";
+	mStrings[TNM_BEST_OF] = "best of ";
+	mStrings[TNM_GAMES_WON] = "games won: ";
 
 	mStrings[OP_TOUCH_TYPE] = "touch input type:";
 	mStrings[OP_TOUCH_ARROWS] = "arrow keys";

@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "UserConfig.h"
 #include "GenericIO.h"
 #include "GameLogic.h"
+#include "server/MatchAssignments.h"
 #include "Global.h"
 #include "JoinLink.h"
 
@@ -100,8 +101,19 @@ LobbyState::LobbyState(ServerInfo info, PreviousState previous, std::string join
 {
 }
 
+LobbyState::LobbyState(ServerInfo info, std::shared_ptr<RakClient> client, const TournamentStatusData& status) :
+		mClient(std::move(client)), mInfo(std::move(info)), mPrevious( PreviousState::MAIN ),
+		mLobbyState(ConnectionState::CONNECTED), mTournament(true), mOwnName(status.ownName)
+{
+	mSubState = std::make_shared<LobbyTournamentSubstate>(status);
+}
+
 void LobbyState::init()
 {
+	// back from a tournament game, the connection is still open
+	if (mClient)
+		return;
+
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
@@ -193,7 +205,16 @@ void LobbyState::step_impl()
 				if (mLobbyState == ConnectionState::REFUSED)
 					break;
 				mLobbyState = ConnectionState::CONNECTED;
-				if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
+				if((LobbyPacketType)t == LobbyPacketType::TOURNAMENT_STATUS)
+				{
+					// the server picks the matches, so the casual lobby is not shown anymore
+					mTournament = true;
+					TournamentStatusData data = readTournamentStatus(*in);
+					if (!data.ownName.empty())
+						mOwnName = data.ownName;
+					mSubState = std::make_shared<LobbyTournamentSubstate>(data);
+				}
+				else if((LobbyPacketType)t == LobbyPacketType::SERVER_STATUS)
 				{
 					uint32_t player_count;
 					in->uint32( player_count );
@@ -248,7 +269,7 @@ void LobbyState::step_impl()
 					mPreferedScore = std::distance( scores.begin(), closest_score );
 
 					// if this is the first time we receive the config, create new main substate
-					if( first_config )
+					if( first_config && !mTournament )
 					{
 						mSubState = std::make_shared<LobbyMainSubstate>(mClient, mPreferedSpeed, mPreferedRules, mPreferedScore);
 					}
@@ -263,18 +284,27 @@ void LobbyState::step_impl()
 				}
 				break;
 			case ID_RULES_CHECKSUM: // this packet is sent when a game was created, so we probably are joining a game here.
-				// this is only a valid request if we are in the lobby game substate
-				assert(dynamic_cast<LobbyGameSubstate*>(mSubState.get()) != nullptr);
+				// in a casual lobby we are in the lobby game substate here. A tournament server
+				// starts the game while we wait in the tournament substate.
 				{
 				RakNet::BitStream stream(packet->data, packet->length, false);
 
 				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
 
-				int serverChecksum, scoreToWin;
-				stream.Read(serverChecksum);
-				stream.Read(scoreToWin);
+				int serverChecksum = 0;
+				int scoreToWin = 0;
+				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
+					break;
+				if (!isValidScoreToWin(scoreToWin))
+					break;
 
-				switchState( new NetworkGameState( mClient, serverChecksum, scoreToWin ) );
+				{
+					auto game = new NetworkGameState( mClient, serverChecksum, scoreToWin, mOwnName );
+					// a tournament player goes back to this lobby after the match
+					if (mTournament)
+						game->setTournamentLobby(mInfo);
+					switchState( game );
+				}
 				}
 				break;
 			default:
@@ -316,6 +346,8 @@ void LobbyState::step_impl()
 				text = TextManager::NET_UNKNOWN_CODE;
 			else if (mRefusedReason == (unsigned char)EntryRefusedReason::CODE_IN_USE)
 				text = TextManager::NET_CODE_IN_USE;
+			else if (mRefusedReason == (unsigned char)EntryRefusedReason::OUTDATED_CLIENT)
+				text = TextManager::NET_UPDATE_GAME;
 			imgui.doText(GEN_ID, Vector2( 100, 55 ), text);
 		}
 
@@ -357,6 +389,68 @@ const char* LobbyState::getStateName() const
 	return "LobbyState";
 }
 
+
+std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data)
+{
+	std::vector<std::string> lines;
+	switch (data.status)
+	{
+		case TournamentStatus::NO_MATCH:
+			lines.push_back(imgui.getText(TextManager::TNM_NO_MATCH));
+			return lines;
+		case TournamentStatus::WAITING_FOR_OPPONENT:
+			lines.push_back(imgui.getText(TextManager::TNM_WAITING_OPPONENT));
+			break;
+		case TournamentStatus::WAITING_FOR_SLOT:
+			lines.push_back(imgui.getText(TextManager::TNM_WAITING_SLOT));
+			break;
+		case TournamentStatus::WAITING_FOR_ORGANIZER:
+			// a game was abandoned, or the organizer holds the match
+			lines.push_back(imgui.getText(TextManager::TNM_GAME_STOPPED));
+			lines.push_back(imgui.getText(TextManager::TNM_ORGANIZER_DECIDES));
+			break;
+		case TournamentStatus::PLAYING:
+			lines.push_back(imgui.getText(TextManager::TNM_PLAYING));
+			break;
+		case TournamentStatus::NEXT_GAME:
+			lines.push_back(imgui.getText(TextManager::TNM_NEXT_GAME));
+			break;
+		case TournamentStatus::MATCH_OVER:
+			lines.push_back(imgui.getText(TextManager::TNM_MATCH_OVER));
+			break;
+	}
+
+	if (!data.opponent.empty())
+		lines.push_back(imgui.getText(TextManager::TNM_OPPONENT) + data.opponent);
+	if (data.bestOf > 1)
+	{
+		lines.push_back(imgui.getText(TextManager::TNM_BEST_OF) + std::to_string(data.bestOf) + ", "
+			+ imgui.getText(TextManager::TNM_GAMES_WON) + std::to_string(data.ownWins) + " - "
+			+ std::to_string(data.opponentWins));
+	}
+	return lines;
+}
+
+// ----------------------------------------------------------------------------
+// 				T o u r n a m e n t     S u b s t a t e
+// ----------------------------------------------------------------------------
+
+LobbyTournamentSubstate::LobbyTournamentSubstate(TournamentStatusData data) :
+	mData(std::move(data))
+{
+}
+
+#undef GEN_ID
+#define GEN_ID imgui.getNextId()
+void LobbyTournamentSubstate::step(IMGUI& imgui, const ServerStatusData& /*status*/)
+{
+	imgui.doOverlay(GEN_ID, Vector2(25.0, 90.0), Vector2(775.0, 470.0));
+	auto lines = describeTournamentStatus(imgui, mData);
+	for (unsigned i = 0; i < lines.size(); ++i)
+	{
+		imgui.doText(GEN_ID, Vector2(400.0, 200.0 + 50.0 * i), lines[i], TF_ALIGN_CENTER);
+	}
+}
 
 // ----------------------------------------------------------------------------
 // 				M a i n     S u b s t a t e

@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "GameState.h"
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
+#include "LobbyStates.h"
 
 #include <vector>
 #include <memory>
@@ -45,12 +46,16 @@ class NetworkGameState : public GameState
 public:
 	/// create a NetworkGameState with connection to a certain server
 	/// \param client A client which has an established connection to the server we want to start the game on.
-	NetworkGameState(std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win);
+	/// \param own_name nickname from a tournament server, used instead of the configured name. Empty on a casual server.
+	NetworkGameState(std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win, std::string own_name = "");
 
 	~NetworkGameState() override;
 	void step_impl() override;
 	void init() override;
 	const char* getStateName() const override;
+
+	/// On a tournament server, OK goes back to this server's lobby and keeps the connection.
+	void setTournamentLobby(const ServerInfo& info);
 
 private:
 	enum
@@ -87,4 +92,22 @@ private:
 
 	// somewhat ugly: we need to keep the rules checksum until we actually initialize the state
 	int mRulesChecksum;
+
+	// a tournament server started the next game, which takes over the connection
+	bool mKeepConnection = false;
+	// the next game waits while a replay of this game is saved
+	bool mNextGamePending = false;
+	int mNextGameChecksum = 0;
+	int mNextGameScoreToWin = 0;
+	void startNextGame();
+	// what a tournament server said about the match
+	bool mHasTournamentStatus = false;
+	TournamentStatusData mTournamentStatus;
+	// nickname from a tournament server, the saved config is not changed
+	std::string mOwnName;
+	// the tournament server, to go back to its lobby, empty on a casual server
+	std::shared_ptr<ServerInfo> mTournamentLobby;
+	// SDL ticks when the next game of the series starts
+	unsigned mNextGameTicks = 0;
+	void backToTournamentLobby();
 };

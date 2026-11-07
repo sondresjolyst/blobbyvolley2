@@ -44,6 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "FileWrite.h"
 #include "SpeedController.h"
 #include "LobbyStates.h"
+#include "server/MatchAssignments.h"
 
 // global variable to save the lag
 int CURRENT_NETWORK_LAG = -1;
@@ -59,7 +60,7 @@ static bool isValidMatchEvent(char event, PlayerSide side)
 
 
 /* implementation */
-NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win)
+NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_checksum, int score_to_win, std::string own_name)
 	: GameState(new DuelMatch(true, DEFAULT_RULES_FILE, score_to_win))
 	, mNetworkState(WAITING_FOR_OPPONENT)
 	, mWaitingForReplay(false)
@@ -68,6 +69,7 @@ NetworkGameState::NetworkGameState( std::shared_ptr<RakClient> client, int rule_
 	, mSelectedChatmessage(0)
 	, mChatCursorPosition(0)
 	, mRulesChecksum(rule_checksum)
+	, mOwnName(std::move(own_name))
 {
 }
 
@@ -101,6 +103,8 @@ void NetworkGameState::init()
 	}
 
 	mRemotePlayer->setName("");
+	if (!mOwnName.empty())
+		mLocalPlayer->setName(mOwnName);
 
 	// check the rules
 	int ourChecksum = 0;
@@ -129,10 +133,37 @@ void NetworkGameState::init()
 	mClient->Send(&stream2, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
 }
 
+void NetworkGameState::startNextGame()
+{
+	mNextGamePending = false;
+	mKeepConnection = true;
+	auto game = new NetworkGameState(mClient, mNextGameChecksum, mNextGameScoreToWin, mOwnName);
+	if (mTournamentLobby)
+		game->setTournamentLobby(*mTournamentLobby);
+	switchState(game);
+}
+
+void NetworkGameState::setTournamentLobby(const ServerInfo& info)
+{
+	mTournamentLobby = std::make_shared<ServerInfo>(info);
+}
+
+void NetworkGameState::backToTournamentLobby()
+{
+	if (!mTournamentLobby)
+	{
+		switchState(new MainMenuState());
+		return;
+	}
+	mKeepConnection = true;
+	switchState(new LobbyState(*mTournamentLobby, mClient, mTournamentStatus));
+}
+
 NetworkGameState::~NetworkGameState()
 {
 	CURRENT_NETWORK_LAG = -1;
-	mClient->Disconnect(50);
+	if (!mKeepConnection)
+		mClient->Disconnect(50);
 }
 
 void NetworkGameState::step_impl()
@@ -140,7 +171,8 @@ void NetworkGameState::step_impl()
 	IMGUI& imgui = getIMGUI();
 
 	packet_ptr packet;
-	while (nullptr != (packet = mClient->Receive()))
+	// once the next game started, its state reads the following packets
+	while (!mKeepConnection && nullptr != (packet = mClient->Receive()))
 	{
 		switch(packet->data[0])
 		{
@@ -276,7 +308,44 @@ void NetworkGameState::step_impl()
 			}
 			case ID_RULES_CHECKSUM:
 			{
-				assert(0);
+				// only a tournament server sends this during a game. It starts the next
+				// game of the match on the same connection.
+				if (mNetworkState != PLAYER_WON && mNetworkState != OPPONENT_DISCONNECTED)
+					break;
+				RakNet::BitStream stream(packet->data, packet->length, false);
+				stream.IgnoreBytes(1);	// ignore ID_RULES_CHECKSUM
+				int serverChecksum = 0;
+				int scoreToWin = 0;
+				if (!stream.Read(serverChecksum) || !stream.Read(scoreToWin))
+					break;
+				if (!isValidScoreToWin(scoreToWin))
+					break;
+				mNextGamePending = true;
+				mNextGameChecksum = serverChecksum;
+				mNextGameScoreToWin = scoreToWin;
+				// a replay that is asked for or on its way is saved first
+				if (!mSaveReplay && !mWaitingForReplay)
+					startNextGame();
+				break;
+			}
+			case ID_LOBBY:
+			{
+				RakNet::BitStream stream(packet->data, packet->length, false);
+				auto in = createGenericReader(&stream);
+				unsigned char type = 0;
+				in->byte(type);	// ID_LOBBY
+				in->byte(type);
+				if ((LobbyPacketType)type == LobbyPacketType::TOURNAMENT_STATUS)
+				{
+					mTournamentStatus = readTournamentStatus(*in);
+					mHasTournamentStatus = true;
+					if (!mTournamentStatus.ownName.empty())
+					{
+						mOwnName = mTournamentStatus.ownName;
+						mLocalPlayer->setName(mOwnName);
+					}
+					mNextGameTicks = SDL_GetTicks() + mTournamentStatus.nextGameInMs;
+				}
 				break;
 			}
 			case ID_RULES:
@@ -427,6 +496,11 @@ void NetworkGameState::step_impl()
 			mWaitingForReplay = true;
 		}
 	}
+	else if (mNextGamePending && !mWaitingForReplay)
+	{
+		// the replay was saved or the user gave up on it
+		startNextGame();
+	}
 	else if (mWaitingForReplay)
 	{
 		imgui.doOverlay(GEN_ID, Vector2(150, 200), Vector2(650, 400));
@@ -455,7 +529,7 @@ void NetworkGameState::step_impl()
 
 			displayQueryPrompt(200,
 				TextManager::GAME_OPP_LEFT,
-				std::make_tuple(TextManager::LBL_OK, [&](){ switchState(new MainMenuState); }),
+				std::make_tuple(TextManager::LBL_OK, [&](){ if (mTournamentLobby) backToTournamentLobby(); else switchState(new MainMenuState); }),
 				std::make_tuple(TextManager::RP_SAVE, [&](){ mSaveReplay = true; imgui.resetSelection(); }),
 				std::make_tuple(TextManager::NET_STAY_ON_SERVER, [&](){
 					// Send a blobby server connection request
@@ -521,9 +595,28 @@ void NetworkGameState::step_impl()
 		{
 			mMatch->updateEvents(); // so the last whistle will be sounded
 			displayWinningPlayerScreen(mWinningPlayer);
-			if (imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
+			// between two games of a series there is no OK, so nobody leaves the server by mistake
+			const bool seriesGoesOn = mHasTournamentStatus &&
+				(mTournamentStatus.status == TournamentStatus::NEXT_GAME || mTournamentStatus.status == TournamentStatus::PLAYING);
+			if (mHasTournamentStatus && mTournamentStatus.status != TournamentStatus::PLAYING)
 			{
-				switchState(new MainMenuState());
+				auto lines = describeTournamentStatus(imgui, mTournamentStatus);
+				if (mTournamentStatus.status == TournamentStatus::NEXT_GAME)
+				{
+					unsigned now = SDL_GetTicks();
+					unsigned left = mNextGameTicks > now ? (mNextGameTicks - now + 999) / 1000 : 0;
+					lines.front() = imgui.getText(TextManager::TNM_NEXT_GAME_IN) + std::to_string(left);
+				}
+				// centred under the winner text, so the lines stay clear of the trophy
+				for (unsigned i = 0; i < lines.size(); ++i)
+					imgui.doText(GEN_ID, Vector2(500, 400 + 18 * i), lines[i], TF_ALIGN_CENTER | TF_SMALL_FONT);
+			}
+			if (!seriesGoesOn && imgui.doButton(GEN_ID, Vector2(290, 360), TextManager::LBL_OK))
+			{
+				if (mTournamentLobby)
+					backToTournamentLobby();
+				else
+					switchState(new MainMenuState());
 			}
 			if (imgui.doButton(GEN_ID, Vector2(380, 360), TextManager::RP_SAVE))
 			{

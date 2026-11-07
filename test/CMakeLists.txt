@@ -28,6 +28,9 @@ set(SRC
 	../src/server/MatchMaker.cpp    ../src/server/MatchMaker.h
 	../src/server/NetworkPlayer.cpp ../src/server/NetworkPlayer.h
 	../src/server/JoinCodes.cpp     ../src/server/JoinCodes.h
+	../src/server/MatchAssignments.cpp ../src/server/MatchAssignments.h
+	../src/server/Tournament.cpp    ../src/server/Tournament.h
+	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h
 	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
 	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
@@ -50,7 +53,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp SponsorBoardTest.cpp ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp ${SRC})
 
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"" "BLOBBY_TEST_VERSION_FILE=\"${PROJECT_SOURCE_DIR}/version.txt\"")

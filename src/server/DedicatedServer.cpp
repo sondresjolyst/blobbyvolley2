@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "ThreadSafeRakServer.h"
 #include "NetworkGame.h"
 #include "GenericIO.h"
+#include "FileExceptions.h"
 
 #ifndef WIN32
 #ifndef __ANDROID__
@@ -50,6 +51,15 @@ namespace
 {
 	// time a refused client gets to receive the reason before the connection closes
 	const std::chrono::milliseconds REFUSED_CLOSE_DELAY(1000);
+
+	// wait before an assigned game whose player could not be found is tried again
+	const unsigned TOURNAMENT_RETRY_DELAY_MS = 1000;
+
+	unsigned long long steadyMilliseconds()
+	{
+		auto now = std::chrono::steady_clock::now().time_since_epoch();
+		return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+	}
 }
 
 #ifdef __ANDROID__
@@ -197,8 +207,13 @@ void DedicatedServer::processPackets()
 			{
 				mActiveConnections.erase(packet->playerId);
 				mRefusedConnections.erase(packet->playerId);
+				mSentStatus.erase(packet->playerId);
 				if( mJoinCodes )
+				{
+					if( mTournament )
+						mTournament->playerDisconnected( mJoinCodes->playerIdOf(packet->playerId) );
 					mJoinCodes->release(packet->playerId);
+				}
 
 				auto player = mPlayerMap.find(packet->playerId);
 				// delete the disconnecting player.
@@ -249,9 +264,13 @@ void DedicatedServer::updateGames()
 {
 	if( mJoinCodes )
 	{
-		auto now = std::chrono::steady_clock::now().time_since_epoch();
-		mJoinCodes->poll( std::chrono::duration_cast<std::chrono::milliseconds>(now).count() );
+		mJoinCodes->poll( steadyMilliseconds() );
 		closeRefusedConnections();
+	}
+
+	if( isTournament() )
+	{
+		updateTournament();
 	}
 
 	// update new game creation for locally hosted games.
@@ -318,6 +337,14 @@ int DedicatedServer::getConnectedClients() const
 void DedicatedServer::allowNewPlayers( bool allow )
 {
 	mAcceptNewPlayers = allow;
+}
+
+void DedicatedServer::setTournamentDirector( std::unique_ptr<TournamentDirector> director )
+{
+	mTournament = std::move(director);
+	mTournamentGeneration = 0;
+	// no casual games on a tournament server
+	mMatchMaker.setAllowNewGames( !mTournament );
 }
 
 void DedicatedServer::setJoinCodeGate( std::unique_ptr<JoinCodeGate> gate )
@@ -420,9 +447,17 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	}
 
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
+	const uint32_t features = readClientFeatures(data);
 
 	if( mJoinCodes )
 	{
+		// an older client would get stuck at the second game of a series
+		if( (features & CLIENT_FEATURE_TOURNAMENT) == 0 )
+		{
+			refuseEntry( source, EntryRefusedReason::OUTDATED_CLIENT );
+			return;
+		}
+
 		JoinCodeGate::Result result = mJoinCodes->admit( *newplayer );
 		if( result != JoinCodeGate::Result::ACCEPTED )
 		{
@@ -439,6 +474,11 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	}
 
 	mMatchMaker.addPlayer(source, newplayer);
+
+	if( isTournament() )
+	{
+		mTournament->playerConnected( mJoinCodes->playerIdOf(source) );
+	}
 
 	syslog(LOG_DEBUG, "Player added (%d) from %s (%s), %d players available",
 		   ID_ENTER_SERVER, source.toString().c_str(),
@@ -512,6 +552,13 @@ void DedicatedServer::processSingleMessage(MessageType message_id, PlayerID sour
 				break;
 			}
 
+			// in tournament mode the server picks the matches
+			if( isTournament() )
+			{
+				syslog(LOG_DEBUG, "Ignored lobby request from %s in tournament mode", source.toString().c_str());
+				break;
+			}
+
 			// which player is wanted as opponent
 			mMatchMaker.receiveLobbyPacket( source, data );
 			break;
@@ -555,4 +602,221 @@ bool DedicatedServer::isConnected(PlayerID player) const {
 bool DedicatedServer::addConnection(PlayerID player) {
 	auto result = mActiveConnections.insert(player);
 	return result.second;
+}
+
+// - - - - - - - - - - - - - - - - - -
+// 			tournament matches
+// - - - - - - - - - - - - - - - - - -
+
+bool DedicatedServer::isTournament() const
+{
+	return mJoinCodes && mTournament;
+}
+
+void DedicatedServer::updateTournament()
+{
+	const unsigned long long now = steadyMilliseconds();
+
+	// a new players file brings new matches and maybe new player ids
+	if( mJoinCodes->getGeneration() != mTournamentGeneration )
+	{
+		mTournamentGeneration = mJoinCodes->getGeneration();
+		mTournament->setAssignments( mJoinCodes->getMatches() );
+
+		std::set<int> connected;
+		for( const auto& p : mPlayerMap )
+		{
+			int id = mJoinCodes->playerIdOf( p.first );
+			if( id > 0 )
+				connected.insert( id );
+		}
+		mTournament->setConnectedPlayers( connected );
+	}
+
+	checkTournamentGames( now );
+
+	for( const auto& order : mTournament->takeGamesToStart( now ) )
+	{
+		startTournamentGame( order );
+	}
+
+	sendTournamentStatus( now );
+}
+
+void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
+{
+	for( auto it = mTournamentGames.begin(); it != mTournamentGames.end(); )
+	{
+		TournamentGame& entry = *it;
+		if( !entry.reported )
+		{
+			// the winner is checked first, since a player may leave right after the win
+			PlayerSide winner = entry.game->getWinner();
+			if( winner != NO_PLAYER )
+			{
+				entry.reported = true;
+				mTournament->gameFinished( entry.matchId, winner == LEFT_PLAYER ? 1 : 2,
+							entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER),
+							entry.startedAt, std::chrono::system_clock::now(), now_ms );
+			}
+			else if( !entry.game->isGameValid() )
+			{
+				entry.reported = true;
+				// the player who left is no longer in the player map. Player 1 plays on the left.
+				int left = 0;
+				const bool leftGone = mPlayerMap.count( entry.game->getPlayerID(LEFT_PLAYER) ) == 0;
+				const bool rightGone = mPlayerMap.count( entry.game->getPlayerID(RIGHT_PLAYER) ) == 0;
+				if( leftGone != rightGone )
+					left = leftGone ? entry.player1 : entry.player2;
+				mTournament->gameAbandoned( entry.matchId,
+							entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER),
+							entry.startedAt, std::chrono::system_clock::now(), left );
+			}
+		}
+
+		// a finished game stays until a player leaves or the next game replaces it
+		if( entry.reported && !entry.game->isGameValid() )
+			it = mTournamentGames.erase( it );
+		else
+			++it;
+	}
+}
+
+void DedicatedServer::endGameOf(NetworkPlayer& player)
+{
+	std::shared_ptr<NetworkGame> old = player.getGame();
+	if( !old )
+		return;
+
+	// detach every player, so the old game cannot send anything to them anymore
+	{
+		std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+		for( auto& p : mPlayerMap )
+		{
+			if( p.second->getGame() == old )
+				p.second->setGame( nullptr );
+		}
+	}
+
+	mGameList.remove( old );
+	for( auto it = mTournamentGames.begin(); it != mTournamentGames.end(); )
+	{
+		if( it->game == old )
+			it = mTournamentGames.erase( it );
+		else
+			++it;
+	}
+	// the game thread stops when the last reference goes away
+}
+
+std::vector<unsigned char> DedicatedServer::finishForNextGame(const std::shared_ptr<NetworkGame>& game)
+{
+	if( !game )
+		return std::vector<unsigned char>();
+	game->finish();
+	return game->makeReplayPacket();
+}
+
+void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& order)
+{
+	const MatchAssignment& match = order.match;
+
+	PlayerID id1, id2;
+	auto player1 = mPlayerMap.end();
+	auto player2 = mPlayerMap.end();
+	if( mJoinCodes->findConnection( match.player1, id1 ) )
+		player1 = mPlayerMap.find( id1 );
+	if( mJoinCodes->findConnection( match.player2, id2 ) )
+		player2 = mPlayerMap.find( id2 );
+	if( player1 == mPlayerMap.end() || player2 == mPlayerMap.end() )
+	{
+		// log once and try again a little later, not on every tick
+		if( mMissingPlayerLogged.insert( match.matchId ).second )
+			syslog(LOG_ERR, "Match %d: a player is not connected after all, the game waits", match.matchId);
+		mTournament->gameNotStarted( match.matchId, true, steadyMilliseconds() + TOURNAMENT_RETRY_DELAY_MS );
+		return;
+	}
+	mMissingPlayerLogged.erase( match.matchId );
+
+	NetworkPlayer& left = *player1->second;
+	NetworkPlayer& right = *player2->second;
+
+	// an earlier game of these players is over, the director only starts free players.
+	// Its queued packets are handled first, so a replay asked for in time still arrives.
+	std::vector<unsigned char> replayLeft = finishForNextGame( left.getGame() );
+	std::vector<unsigned char> replayRight = left.getGame() == right.getGame() ? replayLeft : finishForNextGame( right.getGame() );
+	endGameOf( left );
+	endGameOf( right );
+
+	mMatchMaker.removePlayer( id1 );
+	mMatchMaker.removePlayer( id2 );
+
+	// player 1 plays on the left. Each player still sees itself on its own side.
+	// As in the casual lobby, a player without a side is never mirrored.
+	bool switchLeft = left.getDesiredSide() == RIGHT_PLAYER;
+	bool switchRight = right.getDesiredSide() == LEFT_PLAYER;
+
+	std::shared_ptr<NetworkGame> game;
+	try
+	{
+		game = std::make_shared<NetworkGame>( mServer.get(), left, right, switchLeft, switchRight,
+							match.ruleFile, match.scoreToWin, (float)match.speed );
+	}
+	catch( const std::exception& error )
+	{
+		syslog(LOG_ERR, "Match %d: could not create game %d with rules %s: %s",
+			   match.matchId, order.game, match.ruleFile.c_str(), error.what());
+		mTournament->gameNotStarted( match.matchId );
+		return;
+	}
+	catch( ... )
+	{
+		syslog(LOG_ERR, "Match %d: could not create game %d with rules %s",
+			   match.matchId, order.game, match.ruleFile.c_str());
+		mTournament->gameNotStarted( match.matchId );
+		return;
+	}
+
+	// a late replay request reaches the new game, which answers with the old replay
+	game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
+	game->setPreviousReplay( RIGHT_PLAYER, std::move(replayRight) );
+
+	{
+		std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+		left.setGame( game );
+		right.setGame( game );
+	}
+
+	SWLS_Games++;
+	mGameList.push_back( game );
+	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
+												match.player1, match.player2 } );
+
+	syslog(LOG_NOTICE, "Match %d game %d started: '%s' vs. '%s', rules %s, %d points, speed %d, best of %d",
+		   match.matchId, order.game, left.getName().c_str(), right.getName().c_str(),
+		   match.ruleFile.c_str(), match.scoreToWin, match.speed, match.bestOf);
+}
+
+void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
+{
+	for( const auto& p : mPlayerMap )
+	{
+		int id = mJoinCodes->playerIdOf( p.first );
+		PlayerTournamentStatus status = mTournament->statusOf( id, now_ms );
+
+		auto sent = mSentStatus.find( p.first );
+		if( sent != mSentStatus.end() && sent->second == status )
+			continue;
+		mSentStatus[p.first] = status;
+
+		std::string opponent;
+		if( const JoinCodeEntry* entry = mJoinCodes->getTable().findById( status.opponentId ) )
+			opponent = entry->nickname;
+
+		// the player's name is the nickname from the players file since the join code was accepted
+		RakNet::BitStream stream;
+		unsigned nextGameIn = status.nextGameAt > now_ms ? (unsigned)(status.nextGameAt - now_ms) : 0;
+		writeTournamentStatus( stream, status, opponent, p.second->getName(), nextGameIn );
+		mServer->Send( stream, LOW_PRIORITY, RELIABLE_ORDERED, p.first );
+	}
 }

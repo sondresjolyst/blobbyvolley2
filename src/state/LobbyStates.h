@@ -7,8 +7,14 @@
 #include "PlayerIdentity.h"
 #include "State.h"
 #include "GenericIOFwd.h"
+#include "server/Tournament.h"
 
 class RakClient;
+class IMGUI;
+
+/// The lines of text that describe a tournament status to the player.
+std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data);
+
 struct JoinLink;
 struct SDL_Window;
 
@@ -65,6 +71,8 @@ class LobbyState : public State
 		/// \param join_code when not empty, it is sent as player name instead of the name in the config.
 		///		This is how a join link enters a tournament server.
 		LobbyState(ServerInfo info, PreviousState previous, std::string join_code = std::string());
+		/// Goes back to the lobby of a tournament server on a connection that is still open.
+		LobbyState(ServerInfo info, std::shared_ptr<RakClient> client, const TournamentStatusData& status);
 		~LobbyState() override;
 
 		void step_impl() override;
@@ -84,6 +92,10 @@ class LobbyState : public State
 
 		ServerStatusData mStatus;
 		std::shared_ptr<LobbySubstate> mSubState;
+		// true once the server said it runs a tournament
+		bool mTournament = false;
+		// nickname a tournament server gave this player
+		std::string mOwnName;
 
 		// indices of settings that resemble most closely those of local settings
 		unsigned mPreferedSpeed = -1;
@@ -111,6 +123,17 @@ private:
 	bool mChosenPasswordVisible;
 
 	std::vector<unsigned> mPossibleScores{2, 5, 10, 15, 20, 25, 40, 50};
+};
+
+
+/// Shown on a tournament server, where the server starts the matches.
+class LobbyTournamentSubstate : public LobbySubstate
+{
+public:
+	explicit LobbyTournamentSubstate(TournamentStatusData data);
+	void step( IMGUI& imgui, const ServerStatusData& status ) override;
+private:
+	TournamentStatusData mData;
 };
 
 
