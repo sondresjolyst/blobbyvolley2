@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 /* header include */
 #include "IMGUI.h"
+#include "EditboxWindow.h"
 
 /* includes */
 #include <queue>
@@ -526,12 +527,8 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 {
 	int FontSize = (flags & TF_SMALL_FONT ? FONT_WIDTH_SMALL : FONT_WIDTH_NORMAL);
 	bool changed = false;
-	if (maxLength == 0)
-		maxLength = length;
-	if (cpos > text.length())
-		cpos = text.length();
-	// first visible character, so that the cursor stays inside the box
-	unsigned first = cpos > length ? cpos - length : 0;
+	EditboxWindow window = editboxWindow(text, cpos, length);
+	cpos = window.cursor;
 	QueueObject obj;
 	obj.id = id;
 	obj.pos1 = position;
@@ -560,11 +557,13 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 		if (mInputManager->click())
 		{
 			// Handle click on the text.
-			if (mousepos.x < obj.pos1.x + (text.length() - first) * FontSize)
-				cpos = first + (int) ((mousepos.x-obj.pos1.x-5+(FontSize/2)) / FontSize);
+			if (mousepos.x < obj.pos1.x + window.count * FontSize)
+				cpos = window.first + (int) ((mousepos.x-obj.pos1.x-5+(FontSize/2)) / FontSize);
 			// Handle click behind the text.
 			else if (mousepos.x < obj.pos1.x + width)
 				cpos = (int) text.length();
+			if (cpos > text.length())
+				cpos = text.length();
 
 			mActiveButton = id;
 
@@ -575,6 +574,11 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 
 	if (!mInactive)
 	{
+		// A box that always takes the keys is the selected one while nothing else is.
+		// Then the code below does not move its cursor back to the end of the text.
+		if (force_active && mActiveButton == -1)
+			mActiveButton = id;
+
 		// M.W. : Activate cursorless object-highlighting once the up or down key is pressed.
 		if (mActiveButton == -1)
 		{
@@ -655,22 +659,22 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 			}
 			// This is a temporary solution until the new
 			// UTF-8 class can tell the real length!!!
-			else if (text.length() < maxLength)
+			else if (editboxTakesInput(text.length(), length, maxLength))
 			{
 				if (input == "paste")
 				{
 					char * clipboardText = SDL_GetClipboardText();
 
 					if (clipboardText != nullptr) {
-						for (int i = 0; text.length() < maxLength; i++)
+						for (int i = 0; editboxTakesInput(text.length(), length, maxLength); i++)
 						{
-							const char c = clipboardText[i];
+							const unsigned char c = clipboardText[i];
 
-							// Only ASCII is currently supported
-							if ((c == '\0') || (c < 0x20) || (c > 0xf7))
+							// Only printable ASCII is supported, so no byte is part of a UTF-8 sequence
+							if (c < 0x20 || c > 0x7E)
 								break;
 
-							text.insert(cpos, &c, 1);
+							text.insert(cpos, 1, static_cast<char>(c));
 							cpos++;
 							changed = true;
 						}
@@ -754,9 +758,9 @@ bool IMGUI::doEditbox(int id, const Vector2& position, unsigned int length, std:
 		}
 	}
 
-	first = cpos > length ? cpos - length : 0;
-	obj.pos2.x = SDL_GetTicks() % 1000 >= 500 ? cpos - first : -1.0;
-	obj.text = text.substr(first, length);
+	window = editboxWindow(text, cpos, length);
+	obj.pos2.x = SDL_GetTicks() % 1000 >= 500 ? window.cursor - window.first : -1.0;
+	obj.text = text.substr(window.first, window.count);
 
 	mLastWidget = id;
 	mQueue->push(obj);

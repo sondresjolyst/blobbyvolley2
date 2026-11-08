@@ -38,6 +38,7 @@ set(SRC
 	../src/server/SiteConfig.cpp    ../src/server/SiteConfig.h
 	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h
+	../src/EditboxWindow.cpp        ../src/EditboxWindow.h
 	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
 	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
 	../src/replays/ReplayRecorder.cpp  ../src/replays/ReplayRecorder.h
@@ -64,7 +65,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestBmp.h TestServer.h ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp EditboxWindowTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestBmp.h TestServer.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
 find_package(nlohmann_json 3.10 CONFIG REQUIRED)

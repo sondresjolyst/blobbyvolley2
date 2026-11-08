@@ -182,6 +182,7 @@ void JoinLinkState::step_impl()
 	imgui.doText(GEN_ID, Vector2(400.0, 200.0), TextManager::MNU_LABEL_JOIN_LINK, TF_ALIGN_CENTER);
 
 	// a small font fits a whole join link with a common host name, longer links scroll
+	// the field takes one byte more than a join link may have, so a too long link shows the too long error
 	if (imgui.doEditbox(GEN_ID, Vector2(400.0, 250.0), 62, mLink, mCursor, TF_SMALL_FONT | TF_ALIGN_CENTER, true, MAX_JOIN_LINK_BYTES + 1))
 	{
 		if (getInputMgr().getLastActionKey() == "Return")
