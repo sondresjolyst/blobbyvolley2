@@ -231,10 +231,21 @@ function Invoke-Pull {
     if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not download the server image. See the message above and check the internet connection.' }
 }
 
+# An older image always listens on 1234, so another port needs the newest image.
+function Invoke-PullForPort($Config) {
+    if ("$($Config.Port)" -ne "$DefaultPort") {
+        Write-Host "Port $($Config.Port) is not the default $DefaultPort. It needs a server image from this release or later, so the script downloads the image first."
+        Invoke-Pull
+    }
+    else {
+        & docker image inspect $Image *> $null
+        if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+    }
+}
+
 # Makes the container again with the saved settings, for example after they changed.
 function Reset-ServerContainer($Config) {
-    & docker image inspect $Image *> $null
-    if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+    Invoke-PullForPort $Config
     Remove-ServerContainer
     New-ServerContainer $Config $RetryHint
 }
@@ -251,8 +262,7 @@ function Invoke-Start {
             Write-FirewallHint $config.Port
         }
         default {
-            & docker image inspect $Image *> $null
-            if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+            Invoke-PullForPort $config
             New-ServerContainer $config
         }
     }

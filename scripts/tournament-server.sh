@@ -164,6 +164,16 @@ pull_if_missing() {
 	docker image inspect "$IMAGE" >/dev/null 2>&1 || pull_image
 }
 
+# An older image always listens on 1234, so another port needs the newest image.
+pull_for_port() {
+	if [ "$PORT" != "$DEFAULT_PORT" ]; then
+		echo "Port $PORT is not the default $DEFAULT_PORT. It needs a server image from this release or later, so the script downloads the image first."
+		pull_image
+	else
+		pull_if_missing
+	fi
+}
+
 # The optional argument is a hint that is shown when Docker cannot start the server.
 create_container() {
 	local env_file code hint="${1:-}"
@@ -173,7 +183,7 @@ create_container() {
 	chmod 600 "$env_file"
 	printf 'BLOBBY_TOURNAMENT=1\nBLOBBY_SITE_URL=%s\nBLOBBY_SITE_TOKEN=%s\nBLOBBY_PORT=%s\n' "$SITE" "$TOKEN" "$PORT" >"$env_file"
 	# the server listens on the port of the host, because the game moves to the port the server reports
-	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:$PORT/udp"-v "$VOLUME:/data" \
+	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:$PORT/udp" -v "$VOLUME:/data" \
 		--env-file "$env_file" "$IMAGE" >/dev/null
 	code=$?
 	rm -f "$env_file"
@@ -202,7 +212,7 @@ cmd_start() {
 		echo "Started the tournament server again."
 		;;
 	*)
-		pull_if_missing
+		pull_for_port
 		create_container
 		;;
 	esac
@@ -255,7 +265,7 @@ RETRY_HINT="The old server container is removed. Fix the problem and run start a
 
 # Makes the container again with the saved settings, for example after they changed.
 recreate_container() {
-	pull_if_missing
+	pull_for_port
 	remove_container
 	create_container "$RETRY_HINT"
 }
