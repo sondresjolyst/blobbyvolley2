@@ -187,6 +187,7 @@ endif ()
 if (BUILD_LOADBOT)
 	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp
 		../tools/loadbot/LoadbotArgs.cpp
+		../tools/loadbot/ScriptBot.cpp
 		BlobbyDebug.cpp
 		Clock.cpp
 		Color.cpp

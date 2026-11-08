@@ -71,8 +71,14 @@ for _ in $(seq 1 "$TIMEOUT"); do
 			exit 1
 		fi
 		if [[ " ${BOT1_ARGS[*]-} " == *" --script"* ]]; then
+			bot1=$(docker logs "$PREFIX-bot1" 2>/dev/null)
+			if grep -q '"event":"script_error"' <<< "$bot1"; then
+				grep '"event":"script_error"' <<< "$bot1"
+				echo "smoke failed: the script of the first bot had an error"
+				exit 1
+			fi
 			# a bot with a script shows in each game how long its script took
-			ends=$(docker logs "$PREFIX-bot1" 2>/dev/null | grep '"event":"game_end"' || true)
+			ends=$(grep '"event":"game_end"' <<< "$bot1" || true)
 			echo "$ends"
 			if ! grep -q '"script_max_us"' <<< "$ends"; then
 				echo "smoke failed: the first bot did not play with its script"

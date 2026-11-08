@@ -17,7 +17,9 @@ Each event is one line of JSON on stdout. Every line has the time `t` in seconds
 - `rules_rejected`: the rules checksum could not be read or its points to win are not valid. The game client ignores such a packet too, so the bot does not answer and no game starts.
 - `game_start`: the game runs, with the game speed and the opponent.
 - `script_failed`: the bot script could not be started for a game. The bot then plays that game with the simple bot.
-- `game_end`: the game is over. `why` is `won_notification` for a game played out, `opponent_disconnected` when the opponent left, `disconnected` when the bot lost its connection and `stopped` when the bot was stopped. `won` is 1 or 0 for a game played out, -1 otherwise. The line also holds the length of the game, the number of state updates, the largest gap between two updates, the round trip of the input and the score. A bot with a script also has `script_max_us`, the longest time in microseconds its script took for one step.
+- `script_error`: the bot script stopped with a Lua error, with the error in `message`. The bot plays the rest of the game with the simple bot.
+- `script_slow`: the bot script did not finish a step within 10 ms, so the bot sent its last input again. `steps` counts such steps since the last `script_slow` line. The line comes at most once a second.
+- `game_end`: the game is over. `why` is `won_notification` for a game played out, `opponent_disconnected` when the opponent left, `disconnected` when the bot lost its connection and `stopped` when the bot was stopped. `won` is 1 or 0 for a game played out, -1 otherwise. The line also holds the length of the game, the number of state updates, the largest gap between two updates, the round trip of the input and the score. A bot with a script also has `script_max_us`, the longest time in microseconds its script took for one step, and `script_slow_steps`, the number of steps it did not finish within 10 ms.
 - `disconnected`: the connection was lost. The bot connects again after 2 seconds.
 - `stopped`: the bot got SIGTERM or SIGINT and ends with exit code 0, so `docker stop` returns at once.
 
@@ -36,7 +38,7 @@ Or build the container image from the root of the repository:
 
     blobby-loadbot <host> <port> <join code> [skill]
 
-The skill is 0 to 100 and sets how often the bot moves wrong. Values outside are clamped. It is 70 by default.
+The skill is 0 to 100 and sets how often the bot moves wrong. It is 70 by default.
 
 To run one bot per player against a server on the Docker network `lan`, with a file `codes.txt` that has one join code per line:
 
@@ -53,7 +55,9 @@ The server only starts the games of matches in its players file, or in the sync 
 
     blobby-loadbot <host> <port> <join code> --script <name> [--difficulty <0 to 25>]
 
-`--script` plays with a bot script of the game instead of the simple bot. The name is the file name in `data/scripts` without `.lua`: `reduced`, `axji-0-2`, `com_11`, `gintonicV9`, `hyp014` or `Union`. The bot stops with exit code 2 and lists the scripts when the name is unknown, and with exit code 4 when the script cannot be loaded. The script runs the same way as against a local player, so it plays much better than the simple bot.
+`--script` plays with a bot script of the game instead of the simple bot. The name is the file name in `data/scripts` without `.lua`: `reduced`, `axji-0-2`, `com_11`, `gintonicV9`, `hyp014` or `Union`. The bot stops with exit code 2 and lists the scripts when the name is unknown or says when the scripts folder is not found, and with exit code 4 when the script cannot be loaded. The script runs the same way as against a local player. In four games of the smoke test, `reduced` at difficulty 13 beat the simple bot 3:0 each time.
+
+The script runs on a thread of its own. When it takes longer than 10 ms for a step, the bot sends its last input again, so a slow script never holds up the connection.
 
 `--difficulty` is the bot strength from the options of the game. 0 is the strongest bot and 25 the weakest. It is 13 by default, like the computer player on the right side in a new game. The skill only applies to the simple bot, so it cannot be given together with `--script`.
 

@@ -48,7 +48,8 @@ const char* const LOADBOT_USAGE =
 	"usage: blobby-loadbot <host> <port> <join code> [skill 0 to 100]\n"
 	"       blobby-loadbot <host> <port> <join code> --script <name> [--difficulty 0 to 25]\n";
 
-/// Reads the arguments after the program name. scripts holds the names of the bot scripts there are.
+/// Reads the arguments after the program name. scripts holds the names of the bot scripts there are,
+/// and is empty when the scripts folder was not found.
 /// Returns false and sets error when the arguments are not valid.
 bool parseLoadbotArgs(const std::vector<std::string>& args, const std::vector<std::string>& scripts,
 					LoadbotArgs& out, std::string& error);

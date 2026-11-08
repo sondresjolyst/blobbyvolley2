@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "LoadbotArgs.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <cerrno>
+#include <cstdlib>
 
 namespace
 {
@@ -43,7 +43,7 @@ namespace
 		std::string list;
 		for (const auto& name : scripts)
 			list += (list.empty() ? "" : ", ") + name;
-		return list.empty() ? "none found" : list;
+		return list;
 	}
 }
 
@@ -142,8 +142,13 @@ bool parseLoadbotArgs(const std::vector<std::string>& args, const std::vector<st
 			error = "the skill only applies to the simple bot, not to --script";
 			return false;
 		}
-		// the skill was always clamped, so values outside still work as before
-		out.skill = std::max(0, std::min(100, std::atoi(positional[3].c_str())));
+		long skill = 0;
+		if (!readInteger(positional[3], skill) || skill < 0 || skill > 100)
+		{
+			error = "the skill must be a number from 0 to 100";
+			return false;
+		}
+		out.skill = (int)skill;
 	}
 
 	if (haveDifficulty && !haveScript)
@@ -152,6 +157,11 @@ bool parseLoadbotArgs(const std::vector<std::string>& args, const std::vector<st
 		return false;
 	}
 
+	if (haveScript && scripts.empty())
+	{
+		error = "scripts folder not found, so --script cannot be used";
+		return false;
+	}
 	if (haveScript && std::find(scripts.begin(), scripts.end(), out.script) == scripts.end())
 	{
 		error = "unknown script " + out.script + ". The scripts are: " + scriptList(scripts);

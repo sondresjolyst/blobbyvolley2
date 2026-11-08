@@ -38,10 +38,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <utility>
 #include <vector>
 
-#include "DuelMatch.h"
 #include "DuelMatchState.h"
 #include "FileSystem.h"
-#include "GameLogic.h"
 #include "GenericIO.h"
 #include "Global.h"
 #include "IScriptableComponent.h"
@@ -52,7 +50,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "raknet/BitStream.h"
 #include "raknet/PacketEnumerations.h"
 #include "raknet/RakClient.h"
-#include "ScriptedInputSource.h"
+#include "ScriptBot.h"
 #include "TournamentProtocol.h"
 
 namespace
@@ -64,6 +62,10 @@ namespace
 
 	// the bot steps a little faster than a game at 75 frames per second
 	const std::chrono::milliseconds STEP_TIME(13);
+	// the longest a bot script may take for one step before the bot sends its last input again
+	const std::chrono::milliseconds SCRIPT_BUDGET(10);
+	// script_slow is logged at most this often
+	const std::chrono::seconds SCRIPT_SLOW_LOG_TIME(1);
 	// a failed connection is tried again after this, twice as long after each failure
 	const std::chrono::seconds FIRST_RETRY(2);
 	const std::chrono::seconds MAX_RETRY(30);
@@ -166,6 +168,8 @@ namespace
 		unsigned rttMax = 0;
 		// the longest time the bot script took for one input, -1 for the simple bot
 		long scriptMaxUs = -1;
+		// the steps the script did not finish within its budget
+		unsigned scriptSlowSteps = 0;
 
 		void start(unsigned now)
 		{
@@ -210,7 +214,8 @@ namespace
 				state.getScore(LEFT_PLAYER), state.getScore(RIGHT_PLAYER));
 			std::string line = buffer;
 			if (scriptMaxUs >= 0)
-				line += ",\"script_max_us\":" + std::to_string(scriptMaxUs);
+				line += ",\"script_max_us\":" + std::to_string(scriptMaxUs)
+					+ ",\"script_slow_steps\":" + std::to_string(scriptSlowSteps);
 			return line;
 		}
 	};
@@ -232,40 +237,12 @@ namespace
 		return PlayerInputAbs(left, right, jump);
 	}
 
-	/// Plays with one of the bot scripts of the game, through the same ScriptedInputSource as a local game.
-	/// The script gets the state the server sends. The server shows the game of each client from the
-	/// left, so the script plays the left blob and its input goes to the server as it is.
-	class ScriptBot
-	{
-		public:
-			ScriptBot(const std::string& script, int difficulty, int scoreToWin)
-				// the rules run on the server, the match only holds the state the server sends
-				: mMatch(true, FALLBACK_RULES_NAME, scoreToWin > 0 ? scoreToWin : 15)
-				, mInput("scripts/" + script, LEFT_PLAYER, (unsigned)difficulty, &mMatch)
-			{
-			}
-
-			void setState(const DuelMatchState& state)
-			{
-				mMatch.setState(state);
-			}
-
-			PlayerInputAbs input()
-			{
-				return mInput.getNextInput();
-			}
-
-		private:
-			DuelMatch mMatch;
-			ScriptedInputSource mInput;
-	};
-
 	/// Loads the script once at the start, so a script that cannot run stops the bot at once.
 	bool checkScript(const LoadbotArgs& args)
 	{
 		try
 		{
-			ScriptBot bot(args.script, args.difficulty, 0);
+			ScriptBot bot(args.script, args.difficulty, 0, SCRIPT_BUDGET);
 			return true;
 		}
 		catch (const ScriptException& e)
@@ -277,12 +254,6 @@ namespace
 			std::fprintf(stderr, "the script %s could not be loaded: %s\n", args.script.c_str(), e.what());
 		}
 		return false;
-	}
-
-	/// The names of the bot scripts the game has, without .lua.
-	std::vector<std::string> botScripts()
-	{
-		return FileSystem::getSingleton().enumerateFiles("scripts", ".lua", false);
 	}
 
 	enum class Outcome
@@ -314,6 +285,9 @@ namespace
 		int targetOffset = 0;
 		int scoreToWin = 0;
 		std::unique_ptr<ScriptBot> scriptBot;
+		// slow script steps since the last script_slow line
+		unsigned slowSteps = 0;
+		auto lastSlowLog = std::chrono::steady_clock::now() - SCRIPT_SLOW_LOG_TIME;
 		// the bot steps at a fixed rate, also when the script takes a while
 		auto nextStep = std::chrono::steady_clock::now();
 
@@ -340,7 +314,12 @@ namespace
 				{
 					case ID_CONNECTION_REQUEST_ACCEPTED:
 					{
-						// the server swaps the join code in the name field for the nickname
+						// the server swaps the join code in the name field for the nickname.
+						// The bot asks for the left side, so the server always shows it the game from the left.
+						// A tournament game mirrors a player who wants the left side but plays on the right
+						// (DedicatedServer.cpp, switchRight), and the lobby does the same (MatchMaker.cpp, switchSide).
+						// NetworkGame::broadcastPhysicState then sends it the state with swapSides(), and the
+						// handler of ID_INPUT_UPDATE in NetworkGame.cpp swaps its input back.
 						PlayerIdentity me(code, Color(255, 0, 0), false, LEFT_PLAYER);
 						RakNet::BitStream enter;
 						makeEnterServerPacket(enter, me);
@@ -414,7 +393,9 @@ namespace
 							// a new game gets a new script, as a local game does
 							try
 							{
-								scriptBot.reset(new ScriptBot(args.script, args.difficulty, scoreToWin));
+								scriptBot.reset(new ScriptBot(args.script, args.difficulty, scoreToWin, SCRIPT_BUDGET));
+								stats.scriptMaxUs = 0;
+								slowSteps = 0;
 							}
 							catch (const std::exception&)
 							{
@@ -429,8 +410,6 @@ namespace
 						unsigned inputTime = readGameUpdateTime(stream);
 						readGameUpdateState(stream, state);
 						haveState = true;
-						if (scriptBot)
-							scriptBot->setState(state);
 						if (playing)
 							stats.update(ticks(), inputTime);
 						break;
@@ -455,16 +434,41 @@ namespace
 				RakNet::BitStream input;
 				input.Write((unsigned char)ID_INPUT_UPDATE);
 				input.Write(ticks());
+				PlayerInputAbs next;
+				bool haveInput = false;
 				if (scriptBot)
 				{
-					auto start = std::chrono::steady_clock::now();
-					PlayerInputAbs scripted = scriptBot->input();
-					stats.scriptTime((long)std::chrono::duration_cast<std::chrono::microseconds>(
-						std::chrono::steady_clock::now() - start).count());
-					scripted.writeTo(input);
+					ScriptBot::Step step = scriptBot->step(state);
+					if (!step.error.empty())
+					{
+						// the simple bot plays the rest of the game
+						logEvent("script_error", "\"script\":" + jsonString(args.script) + ",\"message\":" + jsonString(step.error));
+						scriptBot.reset();
+					}
+					else
+					{
+						next = step.input;
+						haveInput = true;
+						if (step.late)
+						{
+							++stats.scriptSlowSteps;
+							++slowSteps;
+							auto now = std::chrono::steady_clock::now();
+							if (now - lastSlowLog >= SCRIPT_SLOW_LOG_TIME)
+							{
+								logEvent("script_slow", "\"steps\":" + std::to_string(slowSteps) + ",\"budget_ms\":"
+									+ std::to_string(SCRIPT_BUDGET.count()));
+								slowSteps = 0;
+								lastSlowLog = now;
+							}
+						}
+						else
+							stats.scriptTime(step.microseconds);
+					}
 				}
-				else
-					botInput(state, args.skill, targetOffset, rng).writeTo(input);
+				if (!haveInput)
+					next = botInput(state, args.skill, targetOffset, rng);
+				next.writeTo(input);
 				client->Send(&input, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0);
 			}
 			nextStep += STEP_TIME;
@@ -490,7 +494,7 @@ int main(int argc, char** argv)
 
 	LoadbotArgs args;
 	std::string error;
-	if (!parseLoadbotArgs(std::vector<std::string>(argv + 1, argv + argc), botScripts(), args, error))
+	if (!parseLoadbotArgs(std::vector<std::string>(argv + 1, argv + argc), findBotScripts(), args, error))
 	{
 		std::fprintf(stderr, "%s\n%s", error.c_str(), LOADBOT_USAGE);
 		return EXIT_USAGE;

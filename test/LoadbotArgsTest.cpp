@@ -42,14 +42,19 @@ BOOST_AUTO_TEST_CASE(reads_the_positional_arguments)
 	BOOST_CHECK(args.script.empty());
 }
 
-BOOST_AUTO_TEST_CASE(clamps_the_skill_as_before)
+BOOST_AUTO_TEST_CASE(refuses_a_skill_out_of_range)
 {
 	LoadbotArgs args;
 	std::string error;
-	BOOST_REQUIRE(parse({"host", "1234", "CODE", "250"}, args, error));
-	BOOST_CHECK_EQUAL(args.skill, 100);
-	BOOST_REQUIRE(parse({"host", "1234", "CODE", "-5"}, args, error));
+	BOOST_REQUIRE(parse({"host", "1234", "CODE", "0"}, args, error));
 	BOOST_CHECK_EQUAL(args.skill, 0);
+	BOOST_REQUIRE(parse({"host", "1234", "CODE", "100"}, args, error));
+	BOOST_CHECK_EQUAL(args.skill, 100);
+
+	BOOST_CHECK(failure({"host", "1234", "CODE", "101"}).find("0 to 100") != std::string::npos);
+	failure({"host", "1234", "CODE", "-1"});
+	failure({"host", "1234", "CODE", "strong"});
+	failure({"host", "1234", "CODE", "50x"});
 }
 
 BOOST_AUTO_TEST_CASE(reads_a_script_with_the_default_difficulty)
@@ -91,6 +96,16 @@ BOOST_AUTO_TEST_CASE(refuses_an_unknown_script_and_lists_the_scripts)
 	failure({"host", "1234", "CODE", "--script", "old/hyp010"});
 	failure({"host", "1234", "CODE", "--script", "union"});
 	failure({"host", "1234", "CODE", "--script", ""});
+}
+
+BOOST_AUTO_TEST_CASE(says_when_the_scripts_folder_is_missing)
+{
+	LoadbotArgs args;
+	std::string error;
+	BOOST_REQUIRE(!parseLoadbotArgs({"host", "1234", "CODE", "--script", "reduced"}, {}, args, error));
+	BOOST_CHECK(error.find("scripts folder not found") != std::string::npos);
+	// the simple bot needs no scripts
+	BOOST_CHECK(parseLoadbotArgs({"host", "1234", "CODE"}, {}, args, error));
 }
 
 BOOST_AUTO_TEST_CASE(refuses_a_difficulty_out_of_range)
