@@ -415,15 +415,15 @@ BOOST_AUTO_TEST_CASE( keepalive_on_a_clock_from_zero )
 	BOOST_CHECK(!RakNet::KeepAliveDue(100 + TIMEOUT_TIME, 200));
 }
 
-BOOST_AUTO_TEST_CASE( connect_attempt_times_out_across_the_wrap_and_from_zero )
+BOOST_AUTO_TEST_CASE( not_connected_times_out_across_the_wrap_and_from_zero )
 {
 	const unsigned int start = 0xFFFFFFFFu - 3000;
-	BOOST_CHECK(!RakNet::ConnectAttemptTimedOut(start, start + 10000));
-	BOOST_CHECK(RakNet::ConnectAttemptTimedOut(start, start + 10001));
-	BOOST_CHECK(!RakNet::ConnectAttemptTimedOut(0, 10000));
-	BOOST_CHECK(RakNet::ConnectAttemptTimedOut(0, 10001));
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(start, start + 10000));
+	BOOST_CHECK(RakNet::NotConnectedTimedOut(start, start + 10001));
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(0, 10000));
+	BOOST_CHECK(RakNet::NotConnectedTimedOut(0, 10001));
 	// a start time a little ahead of now is not a timeout
-	BOOST_CHECK(!RakNet::ConnectAttemptTimedOut(500, 400));
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(500, 400));
 }
 
 BOOST_AUTO_TEST_CASE( ping_is_scheduled_across_the_wrap_and_from_zero )

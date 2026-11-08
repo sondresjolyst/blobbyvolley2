@@ -668,8 +668,11 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 	{
 		//printf("windowSize=%i lossyWindowSize=%i\n", windowSize, lossyWindowSize);
 
-		// 0 means the window size never grew yet
-		const bool windowTestDue = lastWindowIncreaseSizeTime == 0 ||
+		// lastWindowIncreaseSizeTime is 0 until the first test increase or lost packet. Until then compare the time
+		// itself like the old code, so a clock that starts at 0 waits the same first seconds. A clock
+		// past 2^31 ms still gets its first test, which a signed difference from 0 would never allow.
+		const bool windowTestDue = lastWindowIncreaseSizeTime == 0 ?
+			time > lostPacketResendDelay * 2 :
 			RakNet::TimeElapsed( lastWindowIncreaseSizeTime, time ) > (int)lostPacketResendDelay * 2;
 		if ( windowSize < lossyWindowSize || windowTestDue )   // Increases the window size slowly, testing for packetloss
 		{

@@ -17,8 +17,10 @@ namespace RakNet
 		return TimeElapsed( lastReliableSend, now ) > 5000;
 	}
 
-	/// True when a system that is not yet connected has waited too long since the attempt began.
-	inline bool ConnectAttemptTimedOut( unsigned int connectionTime, unsigned int now )
+	/// True when a system that is not connected has stayed so for too long. connectionTime is when
+	/// the system was added, or the last update while it was connected. So the limit counts from the
+	/// start of a connect attempt, or from when a connected system began to close.
+	inline bool NotConnectedTimedOut( unsigned int connectionTime, unsigned int now )
 	{
 		return TimeElapsed( connectionTime, now ) > 10000;
 	}

@@ -1819,6 +1819,10 @@ bool RakPeer::RunUpdateCycle( void )
 			if (time==0)
 				time = RakNet::GetTime();
 
+			// While connected this follows the clock, so the limit for a system that is not connected
+			// counts from when it stopped being connected and not from when it connected.
+			if (remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
+				remoteSystem->connectionTime = time;
 
 			if (RakNet::KeepAliveDue(remoteSystem->lastReliableSend, time) && remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
 			{
@@ -1837,7 +1841,7 @@ bool RakPeer::RunUpdateCycle( void )
 			// Check for failure conditions
 			if ( remoteSystem->reliabilityLayer.IsDeadConnection() ||
 				(remoteSystem->connectMode==RemoteSystemStruct::DISCONNECT_ASAP && remoteSystem->reliabilityLayer.IsDataWaiting()==false) ||
-				((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && RakNet::ConnectAttemptTimedOut(remoteSystem->connectionTime, time)))
+				((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && RakNet::NotConnectedTimedOut(remoteSystem->connectionTime, time)))
 				)
 			{
 				// Failed.  Inform the user?
