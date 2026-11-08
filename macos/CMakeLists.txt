@@ -11,7 +11,8 @@ if (UNIX AND APPLE)
 		# add plist
 		set_target_properties(blobby PROPERTIES 
 		                             XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE YES
-		                             XCODE_ATTRIBUTE_INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist")
+		                             XCODE_ATTRIBUTE_INFOPLIST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist"
+		                             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist")
 
 		# Allow c++ code to change behavior
 		target_compile_definitions(blobby PUBLIC BUILD_MACOS_BUNDLE)

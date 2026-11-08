@@ -1,0 +1,127 @@
+name: macOS package
+
+on:
+  push:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+  pull_request:
+    branches:
+      - "main"
+    paths-ignore:
+      - "**.md"
+      - "AUTHORS"
+      - "ChangeLog"
+  workflow_call:
+    inputs:
+      version:
+        description: "Version used in the package name, such as 0.1.0"
+        type: string
+        required: true
+      release_tag:
+        description: "Release to attach the zips to, such as v0.1.0. Empty means no upload."
+        type: string
+        required: false
+        default: ""
+
+# github.workflow is the caller's name in a called run, so the prefix keeps
+# this group apart from the caller's group.
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  Package:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, os: macos-15 }
+          - { arch: x64, os: macos-15-intel }
+
+    steps:
+      - name: Install dependencies
+        run: brew install sdl2 physfs boost nlohmann-json dylibbundler
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Build the app bundle in Release mode
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_MACOS_BUNDLE=ON -DBLOBBY_SITE_SYNC=ON
+          cmake --build build --parallel
+      - name: Pick package name
+        id: name
+        env:
+          ARCH: ${{ matrix.arch }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -z "$VERSION" ]; then
+            VERSION=$(echo "$SHA" | cut -c1-7)
+          fi
+          echo "package=blobby-volley-2-$VERSION-macos-$ARCH" >> "$GITHUB_OUTPUT"
+      - name: Package
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: |
+          sh .github/scripts/package-macos.sh build "dist/$PACKAGE"
+          find dist -type f | sort
+          lipo -archs "dist/$PACKAGE/Blobby Volley.app/Contents/MacOS/blobby"
+          vtool -show-build "dist/$PACKAGE/Blobby Volley.app/Contents/MacOS/blobby" | grep -E 'minos|platform'
+      # The smoke checks must not find the libraries in Homebrew.
+      - name: Remove the bundled Homebrew formulae
+        run: xargs brew uninstall --ignore-dependencies --force < dist/formulae.txt
+      - name: Smoke check the server
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: sh .github/scripts/smoke-unix.sh "dist/$PACKAGE/blobby-server" 5 blobby-server --no-daemon --print-msgs
+      - name: Smoke check the game
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: sh .github/scripts/smoke-unix.sh "dist/$PACKAGE" 5 "Blobby Volley.app/Contents/MacOS/blobby"
+      # ditto keeps the symlinks, the permissions and the signatures, which the artifact upload would lose.
+      - name: Zip
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: |
+          mkdir out
+          ditto -c -k --sequesterRsrc --keepParent "dist/$PACKAGE" "out/$PACKAGE.zip"
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.name.outputs.package }}
+          path: out/${{ steps.name.outputs.package }}.zip
+          if-no-files-found: error
+
+  Release:
+    name: Attach to release
+    needs: Package
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: blobby-volley-2-${{ inputs.version }}-macos-*
+          path: pkg
+          merge-multiple: true
+      - name: Upload the zips
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release upload "$TAG" "pkg/blobby-volley-2-$VERSION-macos-arm64.zip" "pkg/blobby-volley-2-$VERSION-macos-x64.zip" --repo "$REPO" --clobber

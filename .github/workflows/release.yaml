@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  # A manual run is a dry run. It builds the image and the Windows package
+  # A manual run is a dry run. It builds the image and the packages
   # but pushes and uploads nothing.
   workflow_dispatch:
 
@@ -79,6 +79,28 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/windows-package.yaml
+    with:
+      version: ${{ needs.get-version.outputs.version }}
+      release_tag: ${{ needs.get-version.outputs.tag }}
+
+  macos:
+    name: macOS package
+    needs: get-version
+    if: always() && needs.get-version.result == 'success'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/macos-package.yaml
+    with:
+      version: ${{ needs.get-version.outputs.version }}
+      release_tag: ${{ needs.get-version.outputs.tag }}
+
+  linux:
+    name: Linux package
+    needs: get-version
+    if: always() && needs.get-version.result == 'success'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/linux-package.yaml
     with:
       version: ${{ needs.get-version.outputs.version }}
       release_tag: ${{ needs.get-version.outputs.tag }}
