@@ -41,6 +41,7 @@
 #include <ctype.h> // toupper
 
 #include "GetTime.h"
+#include "PeerTimers.h"
 #include "PacketEnumerations.h"
 #include "PacketPool.h"
 
@@ -392,7 +393,7 @@ void RakPeer::Disconnect( unsigned int blockDuration )
 
 		unsigned time = RakNet::GetTime();
 		unsigned stopWaitingTime = time + blockDuration;
-		while ( time < stopWaitingTime )
+		while ( RakNet::TimeIsAfter( stopWaitingTime, time ) )
 		{
 			bool anyActive = false;
 			for (unsigned j = 0; j < systemListSize; j++)
@@ -1742,7 +1743,7 @@ bool RakPeer::RunUpdateCycle( void )
 		if (time==0)
 			time = RakNet::GetTime();
 
-		if (rcs->nextRequestTime < time)
+		if (RakNet::TimeIsAfter(time, rcs->nextRequestTime))
 		{
 			condition1=rcs->requestsMade==3;
 			condition2=(bool)((rcs->playerId==UNASSIGNED_PLAYER_ID)==1);
@@ -1818,8 +1819,12 @@ bool RakPeer::RunUpdateCycle( void )
 			if (time==0)
 				time = RakNet::GetTime();
 
+			// While connected this follows the clock, so the limit for a system that is not connected
+			// counts from when it stopped being connected and not from when it connected.
+			if (remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
+				remoteSystem->connectionTime = time;
 
-			if (time > remoteSystem->lastReliableSend && time-remoteSystem->lastReliableSend > 5000 && remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
+			if (RakNet::KeepAliveDue(remoteSystem->lastReliableSend, time) && remoteSystem->connectMode==RemoteSystemStruct::CONNECTED)
 			{
 				// If no reliable packets are waiting for an ack, do a one byte reliable send so that disconnections are noticed
 				rnss=remoteSystem->reliabilityLayer.GetStatistics();
@@ -1836,7 +1841,7 @@ bool RakPeer::RunUpdateCycle( void )
 			// Check for failure conditions
 			if ( remoteSystem->reliabilityLayer.IsDeadConnection() ||
 				(remoteSystem->connectMode==RemoteSystemStruct::DISCONNECT_ASAP && remoteSystem->reliabilityLayer.IsDataWaiting()==false) ||
-				((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && time > remoteSystem->connectionTime && time - remoteSystem->connectionTime > 10000))
+				((remoteSystem->connectMode!=RemoteSystemStruct::CONNECTED && RakNet::NotConnectedTimedOut(remoteSystem->connectionTime, time)))
 				)
 			{
 				// Failed.  Inform the user?
@@ -1870,7 +1875,7 @@ bool RakPeer::RunUpdateCycle( void )
 			}
 
 			// Ping this guy if it is time to do so
-			if ( remoteSystem->connectMode==RemoteSystemStruct::CONNECTED && time > remoteSystem->nextPingTime && ( remoteSystem->lowestPing == -1 ) )
+			if ( remoteSystem->connectMode==RemoteSystemStruct::CONNECTED && RakNet::PingDue( remoteSystem->nextPingTime, time ) && ( remoteSystem->lowestPing == -1 ) )
 			{
 				remoteSystem->nextPingTime = time + 5000;
 				PingInternal( playerId, true );
@@ -2019,7 +2024,7 @@ bool RakPeer::RunUpdateCycle( void )
 						inBitStream.Read(sendPongTime);
 
 						time = RakNet::GetTime(); // Update the time value to be accurate
-						ping = time - sendPingTime;
+						ping = RakNet::TimeElapsed( sendPingTime, time );
 						lastPing = remoteSystem->pingTime;
 
 						// Ignore super high spikes in the average

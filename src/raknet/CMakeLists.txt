@@ -13,6 +13,7 @@ set (raknet_SRC
         PacketEnumerations.h
         PacketPool.cpp PacketPool.h
         PacketPriority.h
+        PeerTimers.h
         RakClient.cpp RakClient.h
         RakNetStatistics.cpp RakNetStatistics.h
         RakPeer.cpp RakPeer.h

@@ -3,6 +3,9 @@
 #include <vector>
 
 #include "raknet/BitStream.h"
+#include "raknet/GetTime.h"
+#include "raknet/PeerTimers.h"
+#include "raknet/SocketLayer.h"
 #include "raknet/ReliabilityLayer.h"
 
 namespace
@@ -320,6 +323,120 @@ BOOST_FIXTURE_TEST_CASE( a_packet_seen_before_is_still_dropped, ReliabilityLayer
 	packetNumber = 0;
 	receive(part);
 	BOOST_CHECK_EQUAL(delivered().size(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE( time_helpers_work_across_the_wrap_and_from_zero )
+{
+	// across the wrap
+	BOOST_CHECK_EQUAL(RakNet::TimeElapsed(0xFFFFFF00u, 0x100u), 0x200);
+	BOOST_CHECK(RakNet::TimeIsAfter(5u, 0xFFFFFFF0u));
+	BOOST_CHECK(!RakNet::TimeIsAfter(0xFFFFFFF0u, 5u));
+	// a clock that starts at 0
+	BOOST_CHECK(RakNet::TimeIsAfter(10u, 0u));
+	BOOST_CHECK_EQUAL(RakNet::TimeElapsed(5000u, 1000u), -4000);
+	BOOST_CHECK(!RakNet::TimeIsAfter(1000u, 1000u));
+	// away from the wrap the helpers agree with plain comparisons
+	BOOST_CHECK_EQUAL(RakNet::TimeElapsed(1000u, 4000u), 3000);
+	BOOST_CHECK(RakNet::TimeIsAfter(4000u, 1000u));
+}
+
+namespace
+{
+	struct SendFixture
+	{
+		ReliabilityLayer layer;
+		PlayerID peer;
+
+		SendFixture()
+		{
+			peer.binaryAddress = 0x0100007F;
+			peer.port = 1234;
+		}
+
+		void sendReliable(unsigned int time)
+		{
+			char data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+			layer.Send(data, 64, HIGH_PRIORITY, RELIABLE, 0, true, 576, time);
+			layer.Update(INVALID_SOCKET, peer, 576, time);
+		}
+
+		unsigned resends() { return layer.GetStatistics()->messageResends; }
+	};
+}
+
+BOOST_FIXTURE_TEST_CASE( reliable_message_is_not_resent_early_at_the_wrap, SendFixture )
+{
+	const unsigned int start = 0xFFFFFFFFu - 50;
+	sendReliable(start);
+	layer.Update(INVALID_SOCKET, peer, 576, start + 1);
+	BOOST_CHECK_EQUAL(resends(), 0u);
+
+	// without an ack it goes out again once the resend delay has passed, after the wrap
+	layer.Update(INVALID_SOCKET, peer, 576, start + 2000);
+	BOOST_CHECK_GE(resends(), 1u);
+}
+
+BOOST_FIXTURE_TEST_CASE( connection_without_acks_dies_across_the_wrap, SendFixture )
+{
+	const unsigned int start = 0xFFFFFFFFu - 50;
+	sendReliable(start);
+	layer.Update(INVALID_SOCKET, peer, 576, start + TIMEOUT_TIME / 2);
+	BOOST_CHECK(!layer.IsDeadConnection());
+	layer.Update(INVALID_SOCKET, peer, 576, start + TIMEOUT_TIME + 1000);
+	BOOST_CHECK(layer.IsDeadConnection());
+}
+
+BOOST_FIXTURE_TEST_CASE( connection_without_acks_dies_on_a_clock_from_zero, SendFixture )
+{
+	sendReliable(100);
+	layer.Update(INVALID_SOCKET, peer, 576, 100 + TIMEOUT_TIME / 2);
+	BOOST_CHECK(!layer.IsDeadConnection());
+	layer.Update(INVALID_SOCKET, peer, 576, 100 + TIMEOUT_TIME + 1000);
+	BOOST_CHECK(layer.IsDeadConnection());
+}
+
+BOOST_AUTO_TEST_CASE( keepalive_is_due_after_five_quiet_seconds_across_the_wrap )
+{
+	const unsigned int last = 0xFFFFFFFFu - 1000;
+	BOOST_CHECK(!RakNet::KeepAliveDue(last, last + 5000));
+	BOOST_CHECK(RakNet::KeepAliveDue(last, last + 5001));
+	// after a keepalive the last send lies ahead, also when that crosses the wrap
+	const unsigned int ahead = last + TIMEOUT_TIME;
+	BOOST_CHECK(!RakNet::KeepAliveDue(ahead, last + 1));
+	BOOST_CHECK(!RakNet::KeepAliveDue(ahead, ahead + 5000));
+	BOOST_CHECK(RakNet::KeepAliveDue(ahead, ahead + 5001));
+}
+
+BOOST_AUTO_TEST_CASE( keepalive_on_a_clock_from_zero )
+{
+	BOOST_CHECK(!RakNet::KeepAliveDue(0, 0));
+	BOOST_CHECK(!RakNet::KeepAliveDue(0, 5000));
+	BOOST_CHECK(RakNet::KeepAliveDue(0, 5001));
+	BOOST_CHECK(!RakNet::KeepAliveDue(100 + TIMEOUT_TIME, 200));
+}
+
+BOOST_AUTO_TEST_CASE( not_connected_times_out_across_the_wrap_and_from_zero )
+{
+	const unsigned int start = 0xFFFFFFFFu - 3000;
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(start, start + 10000));
+	BOOST_CHECK(RakNet::NotConnectedTimedOut(start, start + 10001));
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(0, 10000));
+	BOOST_CHECK(RakNet::NotConnectedTimedOut(0, 10001));
+	// a start time a little ahead of now is not a timeout
+	BOOST_CHECK(!RakNet::NotConnectedTimedOut(500, 400));
+}
+
+BOOST_AUTO_TEST_CASE( ping_is_scheduled_across_the_wrap_and_from_zero )
+{
+	// 0 means ping now, also late on the clock
+	BOOST_CHECK(RakNet::PingDue(0, 1));
+	BOOST_CHECK(RakNet::PingDue(0, 0x90000000u));
+	const unsigned int next = 0xFFFFFFFFu - 2000 + 5000;
+	BOOST_CHECK(!RakNet::PingDue(next, 0xFFFFFFFFu - 2000));
+	BOOST_CHECK(!RakNet::PingDue(next, next));
+	BOOST_CHECK(RakNet::PingDue(next, next + 1));
+	BOOST_CHECK(!RakNet::PingDue(5000, 4999));
+	BOOST_CHECK(RakNet::PingDue(5000, 5001));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

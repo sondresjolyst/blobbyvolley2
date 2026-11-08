@@ -415,7 +415,7 @@ public:
 		int lowestPing; /**<The lowest ping value encounter */
 		unsigned int nextPingTime;  /**< When to next ping this player */
 		unsigned int lastReliableSend; /**< When did the last reliable send occur.  Reliable sends must occur at least once every TIMEOUT_TIME/2 units to notice disconnects */
-		unsigned int connectionTime; /**< connection time, if active. */
+		unsigned int connectionTime; /**< When the system was added. While it is connected, the time of its last update. */
 		enum ConnectMode {NO_ACTION, DISCONNECT_ASAP, REQUESTED_CONNECTION, HANDLING_CONNECTION_REQUEST, UNVERIFIED_SENDER, CONNECTED} connectMode;
 	};
 

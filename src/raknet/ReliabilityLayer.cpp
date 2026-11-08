@@ -668,13 +668,19 @@ bool ReliabilityLayer::HandleSocketReceiveFromConnectedPlayer( const char *buffe
 	{
 		//printf("windowSize=%i lossyWindowSize=%i\n", windowSize, lossyWindowSize);
 
-		if ( windowSize < lossyWindowSize || (time>lastWindowIncreaseSizeTime && time-lastWindowIncreaseSizeTime>lostPacketResendDelay*2) )   // Increases the window size slowly, testing for packetloss
+		// lastWindowIncreaseSizeTime is 0 until the first test increase or lost packet. Until then compare the time
+		// itself like the old code, so a clock that starts at 0 waits the same first seconds. A clock
+		// past 2^31 ms still gets its first test, which a signed difference from 0 would never allow.
+		const bool windowTestDue = lastWindowIncreaseSizeTime == 0 ?
+			time > lostPacketResendDelay * 2 :
+			RakNet::TimeElapsed( lastWindowIncreaseSizeTime, time ) > (int)lostPacketResendDelay * 2;
+		if ( windowSize < lossyWindowSize || windowTestDue )   // Increases the window size slowly, testing for packetloss
 		{
 			// If we get a frame which clears out the resend queue after handling one or more acks, and we have packets waiting to go out,
 			// and we didn't recently lose a packet then increase the window size by 1
 			windowSize++;
 
-			if ( (time>lastWindowIncreaseSizeTime && time-lastWindowIncreaseSizeTime>lostPacketResendDelay*2) )   // The increase is to test for packetloss
+			if ( windowTestDue )   // The increase is to test for packetloss
 				lastWindowIncreaseSizeTime = time;
 
 			// If the window is so large that we couldn't possibly fit any more packets into the frame, then just leave it alone
@@ -863,7 +869,7 @@ void ReliabilityLayer::Update( SOCKET s, PlayerID playerId, int MTUSize, unsigne
 
 	// Due to thread vagarities and the way I store the time to avoid slow calls to RakNet::GetTime
 	// time may be less than lastAck
-	if ( resendQueue.size() > 0 && time > lastAck && lastAck && time - lastAck > TIMEOUT_TIME )
+	if ( resendQueue.size() > 0 && lastAck && RakNet::TimeElapsed( lastAck, time ) > (int)TIMEOUT_TIME )
 	{
 		// SHOW - dead connection
 		// printf("The connection has been lost.\n");
@@ -913,7 +919,7 @@ void ReliabilityLayer::Update( SOCKET s, PlayerID playerId, int MTUSize, unsigne
 
 	while ( i < delayList.size() )
 	{
-		if ( delayList[ i ]->sendTime < time )
+		if ( RakNet::TimeIsAfter( time, delayList[ i ]->sendTime ) )
 		{
 			updateBitStream.Reset();
 			updateBitStream.Write( delayList[ i ]->data, delayList[ i ]->length );
@@ -987,7 +993,7 @@ bool ReliabilityLayer::IsFrameReady( unsigned int time )
 
 	// Does the oldest packet need to be resent?  If so, send it.
 	// Otherwise the throttle may never end
-	if ( resendQueue.size() > 0 && resendQueue.peek() && resendQueue.peek()->nextActionTime < time )
+	if ( resendQueue.size() > 0 && resendQueue.peek() && RakNet::TimeIsAfter( time, resendQueue.peek()->nextActionTime ) )
 	{
 		//  reliabilityLayerMutexes[resendQueue_MUTEX].Unlock();
 		return true;
@@ -1023,7 +1029,7 @@ void ReliabilityLayer::GenerateFrame( RakNet::BitStream *output, int MTUSize, bo
 	// Packet acknowledgements always go out first if they are overdue or if there are a lot of them
 	if ( acknowledgementQueue.size() > 0 &&
 		( acknowledgementQueue.size() >= MINIMUM_WINDOW_SIZE ||
-		  acknowledgementQueue.peek()->nextActionTime < time ) )
+		  RakNet::TimeIsAfter( time, acknowledgementQueue.peek()->nextActionTime ) ) )
 	{
 		do
 		{
@@ -1068,7 +1074,7 @@ void ReliabilityLayer::GenerateFrame( RakNet::BitStream *output, int MTUSize, bo
 			continue; // This was a hole
 		}
 
-		if ( resendQueue.peek()->nextActionTime < time )
+		if ( RakNet::TimeIsAfter( time, resendQueue.peek()->nextActionTime ) )
 		{
 			internalPacket = resendQueue.pop();
 			// Testing
@@ -1946,7 +1952,7 @@ void ReliabilityLayer::DeleteExpiredSplitPackets( unsigned int time )
 			newest[ idCount ] = part->creationTime;
 			idCount++;
 		}
-		else if ( part->creationTime > newest[ j ] )
+		else if ( RakNet::TimeIsAfter( part->creationTime, newest[ j ] ) )
 		{
 			newest[ j ] = part->creationTime;
 		}
@@ -1954,7 +1960,7 @@ void ReliabilityLayer::DeleteExpiredSplitPackets( unsigned int time )
 
 	for ( unsigned j = 0; j < idCount; j++ )
 	{
-		if ( time <= newest[ j ] || time - newest[ j ] <= SPLIT_PACKET_EXPIRY_TIME )
+		if ( RakNet::TimeElapsed( newest[ j ], time ) <= (int)SPLIT_PACKET_EXPIRY_TIME )
 			continue;
 
 		unsigned i = 0;
@@ -2138,7 +2144,7 @@ void ReliabilityLayer::DeleteOldUnreliableSplitPackets( unsigned int time )
 	for ( i = 0; i < size; i++ )
 	{
 		if ( ( splitPacketList[ i ]->reliability == UNRELIABLE || splitPacketList[ i ]->reliability == UNRELIABLE_SEQUENCED ) &&
-			splitPacketList[ i ]->creationTime >= newestUnreliableSplitPacket )
+			( !found || RakNet::TimeElapsed( newestUnreliableSplitPacket, splitPacketList[ i ]->creationTime ) >= 0 ) )
 		{
 			orderingIndexToDelete = splitPacketList[ i ]->orderingIndex;
 			newestUnreliableSplitPacket = splitPacketList[ i ]->creationTime;
@@ -2146,7 +2152,7 @@ void ReliabilityLayer::DeleteOldUnreliableSplitPackets( unsigned int time )
 		}
 	}
 
-	if ( found && time>newestUnreliableSplitPacket && time-newestUnreliableSplitPacket > 5000 )
+	if ( found && RakNet::TimeElapsed( newestUnreliableSplitPacket, time ) > 5000 )
 	{
 		// Delete all split packets that use orderingIndexToDelete
 		i = 0;
@@ -2341,7 +2347,7 @@ bool ReliabilityLayer::IsExpiredTime(unsigned int input, unsigned int currentTim
 	// The clock starts at 0 on some systems and wraps, so compare the difference. A signed
 	// difference is right for ages below 2^31 ms. Entries leave the list after about 10 s,
 	// and holes are stored TIMEOUT_TIME * 100 ms ahead, both far below that limit.
-	return static_cast<int>(currentTime - input) > static_cast<int>(TIMEOUT_TIME);
+	return RakNet::TimeElapsed(input, currentTime) > static_cast<int>(TIMEOUT_TIME);
 }
 
 //-------------------------------------------------------------------------------------------------------
@@ -2349,7 +2355,7 @@ bool ReliabilityLayer::IsExpiredTime(unsigned int input, unsigned int currentTim
 //-------------------------------------------------------------------------------------------------------
 unsigned int ReliabilityLayer::IsReceivedPacketHole(unsigned int input, unsigned int currentTime) const
 {
-	return static_cast<int>(input - currentTime) > static_cast<int>(TIMEOUT_TIME);
+	return RakNet::TimeElapsed(currentTime, input) > static_cast<int>(TIMEOUT_TIME);
 }
 
 //-------------------------------------------------------------------------------------------------------
