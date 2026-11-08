@@ -222,3 +222,36 @@ bool loadSiteConfig(const SiteConfigFile& file, const EnvironmentFunction& env, 
 	config = result;
 	return errors.size() == errorsBefore;
 }
+
+bool parsePort(const std::string& text, int& port)
+{
+	if (text.empty() || text.size() > 5 || text[0] == '0')
+		return false;
+	long value = 0;
+	for (char c : text)
+	{
+		if (c < '0' || c > '9')
+			return false;
+		value = value * 10 + (c - '0');
+	}
+	if (value < 1 || value > 65535)
+		return false;
+	port = static_cast<int>(value);
+	return true;
+}
+
+bool loadServerPort(int filePort, const EnvironmentFunction& env, int& port, std::string& error)
+{
+	const char* value = fromEnv(env, "BLOBBY_PORT");
+	if (!value)
+	{
+		port = filePort;
+		return true;
+	}
+	if (!parsePort(value, port))
+	{
+		error = "BLOBBY_PORT must be a number from 1 to 65535";
+		return false;
+	}
+	return true;
+}

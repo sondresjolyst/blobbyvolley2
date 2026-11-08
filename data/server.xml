@@ -2,6 +2,7 @@
 
 <userconfig>
 	<var name="speeds" value="30 60 75 90 120"/>
+	<!-- UDP port the server listens on. BLOBBY_PORT comes first. -->
 	<var name="port" value="1234"/>
 	<var name="maximum_clients" value="100" />
 	<var name="name" value="Blobby Volley 2 Server"/>

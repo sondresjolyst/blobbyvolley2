@@ -22,7 +22,9 @@ On a tournament server the board comes from the server instead. The server sends
 ### Dedicated Server
 The dedicated server is built as `src/blobby-server`. It runs at 100% game speed by default, which is 75 FPS.
 
-The default port is 1234.
+The default port is 1234. The `port` setting in the config file or the `BLOBBY_PORT` environment variable changes it. `BLOBBY_PORT` comes before the config file. It must be a number from 1 to 65535, or the server does not start. The server logs the port it listens on.
+
+Keep the port the same inside and outside a container. After the first contact the game moves to the port the server reports, so a server on port 1234 that is reached on port 1235 sends the players to port 1234. To run the server on port 1235 in Docker, use `-e BLOBBY_PORT=1235 -p 1235:1235/udp`.
 
 #### Run the server in Docker
 A container image of the dedicated server is published on Docker Hub as `sondresjo/blobby-server`. The `dev` tag follows the main branch. Each release gets a tag with its version, such as `0.1.0`, and the `latest` tag points to the newest release. `latest` exists only after the first release, so until then use `sondresjo/blobby-server:dev` in the commands below. On Windows, start Docker Desktop and run:
@@ -100,6 +102,7 @@ With the address and the token of the tournament site, the server reads the play
 - `BLOBBY_SITE_URL` is the address of the site. It must start with `https://`. The server ignores it when tournament mode is off, so set `BLOBBY_TOURNAMENT=1` or `tournament_mode` too.
 - `BLOBBY_SITE_TOKEN` is the game server token from the admin page of the site.
 - `BLOBBY_DATA_DIR` is the folder for the files below. The container image uses `/data`.
+- `BLOBBY_PORT` is the UDP port the server listens on. See [Dedicated Server](#dedicated-server).
 
 The config file can set the same as `tournament_mode`, `tournament_site_url`, `tournament_site_token` and `tournament_data_dir`. The server does not start when the address is not https or the token is missing. It never logs the token.
 

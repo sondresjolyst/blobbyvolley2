@@ -190,6 +190,13 @@ function Get-ContainerState {
     return 'stopped'
 }
 
+# Returns the port mappings of the container as "<container port>/udp <host port>".
+function Get-ContainerPorts {
+    $ports = & docker container inspect --format '{{range $p, $b := .HostConfig.PortBindings}}{{$p}}{{range $b}} {{.HostPort}}{{end}}{{end}}' $Container 2> $null
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return "$ports".Trim()
+}
+
 function Write-FirewallHint($Port) {
     Write-Host ''
     Write-Host "Players on other machines need inbound UDP on port $Port through the Windows firewall."
@@ -203,8 +210,9 @@ $RetryHint = 'The old server container is removed. Fix the problem and run start
 function New-ServerContainer($Config, [string]$Hint = '') {
     $envFile = Join-Path ([System.IO.Path]::GetTempPath()) ("blobby-server-" + [System.Guid]::NewGuid().ToString('N') + '.env')
     try {
-        Write-PrivateFile $envFile "BLOBBY_TOURNAMENT=1`nBLOBBY_SITE_URL=$($Config.Site)`nBLOBBY_SITE_TOKEN=$($Config.Token)`n"
-        & docker run -d --name $Container --restart unless-stopped -p "$($Config.Port):1234/udp" -v "${Volume}:/data" --env-file $envFile $Image | Out-Null
+        Write-PrivateFile $envFile "BLOBBY_TOURNAMENT=1`nBLOBBY_SITE_URL=$($Config.Site)`nBLOBBY_SITE_TOKEN=$($Config.Token)`nBLOBBY_PORT=$($Config.Port)`n"
+        # The server listens on the port of the host, because the game moves to the port the server reports.
+        & docker run -d --name $Container --restart unless-stopped -p "$($Config.Port):$($Config.Port)/udp" -v "${Volume}:/data" --env-file $envFile $Image | Out-Null
         $code = $LASTEXITCODE
     }
     finally {
@@ -230,10 +238,21 @@ function Invoke-Pull {
     if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not download the server image. See the message above and check the internet connection.' }
 }
 
+# An older image always listens on 1234, so another port needs the newest image.
+function Invoke-PullForPort($Config) {
+    if ("$($Config.Port)" -ne "$DefaultPort") {
+        Write-Host "Port $($Config.Port) is not the default $DefaultPort. It needs a server image from this release or later, so the script downloads the image first."
+        Invoke-Pull
+    }
+    else {
+        & docker image inspect $Image *> $null
+        if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+    }
+}
+
 # Makes the container again with the saved settings, for example after they changed.
 function Reset-ServerContainer($Config) {
-    & docker image inspect $Image *> $null
-    if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+    Invoke-PullForPort $Config
     Remove-ServerContainer
     New-ServerContainer $Config $RetryHint
 }
@@ -244,14 +263,19 @@ function Invoke-Start {
     switch (Get-ContainerState) {
         'running' { Write-Host 'The tournament server is already running.' }
         'stopped' {
-            & docker start $Container | Out-Null
-            if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not start the server. See the message above.' }
-            Write-Host 'Started the tournament server again.'
-            Write-FirewallHint $config.Port
+            if ((Get-ContainerPorts) -ne "$($config.Port)/udp $($config.Port)") {
+                Write-Host "The server container uses another port than the saved port $($config.Port), so the script makes it again."
+                Reset-ServerContainer $config
+            }
+            else {
+                & docker start $Container | Out-Null
+                if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not start the server. See the message above.' }
+                Write-Host 'Started the tournament server again.'
+                Write-FirewallHint $config.Port
+            }
         }
         default {
-            & docker image inspect $Image *> $null
-            if ($LASTEXITCODE -ne 0) { Invoke-Pull }
+            Invoke-PullForPort $config
             New-ServerContainer $config
         }
     }

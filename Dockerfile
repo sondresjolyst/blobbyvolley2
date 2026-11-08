@@ -50,6 +50,7 @@ ENV BLOBBY_DATA_DIR=/data
 VOLUME /data
 
 USER blobby
+# the default port, BLOBBY_PORT changes it and the published port must then match
 EXPOSE 1234/udp
 # Run in the foreground and print log messages to stderr, which Docker collects.
 ENTRYPOINT ["blobby-server", "--no-daemon", "--print-msgs"]
