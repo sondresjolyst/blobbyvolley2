@@ -228,6 +228,37 @@ BOOST_AUTO_TEST_CASE(refuses_too_long_pasted_text)
 	BOOST_CHECK(joinLinkFromText("blobby://join?server=lan:1234&code=K7QM2XPR4T" + std::string(MAX_JOIN_LINK_BYTES, '/'), link) == JoinLinkError::TOO_LONG);
 }
 
+BOOST_AUTO_TEST_CASE(reads_the_join_link_field)
+{
+	JoinLink link;
+	BOOST_REQUIRE(joinLinkFromField(" blobby://join?server=lan.example.no:1234&code=k7qm2xpr4t\r\n", link) == JoinLinkError::NONE);
+	BOOST_CHECK_EQUAL(link.host, "lan.example.no");
+	BOOST_CHECK_EQUAL(link.port, 1234);
+	BOOST_CHECK_EQUAL(link.code, "K7QM2XPR4T");
+
+	// an empty field or other text is not a join link, with the message for that
+	JoinLink other;
+	BOOST_CHECK(joinLinkFromField("", other) == JoinLinkError::NOT_A_JOIN_LINK);
+	BOOST_CHECK(joinLinkFromField("   ", other) == JoinLinkError::NOT_A_JOIN_LINK);
+	BOOST_CHECK(joinLinkFromField("K7QM2XPR4T", other) == JoinLinkError::NOT_A_JOIN_LINK);
+	BOOST_CHECK(joinLinkFromField("blobby://join?server=lan:1234&code=K7QM2XPR4", other) == JoinLinkError::BAD_CODE);
+	BOOST_CHECK(joinLinkFromField("blobby://join?server=lan:1234&code=K7QM2 XPR4T", other) == JoinLinkError::BAD_CHARACTER);
+	BOOST_CHECK(joinLinkFromField("blobby://join?server=lan:1234&code=K7QM2XPR4T" + std::string(MAX_JOIN_LINK_BYTES, '/'), other) == JoinLinkError::TOO_LONG);
+	BOOST_CHECK(other.host.empty());
+}
+
+BOOST_AUTO_TEST_CASE(prefills_the_field_only_with_a_valid_link)
+{
+	BOOST_CHECK_EQUAL(joinLinkPrefill("blobby://join?server=lan:1234&code=K7QM2XPR4T"), "blobby://join?server=lan:1234&code=K7QM2XPR4T");
+	BOOST_CHECK_EQUAL(joinLinkPrefill("\t blobby://join?server=lan:1234&code=K7QM2XPR4T\r\n"), "blobby://join?server=lan:1234&code=K7QM2XPR4T");
+
+	BOOST_CHECK_EQUAL(joinLinkPrefill(""), "");
+	BOOST_CHECK_EQUAL(joinLinkPrefill("hello"), "");
+	BOOST_CHECK_EQUAL(joinLinkPrefill("blobby://join?server=lan:1234&code=K7QM2XPR4"), "");
+	BOOST_CHECK_EQUAL(joinLinkPrefill("blobby://join?server=0x7f000001:1234&code=K7QM2XPR4T"), "");
+	BOOST_CHECK_EQUAL(joinLinkPrefill(std::string(MAX_JOIN_LINK_TEXT_BYTES, ' ') + "blobby://join?server=lan:1234&code=K7QM2XPR4T"), "");
+}
+
 BOOST_AUTO_TEST_CASE(every_error_has_a_message)
 {
 	for (JoinLinkError error : {JoinLinkError::TOO_LONG, JoinLinkError::BAD_CHARACTER, JoinLinkError::NOT_A_JOIN_LINK,

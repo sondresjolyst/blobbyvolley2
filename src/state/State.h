@@ -87,9 +87,25 @@ public:
 	~MainMenuState() override;
 	void step_impl() override;
 	const char* getStateName() const override;
+};
+
+/*! \class JoinLinkState
+	\brief Screen where the player enters a join link
+	\details Starts with the join link from the clipboard, if it holds one. After the player
+			agrees, it goes to the server of the link.
+*/
+class JoinLinkState : public State
+{
+public:
+	JoinLinkState();
+	void step_impl() override;
+	const char* getStateName() const override;
 private:
-	/// Reads a join link from the clipboard and, after the player agrees, goes to its server.
-	void pasteJoinLink();
+	void join();
+
+	std::string mLink;
+	unsigned mCursor = 0;
+	std::string mError;
 };
 
 /*! \class CreditsState

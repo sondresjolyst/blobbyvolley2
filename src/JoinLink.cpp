@@ -240,6 +240,19 @@ JoinLinkError joinLinkFromText(const std::string& text, JoinLink& link)
 	return parseJoinLink(trimmed, link);
 }
 
+JoinLinkError joinLinkFromField(const std::string& text, JoinLink& link)
+{
+	return parseJoinLink(trim(text), link);
+}
+
+std::string joinLinkPrefill(const std::string& clipboard)
+{
+	JoinLink link;
+	if (joinLinkFromText(clipboard, link) != JoinLinkError::NONE)
+		return "";
+	return trim(clipboard);
+}
+
 std::string describeJoinLinkError(JoinLinkError error)
 {
 	switch (error)

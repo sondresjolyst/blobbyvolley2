@@ -16,7 +16,7 @@
 	<string english = "credits" translation = "credits" />
 	<string english = "exit" translation = "exit" />
 	<string english = "join link" translation = "join link" />
-	<string english = "no join link in the clipboard" translation = "no join link in the clipboard" />
+	<string english = "join" translation = "join" />
 	
 	<string english = "programmers:" translation = "programmers:" />
 	<string english = "graphics:" translation = "graphics:" />

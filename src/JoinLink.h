@@ -70,6 +70,14 @@ JoinLinkError parseJoinLink(const std::string& text, JoinLink& link);
 /// Otherwise the same checks as parseJoinLink apply.
 JoinLinkError joinLinkFromText(const std::string& text, JoinLink& link);
 
+/// Reads a join link the player typed or pasted into the join link field. Spaces, tabs and line
+/// breaks around the link are removed, then the checks of parseJoinLink apply.
+JoinLinkError joinLinkFromField(const std::string& text, JoinLink& link);
+
+/// The text the join link field starts with: the trimmed clipboard text if it holds a valid
+/// join link, otherwise an empty string.
+std::string joinLinkPrefill(const std::string& clipboard);
+
 /// A sentence that tells the player what is wrong with a link.
 std::string describeJoinLinkError(JoinLinkError error);
 
