@@ -147,10 +147,19 @@ void IScriptableComponent::callLuaFunction(int arg_count)
 {
 	if (protectedCall(arg_count, 0))
 	{
-		std::cerr << "Lua Error: " << lua_tostring(mState, -1);
+		const char* message = lua_tostring(mState, -1);
+		mLuaError = message ? message : "unknown error";
+		std::cerr << "Lua Error: " << mLuaError;
 		std::cerr << std::endl;
 		lua_pop(mState, 1);
 	}
+}
+
+std::string IScriptableComponent::takeLuaError()
+{
+	std::string error;
+	error.swap(mLuaError);
+	return error;
 }
 
 void IScriptableComponent::setGameConstants()

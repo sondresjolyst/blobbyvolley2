@@ -37,3 +37,5 @@ jobs:
           docker build -f tools/loadbot/Dockerfile -t blobby-loadbot:smoke .
       - name: Play one match without a site
         run: tools/loadbot/smoke.sh blobby-server:smoke blobby-loadbot:smoke
+      - name: Play one match with a bot script against the simple bot
+        run: tools/loadbot/smoke.sh blobby-server:smoke blobby-loadbot:smoke --script reduced
