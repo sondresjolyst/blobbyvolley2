@@ -216,7 +216,7 @@ void JoinLinkState::join()
 	}
 
 	mError.clear();
-	LobbyState* lobby = joinFromLink(link, getApp().getWindow());
+	LobbyState* lobby = joinFromLink(link, JoinLinkSource::IN_GAME, getApp().getWindow());
 	if (lobby)
 		switchState(lobby);
 }

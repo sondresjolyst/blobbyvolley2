@@ -180,6 +180,12 @@ BOOST_AUTO_TEST_CASE(detects_link_arguments)
 	BOOST_CHECK(!looksLikeJoinLink(""));
 }
 
+BOOST_AUTO_TEST_CASE(only_external_links_ask_before_joining)
+{
+	BOOST_CHECK(!joinNeedsConfirmation(JoinLinkSource::IN_GAME));
+	BOOST_CHECK(joinNeedsConfirmation(JoinLinkSource::EXTERNAL));
+}
+
 BOOST_AUTO_TEST_CASE(reads_pasted_text_with_space_around)
 {
 	JoinLink link;

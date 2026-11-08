@@ -56,6 +56,18 @@ enum class JoinLinkError
 	NO_LINK
 };
 
+/// Where a join link came from.
+enum class JoinLinkSource
+{
+	/// The player typed or pasted the link into the join link field and picked join.
+	IN_GAME,
+	/// The command line or the blobby:// link handler, where the player did not pick join in the game.
+	EXTERNAL
+};
+
+/// True if the game must ask the player before it joins the server of a link from this source.
+bool joinNeedsConfirmation(JoinLinkSource source);
+
 /// True if the argument looks like it is meant as a blobby:// link, so the game should treat it as one.
 bool looksLikeJoinLink(const std::string& argument);
 
