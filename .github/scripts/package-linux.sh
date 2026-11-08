@@ -25,9 +25,10 @@ for file in blobby blobby-server data/rules.zip data/gfx.zip data/server.xml COP
 	[ -f "$out_dir/$file" ] || { echo "the package is missing $file" >&2; exit 1; }
 done
 
-# These come from the system. glibc, the GCC runtime, the graphics stack, X11 and ALSA
-# must match the machine, and an older copy next to a newer driver breaks it.
-system_libs='^(ld-linux.*|linux-vdso.*|libc|libm|libdl|libpthread|librt|libresolv|libutil|libanl|libmvec|libstdc\+\+|libgcc_s|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libGLESv2|libdrm|libgbm|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libasound|libz|libexpat|libdbus-1|libsystemd|libudev|libwayland-.*)\.so'
+# These come from the system. glibc, the GCC runtime, the graphics stack, X11, Wayland, ALSA,
+# D-Bus and systemd must match the machine, and an older copy next to a newer driver breaks it.
+# The small libraries at the end are what those need, so the newer system copy must win.
+system_libs='^(ld-linux.*|linux-vdso.*|libc|libm|libdl|libpthread|librt|libresolv|libutil|libanl|libmvec|libstdc\+\+|libgcc_s|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libGLESv2|libdrm|libgbm|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libasound|libdbus-1|libsystemd|libudev|libwayland-.*|libz|libexpat|libffi|libgcrypt|libgpg-error|liblzma|liblz4|libzstd|libcap|libbsd|libmd)\.so'
 
 # Copy every other library that the programs need. ldd lists them recursively.
 : > "$out_dir/.libs"

@@ -93,12 +93,16 @@ jobs:
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
         run: |
-          docker run --rm -v "$PWD:/src:ro" -e PACKAGE \
+          docker run --rm -v "$PWD:/src:ro" -e PACKAGE -e DEBIAN_FRONTEND=noninteractive \
             debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 \
             sh -c '
               set -eu
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends libgl1 libegl1 libx11-6 libasound2t64 > /dev/null
+              apt-get install -y -qq --no-install-recommends \
+                libgl1 libegl1 libgbm1 libdrm2 libx11-6 libx11-xcb1 libxcb1 \
+                libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+                libasound2t64 libdbus-1-3 libsystemd0 libudev1 \
+                zlib1g libexpat1 libffi8 libgcrypt20 libgpg-error0 liblzma5 liblz4-1 libzstd1 libcap2 libbsd0 libmd0 > /dev/null
               cp -r "/src/dist/$PACKAGE" /tmp/pkg
               sh /src/.github/scripts/smoke-unix.sh /tmp/pkg 5 blobby-server --no-daemon --print-msgs
               sh /src/.github/scripts/smoke-unix.sh /tmp/pkg 5 blobby
