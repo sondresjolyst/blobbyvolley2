@@ -167,7 +167,7 @@ void TextManager::setDefault()
 	mStrings[MNU_LABEL_CREDITS] = "credits";
 	mStrings[MNU_LABEL_EXIT] = "exit";
 	mStrings[MNU_LABEL_JOIN_LINK] = "join link";
-	mStrings[MNU_NO_JOIN_LINK] = "no join link in the clipboard";
+	mStrings[MNU_JOIN] = "join";
 
 	mStrings[CRD_PROGRAMMERS] = "programmers:";
 	mStrings[CRD_GRAPHICS] = "graphics:";

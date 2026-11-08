@@ -125,10 +125,11 @@ The tournament site shows each player a join link of the form `blobby://join?ser
 To join a match:
 1. Copy your join link on the tournament site.
 2. Open Blobby Volley.
-3. Click "join link" at the top of the main menu.
-4. Answer Yes when the game asks whether to join the server.
+3. Click "join link" at the top of the main menu. The field shows the link from the clipboard. You can also type or paste the link with Ctrl+V.
+4. Click "join" or press Enter.
+5. Answer Yes when the game asks whether to join the server.
 
-The game then connects and sends the code as player name. If the clipboard holds no join link, or the link is not valid, the game says so and stays in the main menu.
+The game then connects and sends the code as player name. If the link is not valid, the game says what is wrong below the field.
 
 The game checks the link strictly before it uses it. The host is a host name or an IPv4 address of at most 63 bytes. A host that starts with a digit must be an IPv4 address of four decimal parts. The port is 1 to 65535 and the code has 10 characters from the join code alphabet. The link may hold only `server` and `code`. The game never opens or runs anything else from a link.
 

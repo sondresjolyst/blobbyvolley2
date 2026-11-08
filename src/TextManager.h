@@ -57,7 +57,7 @@ class TextManager
 			MNU_LABEL_CREDITS,
 			MNU_LABEL_EXIT,
 			MNU_LABEL_JOIN_LINK,
-			MNU_NO_JOIN_LINK,
+			MNU_JOIN,
 
 			// credits
 			CRD_PROGRAMMERS,

@@ -16,7 +16,7 @@
 	<string english = "credits" translation = "developpeurs" />
 	<string english = "exit" translation = "quitter" />
 	<string english = "join link" translation = "lien" />
-	<string english = "no join link in the clipboard" translation = "pas de lien dans le presse-papiers" />
+	<string english = "join" translation = "rejoindre" />
 	
 	<string english = "programmers:" translation = "programmeurs:" />
 	<string english = "graphics:" translation = "graphiques:" />

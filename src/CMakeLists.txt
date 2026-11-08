@@ -58,6 +58,7 @@ set(common_SRC
 set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	Blood.cpp Blood.h
 	TextManager.cpp TextManager.h
+	EditboxWindow.cpp EditboxWindow.h
 	IMGUI.cpp IMGUI.h
 	InputDevice.h
 	InputManager.cpp InputManager.h
