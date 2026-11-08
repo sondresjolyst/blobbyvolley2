@@ -25,7 +25,7 @@ jobs:
     name: Get release version
     needs: release-please
     if: always() && (needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions: {}
     outputs:
       tag: ${{ steps.version.outputs.tag }}

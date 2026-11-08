@@ -45,7 +45,7 @@ jobs:
   build:
     name: Build image
     if: github.event_name == 'pull_request' || (inputs.tag != '' && !inputs.push)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -61,7 +61,7 @@ jobs:
   tag:
     name: Pick image tag
     if: github.event_name != 'pull_request' && (inputs.tag == '' || inputs.push)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions: {}
     outputs:
       tag: ${{ steps.pick.outputs.tag }}
