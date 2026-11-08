@@ -203,8 +203,9 @@ $RetryHint = 'The old server container is removed. Fix the problem and run start
 function New-ServerContainer($Config, [string]$Hint = '') {
     $envFile = Join-Path ([System.IO.Path]::GetTempPath()) ("blobby-server-" + [System.Guid]::NewGuid().ToString('N') + '.env')
     try {
-        Write-PrivateFile $envFile "BLOBBY_TOURNAMENT=1`nBLOBBY_SITE_URL=$($Config.Site)`nBLOBBY_SITE_TOKEN=$($Config.Token)`n"
-        & docker run -d --name $Container --restart unless-stopped -p "$($Config.Port):1234/udp" -v "${Volume}:/data" --env-file $envFile $Image | Out-Null
+        Write-PrivateFile $envFile "BLOBBY_TOURNAMENT=1`nBLOBBY_SITE_URL=$($Config.Site)`nBLOBBY_SITE_TOKEN=$($Config.Token)`nBLOBBY_PORT=$($Config.Port)`n"
+        # The server listens on the port of the host, because the game moves to the port the server reports.
+        & docker run -d --name $Container --restart unless-stopped -p "$($Config.Port):$($Config.Port)/udp" -v "${Volume}:/data" --env-file $envFile $Image | Out-Null
         $code = $LASTEXITCODE
     }
     finally {

@@ -69,3 +69,12 @@ bool isValidSiteToken(const std::string& token);
 */
 bool loadSiteConfig(const SiteConfigFile& file, const EnvironmentFunction& env, SiteConfig& config,
 					std::vector<std::string>& errors);
+
+/// Reads a UDP port. Only the digits of a number from 1 to 65535 are allowed, without a sign, spaces or a leading zero.
+bool parsePort(const std::string& text, int& port);
+
+/*! Picks the UDP port the server listens on. BLOBBY_PORT comes before the port from the config file.
+	\details Returns false and sets error when BLOBBY_PORT is set but is not a valid port.
+	An empty or unset BLOBBY_PORT keeps filePort.
+*/
+bool loadServerPort(int filePort, const EnvironmentFunction& env, int& port, std::string& error);

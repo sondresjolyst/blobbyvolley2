@@ -252,6 +252,38 @@ BOOST_AUTO_TEST_CASE( atomic_write_replaces_a_stale_temporary_file )
 	std::remove(path.c_str());
 }
 
+BOOST_AUTO_TEST_CASE( port_parse_takes_only_valid_ports )
+{
+	int port = 0;
+	BOOST_CHECK(parsePort("1", port));
+	BOOST_CHECK_EQUAL(port, 1);
+	BOOST_CHECK(parsePort("1235", port));
+	BOOST_CHECK_EQUAL(port, 1235);
+	BOOST_CHECK(parsePort("65535", port));
+	BOOST_CHECK_EQUAL(port, 65535);
+
+	port = 7;
+	for (const char* bad : {"", "0", "65536", "99999", "100000", "-1", "+1235", " 1235", "1235 ", "12a5", "0x10", "01235", "1235.0", "1e3"})
+		BOOST_CHECK_MESSAGE(!parsePort(bad, port), "accepted " << bad);
+	BOOST_CHECK_EQUAL(port, 7);
+}
+
+BOOST_AUTO_TEST_CASE( port_comes_from_the_environment_before_the_file )
+{
+	int port = 0;
+	std::string error;
+	BOOST_REQUIRE(loadServerPort(1234, envOf({}), port, error));
+	BOOST_CHECK_EQUAL(port, 1234);
+	BOOST_REQUIRE(loadServerPort(1234, envOf({{"BLOBBY_PORT", ""}}), port, error));
+	BOOST_CHECK_EQUAL(port, 1234);
+	BOOST_REQUIRE(loadServerPort(1234, envOf({{"BLOBBY_PORT", "1235"}}), port, error));
+	BOOST_CHECK_EQUAL(port, 1235);
+	BOOST_CHECK(error.empty());
+
+	BOOST_CHECK(!loadServerPort(1234, envOf({{"BLOBBY_PORT", "70000"}}), port, error));
+	BOOST_CHECK(error.find("BLOBBY_PORT") != std::string::npos);
+}
+
 #ifndef _WIN32
 BOOST_AUTO_TEST_CASE( data_files_are_only_for_the_server_user )
 {

@@ -171,8 +171,9 @@ create_container() {
 	trap 'rm -f "$env_file"' EXIT
 	trap 'exit 130' INT TERM
 	chmod 600 "$env_file"
-	printf 'BLOBBY_TOURNAMENT=1\nBLOBBY_SITE_URL=%s\nBLOBBY_SITE_TOKEN=%s\n' "$SITE" "$TOKEN" >"$env_file"
-	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:1234/udp" -v "$VOLUME:/data" \
+	printf 'BLOBBY_TOURNAMENT=1\nBLOBBY_SITE_URL=%s\nBLOBBY_SITE_TOKEN=%s\nBLOBBY_PORT=%s\n' "$SITE" "$TOKEN" "$PORT" >"$env_file"
+	# the server listens on the port of the host, because the game moves to the port the server reports
+	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:$PORT/udp"-v "$VOLUME:/data" \
 		--env-file "$env_file" "$IMAGE" >/dev/null
 	code=$?
 	rm -f "$env_file"
