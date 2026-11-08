@@ -47,7 +47,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 namespace
 {
-	/// Asks the player before the game connects to the server of a link, since any web page or clipboard can hold one.
+	/// Asks the player before the game connects to the server of a link from outside the game, since any web page can hold one.
 	/// Returns true only when the player picks Yes.
 	bool confirmJoin(const JoinLink& link, SDL_Window* parent)
 	{
@@ -86,9 +86,9 @@ namespace
 	}
 }
 
-LobbyState* joinFromLink(const JoinLink& link, SDL_Window* parent)
+LobbyState* joinFromLink(const JoinLink& link, JoinLinkSource source, SDL_Window* parent)
 {
-	if (!confirmJoin(link, parent))
+	if (joinNeedsConfirmation(source) && !confirmJoin(link, parent))
 		return nullptr;
 	return new LobbyState(serverFromLink(link), PreviousState::MAIN, link.code);
 }

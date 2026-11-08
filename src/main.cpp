@@ -292,7 +292,7 @@ int main(int argc, char* argv[])
 
 		std::unique_ptr<State> first_state;
 		if (request.hasLink)
-			first_state.reset(joinFromLink(request.link, nullptr));
+			first_state.reset(joinFromLink(request.link, JoinLinkSource::EXTERNAL, nullptr));
 		if (!first_state)
 			first_state.reset(new MainMenuState());
 

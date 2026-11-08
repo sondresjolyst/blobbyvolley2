@@ -127,14 +127,13 @@ To join a match:
 2. Open Blobby Volley.
 3. Click "join link" at the top of the main menu. The field shows the link from the clipboard. You can also type or paste the link with Ctrl+V.
 4. Click "join" or press Enter.
-5. Answer Yes when the game asks whether to join the server.
 
 The game then connects and sends the code as player name. If the link is not valid, the game says what is wrong below the field.
 
 The game checks the link strictly before it uses it. The host is a host name or an IPv4 address of at most 63 bytes. A host that starts with a digit must be an IPv4 address of four decimal parts. The port is 1 to 65535 and the code has 10 characters from the join code alphabet. The link may hold only `server` and `code`. The game never opens or runs anything else from a link.
 
 ##### Open links with a click (optional)
-You can also let a click on the link open the game. The game then asks the same question before it joins. Each click starts a new copy of the game, even when one is already running. A link given on the command line must be the only argument. A bad link shows a message, and the game opens the main menu.
+You can also let a click on the link open the game. The game then asks whether to join the server, and joins only when you answer Yes. Each click starts a new copy of the game, even when one is already running. A link given on the command line must be the only argument. A bad link shows a message, and the game opens the main menu.
 
 On Windows, run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
 

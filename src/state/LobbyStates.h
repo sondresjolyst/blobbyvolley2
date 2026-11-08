@@ -16,6 +16,7 @@ class IMGUI;
 std::vector<std::string> describeTournamentStatus(const IMGUI& imgui, const TournamentStatusData& data);
 
 struct JoinLink;
+enum class JoinLinkSource;
 struct SDL_Window;
 
 enum class ConnectionState
@@ -163,8 +164,8 @@ private:
 	std::vector<std::string> mOtherPlayerNames;
 };
 
-/// Asks the player whether to join the server of a join link, since any web page or clipboard can hold one.
-/// Returns a new lobby state for that server on Yes, and nullptr on No. parent may be nullptr.
-LobbyState* joinFromLink(const JoinLink& link, SDL_Window* parent);
+/// Returns a new lobby state for the server of a join link. For a link from outside the game it first asks
+/// the player whether to join, since any web page can hold one, and returns nullptr on No. parent may be nullptr.
+LobbyState* joinFromLink(const JoinLink& link, JoinLinkSource source, SDL_Window* parent);
 
 #endif // LOBBYSTATES_H_INCLUDED

@@ -135,6 +135,11 @@ namespace
 	}
 }
 
+bool joinNeedsConfirmation(JoinLinkSource source)
+{
+	return source != JoinLinkSource::IN_GAME;
+}
+
 bool looksLikeJoinLink(const std::string& argument)
 {
 	return startsWithNoCase(argument, 0, "blobby:");
