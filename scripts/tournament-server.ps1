@@ -190,6 +190,13 @@ function Get-ContainerState {
     return 'stopped'
 }
 
+# Returns the port mappings of the container as "<container port>/udp <host port>".
+function Get-ContainerPorts {
+    $ports = & docker container inspect --format '{{range $p, $b := .HostConfig.PortBindings}}{{$p}}{{range $b}} {{.HostPort}}{{end}}{{end}}' $Container 2> $null
+    if ($LASTEXITCODE -ne 0) { return '' }
+    return "$ports".Trim()
+}
+
 function Write-FirewallHint($Port) {
     Write-Host ''
     Write-Host "Players on other machines need inbound UDP on port $Port through the Windows firewall."
@@ -256,10 +263,16 @@ function Invoke-Start {
     switch (Get-ContainerState) {
         'running' { Write-Host 'The tournament server is already running.' }
         'stopped' {
-            & docker start $Container | Out-Null
-            if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not start the server. See the message above.' }
-            Write-Host 'Started the tournament server again.'
-            Write-FirewallHint $config.Port
+            if ((Get-ContainerPorts) -ne "$($config.Port)/udp $($config.Port)") {
+                Write-Host "The server container uses another port than the saved port $($config.Port), so the script makes it again."
+                Reset-ServerContainer $config
+            }
+            else {
+                & docker start $Container | Out-Null
+                if ($LASTEXITCODE -ne 0) { Write-Fail 'Docker could not start the server. See the message above.' }
+                Write-Host 'Started the tournament server again.'
+                Write-FirewallHint $config.Port
+            }
         }
         default {
             Invoke-PullForPort $config

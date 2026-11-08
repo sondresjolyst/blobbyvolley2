@@ -156,6 +156,11 @@ container_state() {
 	fi
 }
 
+# Prints the port mappings of the container as "<container port>/udp <host port>".
+container_ports() {
+	docker container inspect --format '{{range $p, $b := .HostConfig.PortBindings}}{{$p}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null
+}
+
 pull_image() {
 	docker pull "$IMAGE" || fail "Docker could not download the server image. See the message above and check the internet connection."
 }
@@ -208,8 +213,13 @@ cmd_start() {
 	case "$(container_state)" in
 	running) echo "The tournament server is already running." ;;
 	stopped)
-		docker start "$CONTAINER" >/dev/null || fail "Docker could not start the server. See the message above."
-		echo "Started the tournament server again."
+		if [ "$(container_ports)" != "$PORT/udp $PORT" ]; then
+			echo "The server container uses another port than the saved port $PORT, so the script makes it again."
+			recreate_container
+		else
+			docker start "$CONTAINER" >/dev/null || fail "Docker could not start the server. See the message above."
+			echo "Started the tournament server again."
+		fi
 		;;
 	*)
 		pull_for_port
