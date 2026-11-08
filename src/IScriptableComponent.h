@@ -48,6 +48,10 @@ class IScriptableComponent
 
 		const DuelMatchState& getMatchState() const;
 
+		/// The message of the last error of callLuaFunction, empty when there was none.
+		/// It is cleared when read.
+		std::string takeLuaError();
+
 	protected:
 		IScriptableComponent();
 		virtual ~IScriptableComponent();
@@ -78,6 +82,7 @@ class IScriptableComponent
 		std::unique_ptr<PhysicWorld> mDummyWorld;
 
 		DuelMatchState mCachedState;
+		std::string mLuaError;
 
 		// instruction blocks the current protected call has run
 		mutable unsigned long mInstructionBlocks = 0;

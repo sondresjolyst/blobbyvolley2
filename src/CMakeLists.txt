@@ -186,6 +186,8 @@ endif ()
 # headless client for load tests of a tournament server, see tools/loadbot/README.md
 if (BUILD_LOADBOT)
 	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp
+		../tools/loadbot/LoadbotArgs.cpp
+		../tools/loadbot/ScriptBot.cpp
 		BlobbyDebug.cpp
 		Clock.cpp
 		Color.cpp
@@ -205,11 +207,13 @@ if (BUILD_LOADBOT)
 		PhysicWorld.cpp
 		PlayerIdentity.cpp
 		PlayerInput.cpp
+		ScriptedInputSource.cpp
 		StringUtil.cpp
 		TournamentProtocol.cpp
 		UserConfig.cpp
 		)
-	# the bot has its own main and never includes SDL.h, so it must not get the main of SDL2main
+	target_include_directories(blobby-loadbot PRIVATE ../tools/loadbot)
+	# the file with the main of the bot never includes SDL.h, so it must not get the main of SDL2main
 	set(LOADBOT_LIBS ${BLOBBY_COMMON_LIBS})
 	list(REMOVE_ITEM LOADBOT_LIBS SDL2::SDL2main)
 	target_link_libraries(blobby-loadbot ${LOADBOT_LIBS})

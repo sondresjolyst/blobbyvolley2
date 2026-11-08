@@ -185,6 +185,16 @@ int main(int argc, char** argv)
 	}
 
 	ServerInfo myinfo(config);
+	{
+		int port = 0;
+		std::string error;
+		if(!loadServerPort(myinfo.port, [](const char* name){ return std::getenv(name); }, port, error))
+		{
+			syslog(LOG_ERR, "%s, the server stops", error.c_str());
+			return 1;
+		}
+		myinfo.port = static_cast<uint16_t>(port);
+	}
 	std::vector<std::string> rule_vec;
 	boost::algorithm::split(rule_vec, rulesFile, boost::algorithm::is_space(), boost::algorithm::token_compress_on);
 
@@ -258,6 +268,7 @@ int main(int argc, char** argv)
 	}
 
 	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server %s (%s %s), protocol version %i.%i, started", BLOBBY_UPSTREAM_VERSION, BLOBBY_FORK_NAME, BLOBBY_FORK_VERSION, BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
+	syslog(LOG_NOTICE, "Listening on UDP port %i", (int)myinfo.port);
 
 #ifdef BLOBBY_SITE_SYNC
 	if(siteReporter)

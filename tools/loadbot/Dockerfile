@@ -19,7 +19,7 @@ COPY data ./data
 COPY src ./src
 COPY linux ./linux
 COPY macos ./macos
-COPY tools/loadbot/loadbot.cpp ./tools/loadbot/loadbot.cpp
+COPY tools/loadbot/*.cpp tools/loadbot/*.h ./tools/loadbot/
 
 RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=OFF -DBUILD_LOADBOT=ON \
     && cmake --build /build --parallel --target blobby-loadbot
@@ -41,6 +41,9 @@ RUN apt-get update \
     && useradd --system --uid 999 --user-group --no-create-home --shell /usr/sbin/nologin blobby
 
 COPY --from=build /build/src/blobby-loadbot /usr/local/bin/blobby-loadbot
+# the bot scripts for --script and the lua files they run on, in the data folder the build looks in
+COPY data/api.lua data/bot_api.lua /usr/local/share/blobby/
+COPY data/scripts/*.lua /usr/local/share/blobby/scripts/
 
 USER blobby
 ENTRYPOINT ["blobby-loadbot"]

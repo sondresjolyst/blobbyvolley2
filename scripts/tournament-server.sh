@@ -156,12 +156,27 @@ container_state() {
 	fi
 }
 
+# Prints the port mappings of the container as "<container port>/udp <host port>".
+container_ports() {
+	docker container inspect --format '{{range $p, $b := .HostConfig.PortBindings}}{{$p}}{{range $b}} {{.HostPort}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null
+}
+
 pull_image() {
 	docker pull "$IMAGE" || fail "Docker could not download the server image. See the message above and check the internet connection."
 }
 
 pull_if_missing() {
 	docker image inspect "$IMAGE" >/dev/null 2>&1 || pull_image
+}
+
+# An older image always listens on 1234, so another port needs the newest image.
+pull_for_port() {
+	if [ "$PORT" != "$DEFAULT_PORT" ]; then
+		echo "Port $PORT is not the default $DEFAULT_PORT. It needs a server image from this release or later, so the script downloads the image first."
+		pull_image
+	else
+		pull_if_missing
+	fi
 }
 
 # The optional argument is a hint that is shown when Docker cannot start the server.
@@ -171,8 +186,9 @@ create_container() {
 	trap 'rm -f "$env_file"' EXIT
 	trap 'exit 130' INT TERM
 	chmod 600 "$env_file"
-	printf 'BLOBBY_TOURNAMENT=1\nBLOBBY_SITE_URL=%s\nBLOBBY_SITE_TOKEN=%s\n' "$SITE" "$TOKEN" >"$env_file"
-	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:1234/udp" -v "$VOLUME:/data" \
+	printf 'BLOBBY_TOURNAMENT=1\nBLOBBY_SITE_URL=%s\nBLOBBY_SITE_TOKEN=%s\nBLOBBY_PORT=%s\n' "$SITE" "$TOKEN" "$PORT" >"$env_file"
+	# the server listens on the port of the host, because the game moves to the port the server reports
+	docker run -d --name "$CONTAINER" --restart unless-stopped -p "$PORT:$PORT/udp" -v "$VOLUME:/data" \
 		--env-file "$env_file" "$IMAGE" >/dev/null
 	code=$?
 	rm -f "$env_file"
@@ -197,11 +213,16 @@ cmd_start() {
 	case "$(container_state)" in
 	running) echo "The tournament server is already running." ;;
 	stopped)
-		docker start "$CONTAINER" >/dev/null || fail "Docker could not start the server. See the message above."
-		echo "Started the tournament server again."
+		if [ "$(container_ports)" != "$PORT/udp $PORT" ]; then
+			echo "The server container uses another port than the saved port $PORT, so the script makes it again."
+			recreate_container
+		else
+			docker start "$CONTAINER" >/dev/null || fail "Docker could not start the server. See the message above."
+			echo "Started the tournament server again."
+		fi
 		;;
 	*)
-		pull_if_missing
+		pull_for_port
 		create_container
 		;;
 	esac
@@ -254,7 +275,7 @@ RETRY_HINT="The old server container is removed. Fix the problem and run start a
 
 # Makes the container again with the saved settings, for example after they changed.
 recreate_container() {
-	pull_if_missing
+	pull_for_port
 	remove_container
 	create_container "$RETRY_HINT"
 }
