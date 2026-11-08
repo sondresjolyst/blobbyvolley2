@@ -103,7 +103,9 @@ namespace sponsors
 		PADDED		///< padded board with rounded edges, like court padding
 	};
 
-	/// Parses the style name sent by the site. Unknown names give LED.
+	/// Reads a style name exactly as the site sends it. Returns false for any other text.
+	bool tryParseBoardStyle(const std::string& name, BoardStyle& style);
+	/// Parses the style name sent by the site, in any case and with spaces around it. Unknown names give LED.
 	BoardStyle parseBoardStyle(const std::string& name);
 	/// The name of a style as the site sends it.
 	const char* boardStyleName(BoardStyle style);

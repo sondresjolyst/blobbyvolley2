@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "server/FileUtil.h"
 #include "server/SiteConfig.h"
 #include "TestDir.h"
 

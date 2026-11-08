@@ -10,6 +10,7 @@
 #include "server/JoinCodes.h"
 #include "server/NetworkPlayer.h"
 #include "TestDir.h"
+#include "TestServer.h"
 
 namespace
 {
@@ -20,20 +21,12 @@ namespace
 		"\t<player id=\"17\" nickname=\"Kari\" code=\"B9HNZ3WD6F\"/>\n"
 		"</tournament>\n";
 
-	PlayerID makeID(unsigned short port)
-	{
-		PlayerID id;
-		id.binaryAddress = 0x0100007F;
-		id.port = port;
-		return id;
-	}
-
 	struct LogCapture
 	{
 		std::vector<std::string> lines;
-		JoinCodeGate::LogFunction function()
+		ServerLog function()
 		{
-			return [this](JoinCodeGate::LogLevel, const std::string& line){ lines.push_back(line); };
+			return [this](bool, const std::string& line){ lines.push_back(line); };
 		}
 		bool contains(const std::string& text) const
 		{
@@ -62,7 +55,7 @@ namespace
 	// writes an ID_ENTER_SERVER body as the client does, without the message id
 	void writeEnterServer(RakNet::BitStream& stream, const char* name, std::size_t name_bytes)
 	{
-		char buffer[16] = {0};
+		char buffer[PLAYER_NAME_BUFFER] = {0};
 		std::memcpy(buffer, name, name_bytes);
 		stream.Write((int)RIGHT_PLAYER);
 		stream.Write(buffer, sizeof(buffer));

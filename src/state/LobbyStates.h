@@ -7,7 +7,7 @@
 #include "PlayerIdentity.h"
 #include "State.h"
 #include "GenericIOFwd.h"
-#include "server/Tournament.h"
+#include "TournamentProtocol.h"
 
 class RakClient;
 class IMGUI;

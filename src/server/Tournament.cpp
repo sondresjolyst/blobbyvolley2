@@ -22,10 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include <cstdio>
 #include <ctime>
-#include <fstream>
 #include <random>
 #include <utility>
 
+#include "FileUtil.h"
 #include "GenericIO.h"
 #include "JoinCodes.h"
 
@@ -108,29 +108,6 @@ void writeTournamentStatus(RakNet::BitStream& stream, const PlayerTournamentStat
 	out->uint32( nextGameInMs );
 }
 
-TournamentStatusData readTournamentStatus(GenericIn& in)
-{
-	TournamentStatusData data;
-	unsigned char status = 0;
-	in.byte(status);
-	if (status <= (unsigned char)TournamentStatus::MATCH_OVER)
-		data.status = (TournamentStatus)status;
-	in.string(data.opponent);
-	in.uint32(data.game);
-	in.uint32(data.bestOf);
-	in.uint32(data.ownWins);
-	in.uint32(data.opponentWins);
-	in.string(data.ownName);
-	in.uint32(data.nextGameInMs);
-	if (data.nextGameInMs > MAX_NEXT_GAME_DELAY_MS)
-		data.nextGameInMs = MAX_NEXT_GAME_DELAY_MS;
-	if (!isValidNickname(data.opponent))
-		data.opponent.clear();
-	if (!isValidNickname(data.ownName))
-		data.ownName.clear();
-	return data;
-}
-
 // - - - - - - - - - - - - - - - - - -
 // 			events
 // - - - - - - - - - - - - - - - - - -
@@ -141,7 +118,7 @@ void TournamentEvents::liveScore(int, int, int, int, int, int)
 {
 }
 
-TournamentLog::TournamentLog(std::string resultsPath, LogFunction log)
+TournamentLog::TournamentLog(std::string resultsPath, ServerLog log)
 : mPath(std::move(resultsPath))
 , mLog(std::move(log))
 {
@@ -193,10 +170,7 @@ void TournamentLog::append(const std::string& line)
 {
 	if (mPath.empty())
 		return;
-	std::ofstream file(mPath, std::ios::out | std::ios::app | std::ios::binary);
-	if (file)
-		file << line << "\n";
-	if (!file && mLog)
+	if (!appendLine(mPath, line) && mLog)
 		mLog(true, "cannot write the results file " + mPath);
 }
 
@@ -414,6 +388,22 @@ void TournamentDirector::gameNotStarted(int matchId, bool canRetry, unsigned lon
 	found->second.retryAt = canRetry ? retryAt_ms : 0;
 }
 
+GameReport TournamentDirector::makeReport(int matchId, const Series& s, int points1, int points2,
+									WallTime startedAt, WallTime endedAt)
+{
+	GameReport report;
+	report.reportId = mMakeReportId();
+	report.matchId = matchId;
+	report.game = s.playingGame;
+	report.player1 = s.playing.player1;
+	report.points1 = points1;
+	report.player2 = s.playing.player2;
+	report.points2 = points2;
+	report.startedAt = startedAt;
+	report.endedAt = endedAt;
+	return report;
+}
+
 void TournamentDirector::gameFinished(int matchId, int winner, int points1, int points2,
 									WallTime startedAt, WallTime endedAt, unsigned long long now_ms)
 {
@@ -423,18 +413,9 @@ void TournamentDirector::gameFinished(int matchId, int winner, int points1, int 
 	Series& s = found->second;
 	s.running = false;
 
-	GameReport report;
-	report.reportId = mMakeReportId();
-	report.matchId = matchId;
-	report.game = s.playingGame;
+	GameReport report = makeReport(matchId, s, points1, points2, startedAt, endedAt);
 	report.finished = true;
 	report.winnerId = winner == 1 ? s.playing.player1 : s.playing.player2;
-	report.player1 = s.playing.player1;
-	report.points1 = points1;
-	report.player2 = s.playing.player2;
-	report.points2 = points2;
-	report.startedAt = startedAt;
-	report.endedAt = endedAt;
 
 	if (s.playingEpoch != s.epoch)
 	{
@@ -488,19 +469,10 @@ void TournamentDirector::gameAbandoned(int matchId, int points1, int points2, Wa
 	Series& s = found->second;
 	s.running = false;
 
-	GameReport report;
-	report.reportId = mMakeReportId();
-	report.matchId = matchId;
-	report.game = s.playingGame;
+	GameReport report = makeReport(matchId, s, points1, points2, startedAt, endedAt);
 	report.finished = false;
 	if (s.playing.hasPlayer(leftPlayerId))
 		report.leftPlayerId = leftPlayerId;
-	report.player1 = s.playing.player1;
-	report.points1 = points1;
-	report.player2 = s.playing.player2;
-	report.points2 = points2;
-	report.startedAt = startedAt;
-	report.endedAt = endedAt;
 
 	if (mEvents)
 		mEvents->gameEnded(report);

@@ -20,10 +20,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 #include "Global.h"
 #include "Color.h"
+
+/// Bytes of the name field of a player on the wire, with the terminating zero.
+constexpr std::size_t PLAYER_NAME_BUFFER = 16;
 
 class PlayerIdentity
 {

@@ -22,7 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "JoinLink.h"
 
 /* includes */
-#include "server/JoinCodes.h"
+#include "StringUtil.h"
+#include "TournamentProtocol.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -37,18 +38,13 @@ namespace
 	const char* const SCHEME = "blobby://";
 	const char* const ACTION = "join";
 
-	char toLower(char c)
-	{
-		return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
-	}
-
 	bool startsWithNoCase(const std::string& text, std::size_t pos, const std::string& prefix)
 	{
 		if (text.size() < pos + prefix.size())
 			return false;
 		for (std::size_t i = 0; i < prefix.size(); ++i)
 		{
-			if (toLower(text[pos + i]) != toLower(prefix[i]))
+			if (lowerAscii(text[pos + i]) != lowerAscii(prefix[i]))
 				return false;
 		}
 		return true;
@@ -137,24 +133,6 @@ namespace
 		}
 		return parts == 4;
 	}
-
-	/// A port of 1 to 65535 without leading zeros.
-	bool parsePort(const std::string& text, uint16_t& port)
-	{
-		if (text.empty() || text.size() > 5 || text[0] == '0')
-			return false;
-		unsigned long value = 0;
-		for (char c : text)
-		{
-			if (!isDigit(c))
-				return false;
-			value = value * 10 + static_cast<unsigned long>(c - '0');
-		}
-		if (value < 1 || value > 65535)
-			return false;
-		port = static_cast<uint16_t>(value);
-		return true;
-	}
 }
 
 bool looksLikeJoinLink(const std::string& argument)
@@ -232,9 +210,7 @@ JoinLinkError parseJoinLink(const std::string& text, JoinLink& link)
 	if (colon == std::string::npos)
 		return JoinLinkError::BAD_PORT;
 
-	std::string host = server.substr(0, colon);
-	for (auto& c : host)
-		c = toLower(c);
+	std::string host = lowerAscii(server.substr(0, colon));
 	if (!isWellFormedHost(host))
 		return JoinLinkError::BAD_HOST;
 
@@ -258,13 +234,7 @@ JoinLinkError joinLinkFromText(const std::string& text, JoinLink& link)
 	if (text.size() > MAX_JOIN_LINK_TEXT_BYTES)
 		return JoinLinkError::TOO_LONG;
 
-	const char* const space = " \t\r\n";
-	std::size_t begin = text.find_first_not_of(space);
-	if (begin == std::string::npos)
-		return JoinLinkError::NO_LINK;
-	std::size_t end = text.find_last_not_of(space);
-	std::string trimmed = text.substr(begin, end - begin + 1);
-
+	std::string trimmed = trim(text);
 	if (!looksLikeJoinLink(trimmed))
 		return JoinLinkError::NO_LINK;
 	return parseJoinLink(trimmed, link);

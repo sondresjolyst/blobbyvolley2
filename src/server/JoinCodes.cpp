@@ -20,139 +20,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "JoinCodes.h"
 
-#include <cstring>
-#include <fstream>
 #include <set>
 #include <utility>
 
 #include "tinyxml2.h"
 
+#include "FileUtil.h"
 #include "NetworkPlayer.h"
-
-namespace
-{
-	const char JOIN_CODE_ALPHABET[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
-	// characters of a code or name that are shown in the log
-	const std::size_t LOG_PREFIX_LENGTH = 3;
-
-	bool isJoinCodeChar(char c)
-	{
-		return c != '\0' && std::strchr(JOIN_CODE_ALPHABET, c) != nullptr;
-	}
-
-	// checks that text is valid UTF-8 without control characters
-	bool isCleanUtf8(const std::string& text)
-	{
-		std::size_t i = 0;
-		while (i < text.size())
-		{
-			unsigned char c = text[i];
-			std::size_t extra = 0;
-			if (c < 0x20 || c == 0x7F)
-				return false;
-			if (c < 0x80)
-				extra = 0;
-			else if (c >= 0xC2 && c <= 0xDF)
-				extra = 1;
-			else if (c >= 0xE0 && c <= 0xEF)
-				extra = 2;
-			else if (c >= 0xF0 && c <= 0xF4)
-				extra = 3;
-			else
-				return false;
-
-			for (std::size_t k = 1; k <= extra; ++k)
-			{
-				if (i + k >= text.size())
-					return false;
-				unsigned char follow = text[i + k];
-				if ((follow & 0xC0) != 0x80)
-					return false;
-			}
-			i += extra + 1;
-		}
-		return true;
-	}
-
-	std::string lowerAscii(std::string text)
-	{
-		for (auto& c : text)
-		{
-			if (c >= 'A' && c <= 'Z')
-				c = static_cast<char>(c - 'A' + 'a');
-		}
-		return text;
-	}
-}
-
-std::string normalizeJoinCode(const std::string& raw)
-{
-	std::size_t begin = raw.find_first_not_of(' ');
-	if (begin == std::string::npos)
-		return "";
-	std::size_t end = raw.find_last_not_of(' ');
-	std::string code = raw.substr(begin, end - begin + 1);
-
-	for (auto& c : code)
-	{
-		if (c >= 'a' && c <= 'z')
-			c = static_cast<char>(c - 'a' + 'A');
-	}
-
-	if (!isValidJoinCode(code))
-		return "";
-	return code;
-}
-
-bool isValidJoinCode(const std::string& code)
-{
-	if (code.size() != JOIN_CODE_LENGTH)
-		return false;
-	for (char c : code)
-	{
-		if (!isJoinCodeChar(c))
-			return false;
-	}
-	return true;
-}
-
-bool isValidNickname(const std::string& name)
-{
-	return !name.empty() && name.size() <= MAX_NICKNAME_BYTES && isCleanUtf8(name);
-}
-
-std::string joinCodeLogPrefix(const std::string& raw)
-{
-	std::string prefix;
-	for (char c : raw)
-	{
-		if (prefix.size() >= LOG_PREFIX_LENGTH)
-			break;
-		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
-			prefix += c;
-		else
-			prefix += '?';
-	}
-	return prefix + "...";
-}
+#include "StringUtil.h"
 
 bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warnings, std::string& error)
 {
 	tinyxml2::XMLDocument doc;
-	if (doc.Parse(xml.c_str(), xml.size()) != tinyxml2::XML_SUCCESS)
-	{
-		error = std::string("the players file is not valid XML: ") + doc.ErrorName();
+	const tinyxml2::XMLElement* root = parsePlayersFile(doc, xml, error);
+	if (!root)
 		return false;
-	}
+	parse(root, warnings);
+	return true;
+}
 
-	const tinyxml2::XMLElement* root = doc.RootElement();
-	if (!root || std::strcmp(root->Name(), "tournament") != 0)
-	{
-		error = "the players file has no <tournament> root element";
-		return false;
-	}
-
+void JoinCodeTable::parse(const tinyxml2::XMLElement* root, std::vector<std::string>& warnings)
+{
 	std::vector<JoinCodeEntry> entries;
 	int index = 0;
 	for (const tinyxml2::XMLElement* player = root->FirstChildElement("player"); player;
@@ -184,13 +72,10 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 		}
 
 		int id = 0;
-		if (player->Attribute("id"))
+		if (!readIntAttribute(player, "id", 1, 2147483647, id))
 		{
-			if (player->QueryIntAttribute("id", &id) != tinyxml2::XML_SUCCESS || id < 1)
-			{
-				warnings.push_back(where + " has an invalid id, skipped");
-				continue;
-			}
+			warnings.push_back(where + " has an invalid id, skipped");
+			continue;
 		}
 
 		JoinCodeEntry entry;
@@ -241,7 +126,6 @@ bool JoinCodeTable::parse(const std::string& xml, std::vector<std::string>& warn
 	}
 
 	mEntries.swap(result);
-	return true;
 }
 
 const JoinCodeEntry* JoinCodeTable::find(const std::string& code) const
@@ -288,33 +172,16 @@ bool readJoinCodeFile(const std::string& path, std::string& content, std::string
 		return false;
 	}
 
-	std::ifstream file(path, std::ios::in | std::ios::binary);
-	if (!file)
-	{
+	ReadFileError why = ReadFileError::NONE;
+	if (readWholeFile(path, MAX_PLAYERS_FILE_BYTES, content, &why))
+		return true;
+	if (why == ReadFileError::CANNOT_OPEN)
 		error = "cannot open players file " + path;
-		return false;
-	}
-
-	std::string data;
-	char buffer[4096];
-	while (file)
-	{
-		file.read(buffer, sizeof(buffer));
-		data.append(buffer, static_cast<std::size_t>(file.gcount()));
-		if (data.size() > MAX_PLAYERS_FILE_BYTES)
-		{
-			error = "players file " + path + " is larger than 1 MB";
-			return false;
-		}
-	}
-	if (file.bad())
-	{
+	else if (why == ReadFileError::TOO_LARGE)
+		error = "players file " + path + " is larger than 1 MB";
+	else
 		error = "cannot read players file " + path;
-		return false;
-	}
-
-	content.swap(data);
-	return true;
+	return false;
 }
 
 JoinCodeGate::JoinCodeGate(std::string path, unsigned reload_interval_ms)
@@ -323,15 +190,15 @@ JoinCodeGate::JoinCodeGate(std::string path, unsigned reload_interval_ms)
 {
 }
 
-void JoinCodeGate::setLogFunction(LogFunction log)
+void JoinCodeGate::setLogFunction(ServerLog log)
 {
 	mLog = std::move(log);
 }
 
-void JoinCodeGate::log(LogLevel level, const std::string& message) const
+void JoinCodeGate::log(bool problem, const std::string& message) const
 {
 	if (mLog)
-		mLog(level, message);
+		mLog(problem, message);
 }
 
 bool JoinCodeGate::reload()
@@ -343,7 +210,7 @@ bool JoinCodeGate::reload()
 		// log each problem once, not on every poll
 		if (error != mLastError)
 		{
-			log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+			log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
 			mLastError = error;
 		}
 		return false;
@@ -370,24 +237,24 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 	mLastContent = xml;
 	mHasContent = true;
 
+	// the players and the matches come from the same parsed file
+	tinyxml2::XMLDocument doc;
+	std::string error;
+	const tinyxml2::XMLElement* root = parsePlayersFile(doc, xml, error);
+	if (!root)
+	{
+		log(true, error + ", keeping " + std::to_string(mTable.size()) + " known players");
+		return false;
+	}
+
 	JoinCodeTable table;
 	std::vector<std::string> warnings;
-	std::string error;
-	if (!table.parse(xml, warnings, error))
-	{
-		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
-		return false;
-	}
-
+	table.parse(root, warnings);
 	std::vector<MatchAssignment> matches;
-	if (!parseMatchAssignments(xml, table.playerIds(), matches, warnings, error))
-	{
-		log(LogLevel::PROBLEM, error + ", keeping " + std::to_string(mTable.size()) + " known players");
-		return false;
-	}
+	parseMatchAssignments(root, table.playerIds(), matches, warnings);
 
 	for (const auto& w : warnings)
-		log(LogLevel::PROBLEM, "players file: " + w);
+		log(true, "players file: " + w);
 
 	mTable = std::move(table);
 	mMatches.swap(matches);
@@ -407,7 +274,7 @@ bool JoinCodeGate::applyContent(const std::string& xml)
 		it = mCodeOwners.erase(it);
 	}
 	++mGeneration;
-	log(LogLevel::INFO, "loaded " + std::to_string(mTable.size()) + " tournament players and "
+	log(false, "loaded " + std::to_string(mTable.size()) + " tournament players and "
 		+ std::to_string(mMatches.size()) + " matches");
 	return true;
 }
@@ -418,14 +285,14 @@ JoinCodeGate::Result JoinCodeGate::admit(const PlayerID& player, const std::stri
 	const JoinCodeEntry* entry = code.empty() ? nullptr : mTable.find(code);
 	if (!entry)
 	{
-		log(LogLevel::INFO, "refused unknown join code " + joinCodeLogPrefix(name));
+		log(false, "refused unknown join code " + joinCodeLogPrefix(name));
 		return Result::UNKNOWN_CODE;
 	}
 
 	auto owner = mCodeOwners.find(code);
 	if (owner != mCodeOwners.end() && owner->second != player)
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", already in use by " + entry->nickname);
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", already in use by " + entry->nickname);
 		return Result::CODE_IN_USE;
 	}
 
@@ -434,7 +301,7 @@ JoinCodeGate::Result JoinCodeGate::admit(const PlayerID& player, const std::stri
 	mCodeOwners[code] = player;
 	mPlayerCodes[player] = code;
 	nickname = entry->nickname;
-	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " accepted for " + nickname);
+	log(false, "join code " + joinCodeLogPrefix(code) + " accepted for " + nickname);
 	return Result::ACCEPTED;
 }
 
@@ -460,18 +327,18 @@ JoinCodeGate::Handover JoinCodeGate::checkHandover(const PlayerID& player, const
 	auto last = mHandedOverAt.find(code);
 	if (last != mHandedOverAt.end() && now_ms < last->second + JOIN_CODE_HANDOVER_COOLDOWN_MS)
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", it moved to another connection a moment ago");
 		return Handover::TOO_SOON;
 	}
 	if (holderCanLeave && !holderCanLeave(owner->second))
 	{
-		log(LogLevel::INFO, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
+		log(false, "refused join code " + joinCodeLogPrefix(code) + ", its player is in a running game");
 		return Handover::HOLDER_BUSY;
 	}
 
 	holder = owner->second;
 	mHandedOverAt[code] = now_ms;
-	log(LogLevel::INFO, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
+	log(false, "join code " + joinCodeLogPrefix(code) + " moves to a new connection");
 	return Handover::HAND_OVER;
 }
 

@@ -403,7 +403,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			if (isGameStarted())
 			{
 				// buffer for playernames
-				char name[16];
+				char name[PLAYER_NAME_BUFFER];
 
 				// writing data into leftStream
 				RakNet::BitStream leftStream;

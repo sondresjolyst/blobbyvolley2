@@ -29,30 +29,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "raknet/NetworkTypes.h"
 #include "MatchAssignments.h"
+#include "ServerLog.h"
+#include "TournamentProtocol.h"
 
 class NetworkPlayer;
 
-/// Number of characters in a join code.
-constexpr std::size_t JOIN_CODE_LENGTH = 10;
-/// Longest nickname in bytes. The name field on the wire holds 15 bytes and a terminating zero.
-constexpr std::size_t MAX_NICKNAME_BYTES = 15;
 /// Largest players file the loader reads.
 constexpr std::size_t MAX_PLAYERS_FILE_BYTES = 1024 * 1024;
 /// A join code that moved to a new connection stays there at least this long.
 constexpr unsigned long long JOIN_CODE_HANDOVER_COOLDOWN_MS = 10000;
-
-/// Trims spaces and turns lower case letters into upper case.
-/// Returns an empty string when the result is not a valid join code.
-std::string normalizeJoinCode(const std::string& raw);
-
-/// True if code has the right length and only uses the join code alphabet.
-bool isValidJoinCode(const std::string& code);
-
-/// True if name is 1 to MAX_NICKNAME_BYTES bytes of UTF-8 without control characters.
-bool isValidNickname(const std::string& name);
-
-/// A short part of a name or code that is safe to log. It never holds the whole code.
-std::string joinCodeLogPrefix(const std::string& raw);
 
 /// One player of the tournament.
 struct JoinCodeEntry
@@ -83,6 +68,8 @@ class JoinCodeTable
 		/// Parses the XML text. Returns false and sets error when the text is not a players file.
 		/// Problems with single entries are added to warnings.
 		bool parse(const std::string& xml, std::vector<std::string>& warnings, std::string& error);
+		/// The same for the root element of a players file that is already parsed.
+		void parse(const tinyxml2::XMLElement* root, std::vector<std::string>& warnings);
 
 		/// Looks up a normalized code. Returns nullptr for an unknown code.
 		const JoinCodeEntry* find(const std::string& code) const;
@@ -117,19 +104,11 @@ class JoinCodeGate
 			CODE_IN_USE
 		};
 
-		enum class LogLevel
-		{
-			INFO,
-			PROBLEM
-		};
-
-		typedef std::function<void(LogLevel, const std::string&)> LogFunction;
-
 		/// \param path players file. A relative path is relative to the working directory.
 		/// \param reload_interval_ms how often poll() checks the file
 		explicit JoinCodeGate(std::string path, unsigned reload_interval_ms = 2000);
 
-		void setLogFunction(LogFunction log);
+		void setLogFunction(ServerLog log);
 
 		/// Reads the file now if its content changed since the last read.
 		/// Returns true if a new table is in use.
@@ -185,7 +164,7 @@ class JoinCodeGate
 		bool findConnection(int playerId, PlayerID& player) const;
 
 	private:
-		void log(LogLevel level, const std::string& message) const;
+		void log(bool problem, const std::string& message) const;
 
 		std::string mPath;
 		unsigned mReloadIntervalMs;
@@ -204,5 +183,5 @@ class JoinCodeGate
 		std::map<std::string, unsigned long long> mHandedOverAt;
 		std::map<PlayerID, std::string> mPlayerCodes;
 
-		LogFunction mLog;
+		ServerLog mLog;
 };

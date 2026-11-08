@@ -31,8 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "tinyxml2.h"
 
+#include "FileUtil.h"
 #include "MatchAssignments.h"
-#include "SiteConfig.h"
 #include "SponsorBoard.h"
 #include "base64.h"
 
@@ -151,7 +151,7 @@ namespace
 
 HttpClient::~HttpClient() = default;
 
-Outbox::Outbox(std::string path, LogFunction log, std::size_t maxBytes)
+Outbox::Outbox(std::string path, ServerLog log, std::size_t maxBytes)
 : mPath(std::move(path))
 , mLog(std::move(log))
 , mMaxBytes(maxBytes)
@@ -603,8 +603,6 @@ std::string storedSponsorsVersion(const std::string& folder)
 bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, std::string& version,
 				std::vector<std::string>& warnings, std::string& error)
 {
-	static const std::set<std::string> STYLES{"off", "led", "printed", "wood", "slim", "padded"};
-
 	json answer;
 	if (!parseObject(sponsorsJson, answer))
 	{
@@ -614,7 +612,8 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 	const std::string newVersion = stringField(answer, "sponsorsVersion");
 	const std::string style = stringField(answer, "gameBoard");
 	auto list = answer.find("sponsors");
-	if (newVersion.empty() || STYLES.count(style) == 0 || list == answer.end() || !list->is_array())
+	sponsors::BoardStyle known = sponsors::BoardStyle::LED;
+	if (newVersion.empty() || !sponsors::tryParseBoardStyle(style, known) || list == answer.end() || !list->is_array())
 	{
 		error = "the sponsors answer has no sponsorsVersion, a known gameBoard or a sponsors list";
 		return false;
@@ -654,7 +653,7 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 			warnings.push_back(where + " has no BMP logo with a valid hash, skipped");
 			continue;
 		}
-		const std::string file = "logos/" + hash + ".bmp";
+		const std::string file = "logos/" + sponsors::logoFileName(hash);
 		const std::string path = pathInDataDir(folder, file);
 		if (!fileExists(path))
 		{
@@ -675,16 +674,11 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 				continue;
 			}
 			const std::string bytes(decoded.begin(), decoded.end());
-			if (sha256Hex(bytes) != hash)
-			{
-				warnings.push_back(where + " has a logo that does not match its hash, skipped");
-				continue;
-			}
 			// the same check as the game, so only a logo it can show is kept
-			std::string bmpError;
-			if (!sponsors::validateBmp(bytes.data(), bytes.size(), &bmpError))
+			std::string logoError;
+			if (!sponsors::checkLogo(hash, bytes, &logoError))
 			{
-				warnings.push_back(where + " has a logo the game cannot show: " + bmpError + ", skipped");
+				warnings.push_back(where + " has a logo the game cannot show: " + logoError + ", skipped");
 				continue;
 			}
 			std::string writeError;
@@ -717,8 +711,7 @@ bool storeSponsors(const std::string& folder, const std::string& sponsorsJson, s
 	{
 		for (const auto& name : names)
 		{
-			const bool logoFile = name.size() == 68 && isSha256Hex(name.substr(0, 64)) && name.substr(64) == ".bmp";
-			if (logoFile && kept.count(name) == 0)
+			if (sponsors::isLogoFileName(name) && kept.count(name) == 0)
 				std::remove(pathInDataDir(logos, name).c_str());
 		}
 	}
@@ -760,8 +753,9 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 			}
 			const std::string file = s.is_object() ? stringField(s, "logo") : std::string();
 			// only logos/<hash>.bmp, so board.json cannot point to other files
-			const std::string hash = file.size() == 74 ? file.substr(6, 64) : std::string();
-			if (file.size() != 74 || file.compare(0, 6, "logos/") != 0 || !isSha256Hex(hash) || file.compare(70, 4, ".bmp") != 0)
+			const bool named = file.size() > 6 && file.compare(0, 6, "logos/") == 0 && sponsors::isLogoFileName(file.substr(6));
+			const std::string hash = named ? file.substr(6, 64) : std::string();
+			if (!named)
 			{
 				warnings.push_back(where + " has no logo file logos/<hash>.bmp, skipped");
 				continue;
@@ -799,7 +793,7 @@ bool loadStoredSponsors(const std::string& folder, sponsors::Board& board,
 	return true;
 }
 
-StoredSponsorBoard::StoredSponsorBoard(std::string folder, LogFunction log)
+StoredSponsorBoard::StoredSponsorBoard(std::string folder, ServerLog log)
 : mFolder(std::move(folder))
 , mLog(std::move(log))
 {
@@ -838,7 +832,7 @@ bool StoredSponsorBoard::poll(sponsors::Board& board)
 // 			site link
 // - - - - - - - - - - - - - - - - - -
 
-SiteLink::SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, LogFunction log, SiteTiming timing)
+SiteLink::SiteLink(HttpClient& http, Outbox& outbox, SitePaths paths, ServerLog log, SiteTiming timing)
 : mHttp(http)
 , mOutbox(outbox)
 , mPaths(std::move(paths))
@@ -1138,9 +1132,7 @@ void SiteLink::logRefused(const OutboxEntry& entry, const std::string& reason)
 	line["kind"] = entry.kind;
 	line["path"] = entry.path;
 	line["body"] = json::parse(entry.body, nullptr, false);
-	std::ofstream file(mPaths.refusedFile, std::ios::out | std::ios::app | std::ios::binary);
-	if (file)
-		file << line.dump() << "\n";
+	appendLine(mPaths.refusedFile, line.dump());
 }
 
 void SiteLink::setLiveScore(const LiveScore& score)
@@ -1201,7 +1193,7 @@ void SiteLink::sendLive(unsigned long long now_ms)
 // - - - - - - - - - - - - - - - - - -
 
 SiteReporter::SiteReporter(std::shared_ptr<TournamentEvents> inner, std::unique_ptr<HttpClient> http,
-						std::unique_ptr<Outbox> outbox, SitePaths paths, SiteLink::LogFunction log)
+						std::unique_ptr<Outbox> outbox, SitePaths paths, ServerLog log)
 : mInner(std::move(inner))
 , mHttp(std::move(http))
 , mOutbox(std::move(outbox))

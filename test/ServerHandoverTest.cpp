@@ -33,6 +33,7 @@
 #include "server/NetworkPlayer.h"
 #include "server/ThreadSafeRakServer.h"
 #include "server/Tournament.h"
+#include "TestServer.h"
 
 // the server binary defines these
 std::atomic<int> SWLS_PacketCount{0};
@@ -97,14 +98,6 @@ namespace
 			+ "\t<player id=\"21\" nickname=\"Per\" code=\"C2DEFGHJKM\"/>\n"
 			+ matches + "</tournament>\n";
 	}
-
-	struct RecordingEvents : public TournamentEvents
-	{
-		std::vector<GameReport> games;
-		void matchConnected(int, int, int) override {}
-		void gameEnded(const GameReport& report) override { games.push_back(report); }
-		void seriesEnded(const SeriesResult&) override {}
-	};
 
 	struct Client
 	{
