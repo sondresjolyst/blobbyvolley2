@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Plays one short best of 3 match between two load test bots on a tournament server without a site.
-# Usage: tools/loadbot/smoke.sh <server image> <bot image>
+# Usage: tools/loadbot/smoke.sh <server image> <bot image> [arguments of the first bot]
+# The arguments after the images go to the first bot, so it can play with a bot script of the game:
+#   tools/loadbot/smoke.sh blobby-server blobby-loadbot --script reduced
 # It passes when the results file of the server holds the decided series. It removes what it starts.
 set -euo pipefail
 
 SERVER_IMAGE=${1:?server image}
 BOT_IMAGE=${2:?bot image}
+shift 2
+BOT1_ARGS=("$@")
 TIMEOUT=${SMOKE_TIMEOUT:-300}
 PREFIX=blobby-smoke-$$
 PLAYERS=$(mktemp)
@@ -44,7 +48,7 @@ docker create --name "$PREFIX-server" --network "$PREFIX" \
 docker cp "$SOURCE" "$PREFIX-server:/data/tournament_players.xml" >/dev/null
 docker start "$PREFIX-server" >/dev/null
 sleep 2
-docker run -d --name "$PREFIX-bot1" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKAAAAAA2 >/dev/null
+docker run -d --name "$PREFIX-bot1" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKAAAAAA2 ${BOT1_ARGS[@]+"${BOT1_ARGS[@]}"} >/dev/null
 docker run -d --name "$PREFIX-bot2" --network "$PREFIX" "$BOT_IMAGE" "$PREFIX-server" 1234 SMKBBBBBB3 >/dev/null
 
 running() {
@@ -65,6 +69,15 @@ for _ in $(seq 1 "$TIMEOUT"); do
 		if grep -q '"status":"abandoned"' <<< "$results"; then
 			echo "smoke failed: a game was abandoned"
 			exit 1
+		fi
+		if [[ " ${BOT1_ARGS[*]-} " == *" --script"* ]]; then
+			# a bot with a script shows in each game how long its script took
+			ends=$(docker logs "$PREFIX-bot1" 2>/dev/null | grep '"event":"game_end"' || true)
+			echo "$ends"
+			if ! grep -q '"script_max_us"' <<< "$ends"; then
+				echo "smoke failed: the first bot did not play with its script"
+				exit 1
+			fi
 		fi
 		echo "smoke passed: the series was decided after $(grep -c '"event":"game"' <<< "$results") games"
 		exit 0

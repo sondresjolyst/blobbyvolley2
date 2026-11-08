@@ -38,6 +38,7 @@ set(SRC
 	../src/server/SiteConfig.cpp    ../src/server/SiteConfig.h
 	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h
+	../tools/loadbot/LoadbotArgs.cpp ../tools/loadbot/LoadbotArgs.h
 	../src/EditboxWindow.cpp        ../src/EditboxWindow.h
 	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
 	../src/replays/ReplayPlayer.cpp    ../src/replays/ReplayPlayer.h
@@ -65,14 +66,14 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp RakPeerTimeTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp EditboxWindowTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestClock.cpp TestClock.h TestBmp.h TestServer.h ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp RakPeerTimeTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp LoadbotArgsTest.cpp EditboxWindowTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestClock.cpp TestClock.h TestBmp.h TestServer.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
 find_package(nlohmann_json 3.10 CONFIG REQUIRED)
 target_sources(blobbytest PRIVATE SiteSyncTest.cpp ../src/server/SiteSync.cpp ../src/server/SiteSync.h)
 target_link_libraries(blobbytest nlohmann_json::nlohmann_json)
 
-target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src)
+target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src ../tools/loadbot)
 target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"" "BLOBBY_TEST_VERSION_FILE=\"${PROJECT_SOURCE_DIR}/version.txt\"")
 target_link_libraries(blobbytest ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY} ${PHYSFS_LIBRARY} ${SDL2_LIBRARIES} lua raknet tinyxml2)
 
