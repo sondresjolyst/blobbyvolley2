@@ -2122,7 +2122,8 @@ bool RakPeer::RunUpdateCycle( void )
 								//						RakNet::BitStream casBitS(data, byteSize, false);
 								//						ConnectionAcceptStruct cas;
 								//						cas.Deserialize(casBitS);
-								playerId.port = remotePort;
+								// Keep the port we dialled. remotePort is the port the server listens on, which
+								// differs from it when a router or container forwards another port to the server.
 								remoteSystem->connectMode=RemoteSystemStruct::CONNECTED;
 
 								// The remote system told us our external IP, so save it
