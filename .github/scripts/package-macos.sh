@@ -15,6 +15,9 @@ done
 
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
+# fixup_bundle needs an absolute path.
+out_dir=$(cd "$out_dir" && pwd)
+brew_prefix=$(brew --prefix)
 
 # The install step of the bundle runs fixup_bundle, which copies the libraries into the app.
 cmake --install "$build_dir" --prefix "$out_dir/.install"
@@ -33,10 +36,20 @@ cp "$build_dir/src/blobby-server" "$server_dir/"
 cp "$build_dir/data/rules.zip" data/server.xml data/api.lua data/rules_api.lua "$server_dir/data/"
 dylibbundler -of -b -cd -x "$server_dir/blobby-server" -d "$server_dir/lib" -p @executable_path/lib/
 
+# Homebrew's SDL2 is sdl2-compat, which loads SDL3 at run time from the folder it is in.
+# Neither fixup_bundle nor dylibbundler sees that, so copy SDL3 next to each copy of SDL2.
+if [ -e "$brew_prefix/opt/sdl2-compat" ]; then
+	for dir in "$app/Contents/Frameworks" "$server_dir/lib"; do
+		[ -f "$dir/libSDL2-2.0.0.dylib" ] || { echo "no libSDL2-2.0.0.dylib in $dir" >&2; exit 1; }
+		cp -L "$brew_prefix/opt/sdl3/lib/libSDL3.dylib" "$dir/libSDL3.dylib"
+		chmod 644 "$dir/libSDL3.dylib"
+		install_name_tool -id @loader_path/libSDL3.dylib "$dir/libSDL3.dylib"
+	done
+fi
+
 cp COPYING README.md "$out_dir/"
 
 # Every library reference must point into the package or to the system.
-brew_prefix=$(brew --prefix)
 find "$out_dir" -type f \( -perm -u+x -o -name '*.dylib' \) > "$out_dir/.machos"
 : > "$out_dir/.libs"
 while read -r file; do
