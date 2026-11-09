@@ -17,11 +17,9 @@ BOOST_AUTO_TEST_CASE(fork_version_matches_version_file)
 	BOOST_CHECK_EQUAL(version, BLOBBY_FORK_VERSION);
 }
 
-BOOST_AUTO_TEST_CASE(title_shows_both_versions)
+BOOST_AUTO_TEST_CASE(title_shows_fork_name_and_version)
 {
-	const std::string expected = std::string("Blobby Volley 2 Version ") + BLOBBY_UPSTREAM_VERSION
-								+ " (" + BLOBBY_FORK_NAME + " " + BLOBBY_FORK_VERSION + ")";
-	BOOST_CHECK_EQUAL(std::string(AppTitle), expected);
+	BOOST_CHECK_EQUAL(std::string(AppTitle), std::string("Blobby Volley 2 Tournament ") + BLOBBY_FORK_VERSION);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
