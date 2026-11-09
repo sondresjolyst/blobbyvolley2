@@ -119,7 +119,8 @@ void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& play
 
 	// Send playername
 	char myname[PLAYER_NAME_BUFFER];
-	strncpy(myname, player.getName().c_str(), sizeof(myname));
+	strncpy(myname, player.getName().c_str(), sizeof(myname) - 1);
+	myname[sizeof(myname) - 1] = '\0';
 	stream.Write(myname, sizeof(myname));
 
 	// send color settings

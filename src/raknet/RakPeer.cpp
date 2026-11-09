@@ -605,7 +605,9 @@ packet_ptr RakPeer::Receive( void )
 
 	Packet *val;
 
+#ifdef _MSC_VER
 	#pragma warning( disable : 4127 ) // warning C4127: conditional expression is constant
+#endif
 	while ( true )
 	{
 		if (incomingPacketQueue.size() > 0) // First fast unlocked check
@@ -991,6 +993,9 @@ void RakPeer::AdvertiseSystem( char *host, unsigned short remotePort, const char
 	{
 		host = ( char* ) SocketLayer::Instance()->DomainNameToIP( host );
 	}
+
+	if ( host == NULL )
+		return;
 
 	PlayerID playerId;
 	IPToPlayerID( host, remotePort, &playerId );
@@ -1455,7 +1460,7 @@ void ProcessNetworkPacket( unsigned int binaryAddress, unsigned short port, cons
 		bool acceptOpenConnection;
 		int actionToTake=0;
 		char data[MAX_OFFLINE_DATA_LENGTH];
-		unsigned short dataLength;
+		unsigned short dataLength = 0;
 		RakPeer::RequestedConnectionStruct *rcsFirst, *rcs;
 		rcsFirst = rakPeer->requestedConnectionList.ReadLock();
 		rcs=rcsFirst;
@@ -1587,7 +1592,7 @@ void ProcessNetworkPacket( unsigned int binaryAddress, unsigned short port, cons
 			( (unsigned char)data[0] == ID_OPEN_CONNECTION_REQUEST && length == 1 ) ||
 			( (unsigned char)data[0] == ID_OPEN_CONNECTION_REPLY && length == 1 ) ||
 			(((unsigned char)data[0] == ID_UNCONNECTED_PING_OPEN_CONNECTIONS || (unsigned char)(data)[0] == ID_UNCONNECTED_PING) && length == sizeof(unsigned char)+sizeof(unsigned int) ) ||
-			( (unsigned char)data[0] == ID_PONG && length >= sizeof(unsigned char)+sizeof(unsigned int) ) ||
+			( (unsigned char)data[0] == ID_PONG && length >= (int)(sizeof(unsigned char)+sizeof(unsigned int)) ) ||
 			( (unsigned char)data[0] == ID_ADVERTISE_SYSTEM && length<MAX_OFFLINE_DATA_LENGTH )
 			) )
 			{
@@ -1902,7 +1907,7 @@ bool RakPeer::RunUpdateCycle( void )
 						ParseConnectionRequestPacket(remoteSystem, playerId, data, byteSize);
 						delete [] data;
 					}
-					else if ( ((unsigned char) data[0] == ID_PONG && byteSize >= sizeof(unsigned char)+sizeof(unsigned int)) ||
+					else if ( ((unsigned char) data[0] == ID_PONG && byteSize >= (int)(sizeof(unsigned char)+sizeof(unsigned int))) ||
 						((unsigned char) data[0] == ID_ADVERTISE_SYSTEM && byteSize<=MAX_OFFLINE_DATA_LENGTH))
 					{
 						// Push to the user

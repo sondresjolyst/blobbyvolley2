@@ -444,7 +444,8 @@ void NetworkSearchState::step_impl()
 		mHostedServer.reset(new ServerInfo( local_player.getName()));
 		std::strncpy(mHostedServer->hostname,
 					mPingClient->PlayerIDToDottedIP(mPingClient->GetInternalID()),
-					sizeof(mHostedServer->hostname));
+					sizeof(mHostedServer->hostname) - 1);
+		mHostedServer->hostname[sizeof(mHostedServer->hostname) - 1] = '\0';
 	}
 
 	if (((imgui.doButton(GEN_ID, Vector2(230, 530), TextManager::LBL_OK) && !mScannedServers.empty())
