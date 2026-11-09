@@ -151,7 +151,7 @@ std::string FileSystem::getBaseDir()
 std::string FileSystem::getPrefDir()
 {
 	// Not the folder of the original game, so the two keep their own settings.
-	return PHYSFS_getPrefDir("julalan", "julalan-blobby");
+	return PHYSFS_getPrefDir("sjolyst-innovation", "blobbyvolley2-tournament");
 }
 
 void FileSystem::probeDir(const std::string& dirname)

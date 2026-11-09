@@ -299,7 +299,7 @@ std::vector<RegistryValue> linkHandlerRegistryValues(const std::string& exe_path
 
 	const std::string quoted = "\"" + exe_path + "\"";
 	return {
-		{"", "", "URL:Blobby Volley JulaLAN join link"},
+		{"", "", "URL:Blobby Volley 2 Tournament join link"},
 		{"", "URL Protocol", ""},
 		{"DefaultIcon", "", quoted + ",0"},
 		{"shell\\open\\command", "", quoted + " \"%1\""},

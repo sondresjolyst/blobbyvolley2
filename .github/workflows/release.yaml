@@ -26,12 +26,17 @@ jobs:
     needs: release-please
     if: always() && (needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-26.04
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       publish: ${{ steps.version.outputs.publish }}
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
       - name: Read the tag release-please created
         id: version
         env:
@@ -47,6 +52,10 @@ jobs:
             exit 0
           fi
           tag=$(echo "$TAG_NAMES" | jq -r '.["."] // empty')
+          # Release-please leaves the root package out of path_tag_names, so read the version it released.
+          if [ -z "$tag" ]; then
+            tag="v$(jq -r '.["."]' .release-please-manifest.json)"
+          fi
           if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::Unexpected release tag '$tag'"
             exit 1

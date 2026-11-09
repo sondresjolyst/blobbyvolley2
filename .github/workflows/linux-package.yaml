@@ -66,7 +66,7 @@ jobs:
           if [ -z "$VERSION" ]; then
             VERSION=$(echo "$SHA" | cut -c1-7)
           fi
-          echo "package=julalan-blobby-$VERSION-linux-x64" >> "$GITHUB_OUTPUT"
+          echo "package=blobbyvolley2-tournament-$VERSION-linux-x64" >> "$GITHUB_OUTPUT"
       - name: Package
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
