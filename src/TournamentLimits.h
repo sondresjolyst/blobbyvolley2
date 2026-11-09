@@ -34,6 +34,11 @@ constexpr int MIN_NEXT_GAME_DELAY = 3;
 constexpr int MAX_NEXT_GAME_DELAY = 120;
 constexpr int DEFAULT_NEXT_GAME_DELAY = 10;
 
+/// Strength of the server bot of a training match. 0 is the strongest bot and 25 the weakest, as in the options of the game.
+constexpr int MIN_BOT_DIFFICULTY = 0;
+constexpr int MAX_BOT_DIFFICULTY = 25;
+constexpr int DEFAULT_BOT_DIFFICULTY = 13;
+
 /// Longest wait for the next game that a client accepts from a server, the longest next game delay.
 constexpr unsigned MAX_NEXT_GAME_DELAY_MS = MAX_NEXT_GAME_DELAY * 1000;
 

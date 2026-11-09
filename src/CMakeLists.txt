@@ -37,6 +37,8 @@ set(common_SRC
 	PlayerInput.h PlayerInput.cpp
 	IScriptableComponent.cpp IScriptableComponent.h
 	PlayerIdentity.cpp PlayerIdentity.h
+	ScriptBot.cpp ScriptBot.h
+	ScriptedInputSource.cpp ScriptedInputSource.h
 	Sha256.cpp Sha256.h
 	SponsorBoard.cpp SponsorBoard.h
 	SponsorSync.cpp SponsorSync.h
@@ -70,7 +72,6 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	RenderManagerGL2D.cpp RenderManagerGL2D.h
 	RenderManagerSDL.cpp RenderManagerSDL.h
 	RenderManagerNull.cpp RenderManagerNull.h
-	ScriptedInputSource.cpp ScriptedInputSource.h
 	SoundManager.cpp SoundManager.h
 	Vector.h
 	replays/ReplayPlayer.cpp replays/ReplayPlayer.h
@@ -187,7 +188,7 @@ endif ()
 if (BUILD_LOADBOT)
 	add_executable(blobby-loadbot ../tools/loadbot/loadbot.cpp
 		../tools/loadbot/LoadbotArgs.cpp
-		../tools/loadbot/ScriptBot.cpp
+		ScriptBot.cpp
 		BlobbyDebug.cpp
 		Clock.cpp
 		Color.cpp

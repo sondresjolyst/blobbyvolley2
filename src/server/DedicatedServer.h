@@ -125,6 +125,8 @@ class DedicatedServer
 		void updateTournament();
 		void checkTournamentGames(unsigned long long now_ms);
 		void startTournamentGame(const TournamentDirector::GameOrder& order);
+		// starts a training match of one player against a bot script that the server runs
+		void startTrainingGame(const TournamentDirector::GameOrder& order);
 		void endGameOf(NetworkPlayer& player);
 		// stops a finished game and returns its replay packet, empty without a game
 		std::vector<unsigned char> finishForNextGame(const std::shared_ptr<NetworkGame>& game);
@@ -191,7 +193,13 @@ class DedicatedServer
 			// score that was sent as live score last, -1 before the first
 			int livePoints1;
 			int livePoints2;
+			// a training match against the server bot, whose player 2 is 0
+			bool training;
+			// the bot stats of a training game were logged
+			bool botLogged;
 		};
+		// logs once how the bot of a finished training game did
+		void logTrainingBot(TournamentGame& entry);
 		std::vector<TournamentGame> mTournamentGames;
 		// status each player got last
 		std::map<PlayerID, PlayerTournamentStatus> mSentStatus;

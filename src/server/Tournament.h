@@ -35,6 +35,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 typedef std::chrono::system_clock::time_point WallTime;
 
+/// Training matches against the server bot that play at the same time, unless BLOBBY_MAX_TRAINING says otherwise.
+constexpr unsigned DEFAULT_MAX_TRAINING = 6;
+/// The most BLOBBY_MAX_TRAINING allows.
+constexpr unsigned MAX_MAX_TRAINING = 32;
+
 /// Formats a time as ISO 8601 in UTC, such as 2026-11-20T18:04:05Z.
 std::string formatUtcTime(WallTime time);
 
@@ -49,16 +54,19 @@ struct GameReport
 	int game = 0;
 	/// True for a game that was played out, false for an abandoned game.
 	bool finished = false;
-	/// Player id of the winner, 0 for an abandoned game.
+	/// Player id of the winner, 0 for an abandoned game. In a training match also 0 when the bot won.
 	int winnerId = 0;
 	/// Player id of the player who left an abandoned game, 0 when it is not known.
 	int leftPlayerId = 0;
 	int player1 = 0;
 	int points1 = 0;
+	/// 0 in a training match, where the server bot plays on the right.
 	int player2 = 0;
 	int points2 = 0;
 	WallTime startedAt;
 	WallTime endedAt;
+	/// True for a game of a training match against the server bot. The site keeps it out of the real stats.
+	bool training = false;
 };
 
 /// A best-of series that is decided.
@@ -74,6 +82,7 @@ struct SeriesResult
 };
 
 /// The body of a game report, as JSON in the form the tournament site expects.
+/// A training game has "training":true and the bot as player id 0.
 std::string gameReportJson(const GameReport& report);
 
 /*! \class TournamentEvents
@@ -184,9 +193,12 @@ class TournamentDirector
 			unsigned long long cooldownUntil = 0;
 		};
 
-		/// \param maxRunning most matches that play at the same time, 0 for no limit
+		/// \param maxRunning most matches that play at the same time, 0 for no limit. Training matches do not count.
 		/// \param nextGameDelayMs pause between two games of a series, unless the match sets its own
 		TournamentDirector(unsigned maxRunning, unsigned nextGameDelayMs);
+
+		/// Most training matches against the server bot that play at the same time. 0 turns training off.
+		void setMaxTraining(unsigned maxTraining) { mMaxTraining = maxTraining; }
 
 		void setEvents(std::shared_ptr<TournamentEvents> events);
 
@@ -241,6 +253,7 @@ class TournamentDirector
 		GameReport makeReport(int matchId, const Series& s, int points1, int points2, WallTime startedAt, WallTime endedAt);
 
 		unsigned mMaxRunning;
+		unsigned mMaxTraining = DEFAULT_MAX_TRAINING;
 		unsigned mNextGameDelayMs;
 		std::shared_ptr<TournamentEvents> mEvents;
 		std::function<std::string()> mMakeReportId;

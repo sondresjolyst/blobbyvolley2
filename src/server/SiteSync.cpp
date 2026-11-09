@@ -500,7 +500,25 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 		}
 		const int matchId = m["matchId"].get<int>();
 		auto pl = m.find("players");
-		if (pl == m.end() || !pl->is_array() || pl->size() != 2 || !(*pl)[0].is_object() || !(*pl)[1].is_object()
+		// a training match has one player and a bot that the server runs
+		auto training = m.find("training");
+		const bool isTraining = training != m.end() && !training->is_null();
+		if (isTraining)
+		{
+			if (!training->is_object() || !training->contains("bot") || !(*training)["bot"].is_string()
+				|| !isInt(training->value("difficulty", json()), MIN_BOT_DIFFICULTY, MAX_BOT_DIFFICULTY))
+			{
+				warnings.push_back("training match " + std::to_string(matchId) + " of the sync has no valid bot, skipped");
+				continue;
+			}
+			if (pl == m.end() || !pl->is_array() || pl->size() != 1 || !(*pl)[0].is_object()
+				|| !isInt((*pl)[0].value("playerId", json()), 1, 2147483647))
+			{
+				warnings.push_back("training match " + std::to_string(matchId) + " of the sync has no one player, skipped");
+				continue;
+			}
+		}
+		else if (pl == m.end() || !pl->is_array() || pl->size() != 2 || !(*pl)[0].is_object() || !(*pl)[1].is_object()
 			|| !isInt((*pl)[0].value("playerId", json()), 1, 2147483647)
 			|| !isInt((*pl)[1].value("playerId", json()), 1, 2147483647))
 		{
@@ -508,7 +526,7 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 			continue;
 		}
 		const int player1 = (*pl)[0]["playerId"].get<int>();
-		const int player2 = (*pl)[1]["playerId"].get<int>();
+		const int player2 = isTraining ? 0 : (*pl)[1]["playerId"].get<int>();
 
 		int nextGame = intField(m, "nextGame", 1, 1);
 		bool awaiting = m.contains("awaitingDecision") && m["awaitingDecision"].is_boolean() && m["awaitingDecision"].get<bool>();
@@ -538,7 +556,13 @@ bool buildPlayersFile(const std::string& syncJson, const std::vector<OutboxEntry
 		tinyxml2::XMLElement* element = doc.NewElement("match");
 		element->SetAttribute("id", matchId);
 		element->SetAttribute("player1", player1);
-		element->SetAttribute("player2", player2);
+		if (isTraining)
+		{
+			element->SetAttribute("bot", (*training)["bot"].get<std::string>().c_str());
+			element->SetAttribute("botDifficulty", (*training)["difficulty"].get<int>());
+		}
+		else
+			element->SetAttribute("player2", player2);
 		const std::string rule = stringField(m, "ruleFile");
 		if (!rule.empty())
 			element->SetAttribute("ruleFile", rule.c_str());

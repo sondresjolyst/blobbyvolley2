@@ -26,6 +26,7 @@
 #include "Global.h"
 #include "NetworkMessage.h"
 #include "PlayerIdentity.h"
+#include "PlayerInput.h"
 #include "raknet/PacketEnumerations.h"
 #include "raknet/RakClient.h"
 #include "server/DedicatedServer.h"
@@ -655,3 +656,104 @@ BOOST_FIXTURE_TEST_CASE( rules_checksum_has_the_points_of_the_match_when_the_rul
 
 BOOST_AUTO_TEST_SUITE_END()
 
+BOOST_AUTO_TEST_SUITE( TrainingServerTest )
+
+namespace
+{
+	// the name the client was told it plays against, from the last ID_GAME_READY
+	std::string gameReadyOpponent(const Client& client)
+	{
+		std::string opponent;
+		for (const auto& p : client.packets)
+		{
+			if (p[0] != ID_GAME_READY)
+				continue;
+			RakNet::BitStream stream(const_cast<unsigned char*>(p.data()), p.size(), false);
+			opponent = readGameReady(stream).opponent;
+		}
+		return opponent;
+	}
+}
+
+BOOST_AUTO_TEST_CASE( server_bot_plays_a_training_match_to_the_end )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\" botDifficulty=\"0\" scoreToWin=\"1\"/>\n", true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+
+	// the game starts with one player, against the bot of the server
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0; }));
+	BOOST_CHECK_EQUAL(gameReadyOpponent(ola), "Bot reduced");
+	BOOST_REQUIRE_EQUAL(f.events->connected.size(), 1u);
+	BOOST_CHECK_EQUAL(f.events->connected[0].player1, 12);
+	BOOST_CHECK_EQUAL(f.events->connected[0].player2, 0);
+
+	// the player only jumps, which serves the ball, and the bot of the server plays it
+	BOOST_REQUIRE(f.pump([&](){
+		RakNet::BitStream input;
+		input.Write((unsigned char)ID_INPUT_UPDATE);
+		input.Write((unsigned)1);
+		PlayerInputAbs(false, false, true).writeTo(input);
+		ola.rak.Send(&input, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0);
+		return !f.events->games.empty();
+	}, 90000));
+	const GameReport& report = f.events->games[0];
+	BOOST_CHECK(report.training);
+	BOOST_CHECK(report.finished);
+	BOOST_CHECK(report.winnerId == 0 || report.winnerId == 12);
+	// the default rules need a lead of two points
+	const int winner = report.winnerId == 0 ? report.points2 : report.points1;
+	const int loser = report.winnerId == 0 ? report.points1 : report.points2;
+	BOOST_CHECK_GE(winner, 2);
+	BOOST_CHECK_EQUAL(winner - loser, 2);
+	BOOST_CHECK(f.pump([&](){ return ola.count(ID_WIN_NOTIFICATION) == 1; }));
+	BOOST_REQUIRE_EQUAL(f.events->series.size(), 1u);
+	BOOST_CHECK_EQUAL(f.events->series[0].winnerId, report.winnerId);
+}
+
+BOOST_AUTO_TEST_CASE( player_who_leaves_abandons_the_training )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\" scoreToWin=\"15\"/>\n", true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0; }));
+	f.settle(500);
+
+	ola.rak.Disconnect(100);
+	BOOST_REQUIRE(f.pump([&](){ return !f.events->games.empty(); }));
+	const GameReport& report = f.events->games[0];
+	BOOST_CHECK(report.training);
+	BOOST_CHECK(!report.finished);
+	BOOST_CHECK_EQUAL(report.leftPlayerId, 12);
+}
+
+BOOST_AUTO_TEST_CASE( unknown_bot_script_does_not_start_a_game )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"nosuchbot\"/>\n", true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return ola.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
+	f.settle(1000);
+	BOOST_CHECK_EQUAL(ola.count(ID_RULES_CHECKSUM), 0);
+	BOOST_CHECK_EQUAL(ola.count(ID_GAME_READY), 0);
+	BOOST_CHECK(f.events->games.empty());
+	BOOST_CHECK_EQUAL(f.server->getActiveGamesCount(), 0);
+}
+
+BOOST_AUTO_TEST_CASE( server_runs_a_normal_match_next_to_a_training )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\"/>\n"
+		"\t<match id=\"10\" player1=\"17\" player2=\"21\"/>\n", true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	Client& kari = f.connect();
+	kari.enter(KARI);
+	Client& per = f.connect();
+	per.enter(PER);
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0 && kari.count(ID_GAME_READY) > 0 && per.count(ID_GAME_READY) > 0; }));
+	BOOST_CHECK_EQUAL(gameReadyOpponent(ola), "Bot reduced");
+	BOOST_CHECK_EQUAL(gameReadyOpponent(kari), "Per");
+	BOOST_CHECK_EQUAL(f.server->getActiveGamesCount(), 2);
+}
+
+BOOST_AUTO_TEST_SUITE_END()

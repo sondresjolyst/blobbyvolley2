@@ -34,6 +34,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "NetworkGame.h"
 #include "GenericIO.h"
 #include "FileExceptions.h"
+#include "IScriptableComponent.h"
+#include "ScriptBot.h"
 #include "ServerLog.h"
 
 #ifndef WIN32
@@ -57,6 +59,10 @@ namespace
 
 	// wait before an assigned game whose player could not be found is tried again
 	const unsigned TOURNAMENT_RETRY_DELAY_MS = 1000;
+
+	// the longest the bot script of a training match may take for one step before it plays its last input again,
+	// as the load test bot does
+	const std::chrono::milliseconds TRAINING_BOT_BUDGET(10);
 
 	unsigned long long steadyMilliseconds()
 	{
@@ -816,7 +822,8 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 				// the player who left is no longer in the player map. Player 1 plays on the left.
 				int left = 0;
 				const bool leftGone = mPlayerMap.count( entry.game->getPlayerID(LEFT_PLAYER) ) == 0;
-				const bool rightGone = mPlayerMap.count( entry.game->getPlayerID(RIGHT_PLAYER) ) == 0;
+				// the bot of a training match never leaves
+				const bool rightGone = !entry.training && mPlayerMap.count( entry.game->getPlayerID(RIGHT_PLAYER) ) == 0;
 				if( leftGone != rightGone )
 					left = leftGone ? entry.player1 : entry.player2;
 				mTournament->gameAbandoned( entry.matchId,
@@ -824,6 +831,9 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 							entry.startedAt, std::chrono::system_clock::now(), left );
 			}
 		}
+
+		if( entry.training && entry.reported && !entry.game->isGameValid() )
+			logTrainingBot( entry );
 
 		// a finished game stays until a player leaves or the next game replaces it
 		if( entry.reported && !entry.game->isGameValid() )
@@ -871,6 +881,12 @@ std::vector<unsigned char> DedicatedServer::finishForNextGame(const std::shared_
 void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& order)
 {
 	const MatchAssignment& match = order.match;
+
+	if( match.isTraining() )
+	{
+		startTrainingGame( order );
+		return;
+	}
 
 	PlayerID id1, id2;
 	auto player1 = mPlayerMap.end();
@@ -959,11 +975,110 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	SWLS_Games++;
 	mGameList.push_back( game );
 	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
-												match.player1, match.player2, -1, -1 } );
+												match.player1, match.player2, -1, -1, false, false } );
 
 	syslog(LOG_NOTICE, "Match %d game %d started: '%s' vs. '%s', rules %s, %d points, speed %d, best of %d",
 		   match.matchId, order.game, left.getName().c_str(), right.getName().c_str(),
 		   match.ruleFile.c_str(), match.scoreToWin, match.speed, match.bestOf);
+}
+
+void DedicatedServer::startTrainingGame(const TournamentDirector::GameOrder& order)
+{
+	const MatchAssignment& match = order.match;
+
+	PlayerID id;
+	auto player = mPlayerMap.end();
+	if( mJoinCodes->findConnection( match.player1, id ) )
+		player = mPlayerMap.find( id );
+	if( player == mPlayerMap.end() )
+	{
+		if( mMissingPlayerLogged.insert( match.matchId ).second )
+			syslog(LOG_ERR, "Match %d: the player is not connected after all, the training waits", match.matchId);
+		mTournament->gameNotStarted( match.matchId, true, steadyMilliseconds() + TOURNAMENT_RETRY_DELAY_MS );
+		return;
+	}
+	mMissingPlayerLogged.erase( match.matchId );
+
+	NetworkPlayer& human = *player->second;
+	std::vector<unsigned char> replay = finishForNextGame( human.getGame() );
+	endGameOf( human );
+	mMatchMaker.removePlayer( id );
+
+	// the player is player 1 on the left and the bot plays on the right. The bot is a stand-in
+	// without a connection, so it never gets a packet and never holds a join code.
+	NetworkPlayer bot( UNASSIGNED_PLAYER_ID, trainingBotName( match.bot ), Color(0, 0, 255), RIGHT_PLAYER );
+	const bool switchLeft = human.getDesiredSide() == RIGHT_PLAYER;
+
+	std::shared_ptr<NetworkGame> game;
+	bool failed = true;
+	std::string error = "unknown error";
+	try
+	{
+		const std::vector<std::string> scripts = findBotScripts();
+		if( std::find( scripts.begin(), scripts.end(), match.bot ) == scripts.end() )
+			BOOST_THROW_EXCEPTION( std::runtime_error( "there is no bot script " + match.bot ) );
+		// the script is loaded here, so a missing or broken script stops the training at once
+		std::unique_ptr<ScriptBot> script( new ScriptBot( match.bot, match.botDifficulty, match.scoreToWin, TRAINING_BOT_BUDGET ) );
+		game = std::make_shared<NetworkGame>( mServer.get(), human, bot, switchLeft, false,
+							match.ruleFile, match.scoreToWin, (float)match.speed );
+		game->setBot( RIGHT_PLAYER, std::move(script) );
+		// a training game cannot be paused either, so it never holds a training slot for long
+		game->setPauseAllowed( false );
+		game->setPreviousReplay( LEFT_PLAYER, std::move(replay) );
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			human.setGame( game );
+		}
+		game->start();
+		failed = false;
+	}
+	catch( const ScriptException& e )
+	{
+		error = "the bot could not be loaded: " + e.luaerror;
+	}
+	catch( const std::exception& e )
+	{
+		if( *e.what() )
+			error = e.what();
+	}
+	catch( ... )
+	{
+	}
+	if( failed )
+	{
+		if( game )
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			if( human.getGame() == game )
+				human.setGame( nullptr );
+		}
+		syslog(LOG_ERR, "Match %d: could not create the training against %s with rules %s: %s",
+			   match.matchId, match.bot.c_str(), match.ruleFile.c_str(), error.c_str());
+		mTournament->gameNotStarted( match.matchId );
+		return;
+	}
+
+	SWLS_Games++;
+	mGameList.push_back( game );
+	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
+												match.player1, 0, -1, -1, true, false } );
+
+	syslog(LOG_NOTICE, "Match %d training started: '%s' vs. the bot %s at difficulty %d, rules %s, %d points, speed %d",
+		   match.matchId, human.getName().c_str(), match.bot.c_str(), match.botDifficulty,
+		   match.ruleFile.c_str(), match.scoreToWin, match.speed);
+}
+
+void DedicatedServer::logTrainingBot(TournamentGame& entry)
+{
+	if( entry.botLogged )
+		return;
+	entry.botLogged = true;
+	// the game thread has stopped, so the bot error can be read
+	entry.game->finish();
+	if( !entry.game->getBotError().empty() )
+		syslog(LOG_ERR, "Match %d: the training bot stopped with a Lua error: %s", entry.matchId, entry.game->getBotError().c_str());
+	syslog(LOG_NOTICE, "Match %d: the training bot took at most %ld us for a step, %u steps were late",
+		   entry.matchId, entry.game->getBotMaxMicroseconds(), entry.game->getBotLateSteps());
 }
 
 void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
@@ -981,6 +1096,12 @@ void DedicatedServer::sendTournamentStatus(unsigned long long now_ms)
 		std::string opponent;
 		if( const JoinCodeEntry* entry = mJoinCodes->getTable().findById( status.opponentId ) )
 			opponent = entry->nickname;
+		else if( const TournamentDirector::Series* series = mTournament->getSeries( status.matchId ) )
+		{
+			// the opponent in a training match is the bot of the server
+			if( series->match.isTraining() )
+				opponent = trainingBotName( series->match.bot );
+		}
 
 		// the player's name is the nickname from the players file since the join code was accepted
 		RakNet::BitStream stream;

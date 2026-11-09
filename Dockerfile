@@ -22,7 +22,7 @@ COPY linux ./linux
 COPY macos ./macos
 
 RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DBLOBBY_SITE_SYNC=ON \
-    && cmake --build /build --parallel --target blobby-server rules_zip
+    && cmake --build /build --parallel --target blobby-server rules_zip scripts_zip
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
@@ -43,7 +43,9 @@ RUN apt-get update \
 
 COPY --from=build /build/src/blobby-server /usr/local/bin/blobby-server
 COPY --from=build /build/data/rules.zip /usr/local/share/blobby/rules.zip
-COPY --from=build /src/data/server.xml /src/data/rules_api.lua /src/data/api.lua /usr/local/share/blobby/
+# the bot scripts of training matches against the server
+COPY --from=build /build/data/scripts.zip /usr/local/share/blobby/scripts.zip
+COPY --from=build /src/data/server.xml /src/data/rules_api.lua /src/data/api.lua /src/data/bot_api.lua /usr/local/share/blobby/
 
 # Tournament mode keeps the players file, the results and the reports that wait for the site here.
 ENV BLOBBY_DATA_DIR=/data
