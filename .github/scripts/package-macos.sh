@@ -1,7 +1,7 @@
 #!/bin/sh
 # Lay out a self-contained macOS build from a build tree configured with BUILD_MACOS_BUNDLE=ON.
 # Usage: package-macos.sh <build dir> <output dir>
-# The output holds "Blobby Volley.app" and a blobby-server folder. Both carry the Homebrew
+# The output holds "Blobby Volley 2 Tournament.app" and a blobby-server folder. Both carry the Homebrew
 # libraries they need and get an ad-hoc signature, so they run on Apple Silicon.
 # The names of the Homebrew formulae whose libraries were bundled are written to <output dir>/../formulae.txt.
 set -eu
@@ -21,13 +21,17 @@ brew_prefix=$(brew --prefix)
 
 # The install step of the bundle runs fixup_bundle, which copies the libraries into the app.
 cmake --install "$build_dir" --prefix "$out_dir/.install"
-app="$out_dir/Blobby Volley.app"
+app="$out_dir/Blobby Volley 2 Tournament.app"
 mv "$out_dir/.install/blobby.app" "$app"
 rm -rf "$out_dir/.install"
 
 for file in Contents/MacOS/blobby Contents/Info.plist Contents/Resources/rules.zip Contents/Resources/gfx.zip Contents/Resources/icon.icns; do
 	[ -f "$app/$file" ] || { echo "the app is missing $file" >&2; exit 1; }
 done
+
+# The app must not share its bundle id with the original game, so both can be installed.
+bundle_id=$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")
+[ "$bundle_id" = "no.sjolystinnovation.blobbyvolley2-tournament" ] || { echo "the app has the bundle id $bundle_id" >&2; exit 1; }
 
 # The server gets its own folder with its libraries in lib and its data in data.
 server_dir="$out_dir/blobby-server"

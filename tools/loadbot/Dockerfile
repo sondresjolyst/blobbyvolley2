@@ -30,7 +30,7 @@ ARG BLOBBY_VERSION=dev
 LABEL org.opencontainers.image.title="blobby-loadbot" \
       org.opencontainers.image.description="Headless load test client for a Blobby Volley 2 tournament server" \
       org.opencontainers.image.version="${BLOBBY_VERSION}" \
-      org.opencontainers.image.source="https://github.com/sondresjolyst/blobbyvolley2" \
+      org.opencontainers.image.source="https://github.com/sondresjolyst/blobbyvolley2-tournament" \
       org.opencontainers.image.licenses="GPL-2.0-or-later"
 
 RUN apt-get update \

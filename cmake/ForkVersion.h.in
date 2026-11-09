@@ -3,7 +3,7 @@
 #define BLOBBY_FORK_VERSION_H
 
 #define BLOBBY_UPSTREAM_VERSION "@PROJECT_VERSION@"
-#define BLOBBY_FORK_NAME "JulaLAN"
+#define BLOBBY_FORK_NAME "Blobby Volley 2 Tournament"
 #define BLOBBY_FORK_VERSION "@BLOBBY_FORK_VERSION@"
 
 #endif
