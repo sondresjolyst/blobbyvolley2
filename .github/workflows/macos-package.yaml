@@ -1,13 +1,6 @@
 name: macOS package
 
 on:
-  push:
-    branches:
-      - "main"
-    paths-ignore:
-      - "**.md"
-      - "AUTHORS"
-      - "ChangeLog"
   pull_request:
     branches:
       - "main"
