@@ -39,7 +39,7 @@ struct MatchAssignment
 	int matchId = 0;
 	/// Player id of player 1, who plays on the left.
 	int player1 = 0;
-	/// Player id of player 2, who plays on the right.
+	/// Player id of player 2, who plays on the right. 0 in a training match, where the server bot plays on the right.
 	int player2 = 0;
 	std::string ruleFile = "default.lua";
 	int scoreToWin = 15;
@@ -56,8 +56,14 @@ struct MatchAssignment
 	int wins2 = -1;
 	/// Seconds between two games of the series. -1 when the file does not say, then the server config decides.
 	int nextGameDelay = -1;
+	/// The bot script of a training match, such as reduced, without .lua. Empty for a match of two players.
+	std::string bot;
+	/// Strength of the bot, from MIN_BOT_DIFFICULTY to MAX_BOT_DIFFICULTY. 0 is the strongest.
+	int botDifficulty = DEFAULT_BOT_DIFFICULTY;
 
-	bool hasPlayer(int playerId) const { return playerId == player1 || playerId == player2; }
+	/// True for a training match of one player against a bot that the server runs.
+	bool isTraining() const { return !bot.empty(); }
+	bool hasPlayer(int playerId) const { return playerId > 0 && (playerId == player1 || playerId == player2); }
 	int opponentOf(int playerId) const { return playerId == player1 ? player2 : player1; }
 };
 
@@ -69,6 +75,12 @@ int clampNextGameDelay(int seconds);
 
 /// True if name is a plain rules file name such as default.lua, without a folder.
 bool isValidRuleFileName(const std::string& name);
+
+/// True if name is a plain bot script name such as reduced, without .lua and without a folder.
+bool isValidBotName(const std::string& name);
+
+/// The name the human player sees for the bot of a training match. It fits the name field of the game.
+std::string trainingBotName(const std::string& bot);
 
 /// Reads an optional whole number attribute of an XML element. Returns false when it is there
 /// but not a number from min to max. value only changes when the attribute is read.
@@ -85,9 +97,11 @@ const tinyxml2::XMLElement* parsePlayersFile(tinyxml2::XMLDocument& doc, const s
 		<player id="12" nickname="Ola" code="K7QM2XPR4T"/>
 		<player id="17" nickname="Kari" code="B9HNZ3WD6F"/>
 		<match id="7" player1="12" player2="17" ruleFile="default.lua" scoreToWin="15" speed="75" bestOf="3" wins1="1" wins2="0"/>
+		<match id="8" player1="17" bot="reduced" botDifficulty="13" scoreToWin="15"/>
 	</tournament>
 	\endcode
-	Only id, player1 and player2 are required. A match with a bad value, or with a player
+	Only id, player1 and player2 are required. A match with a bot instead of player2 is a training match
+	against a bot that the server runs. It has no player2 and is always one game. A match with a bad value, or with a player
 	that is not in knownPlayers, is skipped. So is a match whose wins already decide the series,
 	since a decided match should have left the file. A match id that appears more than once is
 	dropped for every match that uses it.

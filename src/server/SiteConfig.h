@@ -78,3 +78,10 @@ bool parsePort(const std::string& text, int& port);
 	An empty or unset BLOBBY_PORT keeps filePort.
 */
 bool loadServerPort(int filePort, const EnvironmentFunction& env, int& port, std::string& error);
+
+/*! Picks how many training matches against the server bot may play at the same time, from BLOBBY_MAX_TRAINING.
+	\details An empty or unset BLOBBY_MAX_TRAINING keeps defaultValue. 0 turns training off.
+	Returns false and sets error when the value is not a whole number from 0 to maxValue.
+*/
+bool loadMaxTraining(const EnvironmentFunction& env, unsigned defaultValue, unsigned maxValue, unsigned& value,
+					std::string& error);

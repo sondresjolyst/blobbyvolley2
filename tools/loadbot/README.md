@@ -57,7 +57,7 @@ The server only starts the games of matches in its players file, or in the sync 
 
 `--script` plays with a bot script of the game instead of the simple bot. The name is the file name in `data/scripts` without `.lua`: `reduced`, `axji-0-2`, `com_11`, `gintonicV9`, `hyp014` or `Union`. The bot stops with exit code 2 and lists the scripts when the name is unknown or says when the scripts folder is not found, and with exit code 4 when the script cannot be loaded. The script runs the same way as against a local player. In four games of the smoke test, `reduced` at difficulty 13 beat the simple bot 3:0 each time.
 
-The script runs on a thread of its own. When it takes longer than 10 ms for a step, the bot sends its last input again, so a slow script never holds up the connection.
+The script runs on a thread of its own. When it takes longer than 10 ms for a step, the bot sends its last input again, so a slow script never holds up the connection. The server bot of a training match uses the same code, `src/ScriptBot.cpp`.
 
 `--difficulty` is the bot strength from the options of the game. 0 is the strongest bot and 25 the weakest. It is 13 by default, like the computer player on the right side in a new game. The skill only applies to the simple bot, so it cannot be given together with `--script`.
 

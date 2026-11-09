@@ -33,7 +33,7 @@ done
 server_dir="$out_dir/blobby-server"
 mkdir -p "$server_dir/data"
 cp "$build_dir/src/blobby-server" "$server_dir/"
-cp "$build_dir/data/rules.zip" data/server.xml data/api.lua data/rules_api.lua "$server_dir/data/"
+cp "$build_dir/data/rules.zip" "$build_dir/data/scripts.zip" data/server.xml data/api.lua data/bot_api.lua data/rules_api.lua "$server_dir/data/"
 dylibbundler -of -b -cd -x "$server_dir/blobby-server" -d "$server_dir/lib" -p @executable_path/lib/
 
 # Homebrew's SDL2 is sdl2-compat, which loads SDL3 at run time from the folder it is in.

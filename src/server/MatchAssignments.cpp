@@ -30,6 +30,15 @@ namespace
 {
 	// longest rules file name
 	const std::size_t MAX_RULE_FILE_NAME = 64;
+	// longest bot script name
+	const std::size_t MAX_BOT_NAME = 40;
+	// the name field of the game holds 15 characters and the terminating zero
+	const std::size_t MAX_SHOWN_NAME = 15;
+
+	bool isPlainNameChar(char c)
+	{
+		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+	}
 }
 
 bool readIntAttribute(const tinyxml2::XMLElement* element, const char* name, int min, int max, int& value)
@@ -65,7 +74,8 @@ bool operator==(const MatchAssignment& a, const MatchAssignment& b)
 	return a.matchId == b.matchId && a.player1 == b.player1 && a.player2 == b.player2
 		&& a.ruleFile == b.ruleFile && a.scoreToWin == b.scoreToWin && a.speed == b.speed
 		&& a.bestOf == b.bestOf && a.nextGame == b.nextGame && a.awaitingDecision == b.awaitingDecision
-		&& a.wins1 == b.wins1 && a.wins2 == b.wins2 && a.nextGameDelay == b.nextGameDelay;
+		&& a.wins1 == b.wins1 && a.wins2 == b.wins2 && a.nextGameDelay == b.nextGameDelay
+		&& a.bot == b.bot && a.botDifficulty == b.botDifficulty;
 }
 
 bool operator!=(const MatchAssignment& a, const MatchAssignment& b)
@@ -91,12 +101,30 @@ bool isValidRuleFileName(const std::string& name)
 		return false;
 	for (std::size_t i = 0; i < name.size() - ending.size(); ++i)
 	{
-		char c = name[i];
-		bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
-		if (!ok)
+		if (!isPlainNameChar(name[i]))
 			return false;
 	}
 	return true;
+}
+
+bool isValidBotName(const std::string& name)
+{
+	if (name.empty() || name.size() > MAX_BOT_NAME)
+		return false;
+	for (char c : name)
+	{
+		if (!isPlainNameChar(c))
+			return false;
+	}
+	return true;
+}
+
+std::string trainingBotName(const std::string& bot)
+{
+	std::string name = "Bot " + bot;
+	if (name.size() > MAX_SHOWN_NAME)
+		name.resize(MAX_SHOWN_NAME);
+	return name;
 }
 
 bool parseMatchAssignments(const std::string& xml, const std::set<int>& knownPlayers,
@@ -122,9 +150,11 @@ void parseMatchAssignments(const tinyxml2::XMLElement* root, const std::set<int>
 		++index;
 		const std::string where = "match entry " + std::to_string(index);
 
-		if (!element->Attribute("id") || !element->Attribute("player1") || !element->Attribute("player2"))
+		// a training match has a bot instead of player 2
+		const bool training = element->Attribute("bot") != nullptr;
+		if (!element->Attribute("id") || !element->Attribute("player1") || training == (element->Attribute("player2") != nullptr))
 		{
-			warnings.push_back(where + " needs an id, player1 and player2, skipped");
+			warnings.push_back(where + " needs an id, player1 and either player2 or a bot, skipped");
 			continue;
 		}
 
@@ -143,10 +173,24 @@ void parseMatchAssignments(const tinyxml2::XMLElement* root, const std::set<int>
 			warnings.push_back(named + " has invalid players, skipped");
 			continue;
 		}
-		if (knownPlayers.count(match.player1) == 0 || knownPlayers.count(match.player2) == 0)
+		if (knownPlayers.count(match.player1) == 0 || (!training && knownPlayers.count(match.player2) == 0))
 		{
 			warnings.push_back(named + " has a player that is not in the players file, skipped");
 			continue;
+		}
+		if (training)
+		{
+			match.bot = element->Attribute("bot");
+			if (!isValidBotName(match.bot))
+			{
+				warnings.push_back(named + " has an invalid bot, skipped");
+				continue;
+			}
+			if (!readIntAttribute(element, "botDifficulty", MIN_BOT_DIFFICULTY, MAX_BOT_DIFFICULTY, match.botDifficulty))
+			{
+				warnings.push_back(named + " has an invalid botDifficulty, skipped");
+				continue;
+			}
 		}
 
 		if (const char* rule = element->Attribute("ruleFile"))
@@ -170,6 +214,11 @@ void parseMatchAssignments(const tinyxml2::XMLElement* root, const std::set<int>
 		if (!readIntAttribute(element, "bestOf", 1, MAX_MATCH_BEST_OF, match.bestOf) || match.bestOf % 2 == 0)
 		{
 			warnings.push_back(named + " has an invalid bestOf, it must be odd, skipped");
+			continue;
+		}
+		if (training && match.bestOf != 1)
+		{
+			warnings.push_back(named + " is a training match, which is one game, but has a bestOf, skipped");
 			continue;
 		}
 		if (!readIntAttribute(element, "nextGame", 1, 2147483647, match.nextGame))

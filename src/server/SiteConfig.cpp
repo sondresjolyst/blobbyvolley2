@@ -255,3 +255,32 @@ bool loadServerPort(int filePort, const EnvironmentFunction& env, int& port, std
 	}
 	return true;
 }
+
+bool loadMaxTraining(const EnvironmentFunction& env, unsigned defaultValue, unsigned maxValue, unsigned& value,
+					std::string& error)
+{
+	const char* text = fromEnv(env, "BLOBBY_MAX_TRAINING");
+	if (!text)
+	{
+		value = defaultValue;
+		return true;
+	}
+	// only digits, and no leading zero except for 0 itself
+	const std::string digits = text;
+	bool ok = digits.size() <= 4 && (digits == "0" || digits[0] != '0');
+	unsigned read = 0;
+	for (char c : digits)
+	{
+		if (c < '0' || c > '9')
+			ok = false;
+		else
+			read = read * 10 + (unsigned)(c - '0');
+	}
+	if (!ok || read > maxValue)
+	{
+		error = "BLOBBY_MAX_TRAINING must be a number from 0 to " + std::to_string(maxValue);
+		return false;
+	}
+	value = read;
+	return true;
+}

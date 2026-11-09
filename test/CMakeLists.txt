@@ -39,7 +39,7 @@ set(SRC
 	../src/NetworkMessage.cpp       ../src/NetworkMessage.h
 	../src/JoinLink.cpp             ../src/JoinLink.h
 	../tools/loadbot/LoadbotArgs.cpp ../tools/loadbot/LoadbotArgs.h
-	../tools/loadbot/ScriptBot.cpp   ../tools/loadbot/ScriptBot.h
+	../src/ScriptBot.cpp            ../src/ScriptBot.h
 	../src/ScriptedInputSource.cpp  ../src/ScriptedInputSource.h
 	../src/EditboxWindow.cpp        ../src/EditboxWindow.h
 	../src/replays/ReplayLoader.cpp    ../src/replays/IReplayLoader.h
@@ -68,7 +68,7 @@ if (WIN32)
 	set(SDL2_LIBRARIES "SDL2::SDL2")
 endif (WIN32)
 
-add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp RakPeerTimeTest.cpp RakPeerPortForwardTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp LoadbotArgsTest.cpp LoadbotScriptTest.cpp EditboxWindowTest.cpp TournamentTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestClock.cpp TestClock.h TestBmp.h TestServer.h ${SRC})
+add_executable(blobbytest GenericIOTest.cpp FileTest.cpp Base64Test.cpp MatchGoldenTest.cpp ScriptSafetyTest.cpp FontIndexTest.cpp MatchMakerTest.cpp ReliabilityLayerTest.cpp RakPeerTimeTest.cpp RakPeerPortForwardTest.cpp ReplayTest.cpp ForkVersionTest.cpp JoinCodesTest.cpp JoinLinkTest.cpp LoadbotArgsTest.cpp LoadbotScriptTest.cpp EditboxWindowTest.cpp TournamentTest.cpp TrainingTest.cpp SponsorBoardTest.cpp SponsorSyncTest.cpp SiteConfigTest.cpp FutureResultTest.cpp StringUtilTest.cpp FileUtilTest.cpp TestDir.cpp TestDir.h TestClock.cpp TestClock.h TestBmp.h TestServer.h ${SRC})
 
 # the site client tests need nlohmann_json, but not libcurl
 find_package(nlohmann_json 3.10 CONFIG REQUIRED)

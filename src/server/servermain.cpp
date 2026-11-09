@@ -216,6 +216,20 @@ int main(int argc, char** argv)
 
 		const ServerLog logLine = logToSyslog;
 		std::unique_ptr<TournamentDirector> director(new TournamentDirector(tournamentMaxMatches, (unsigned)tournamentNextGameDelay * 1000u));
+		unsigned maxTraining = DEFAULT_MAX_TRAINING;
+		{
+			std::string error;
+			if(!loadMaxTraining([](const char* name){ return std::getenv(name); }, DEFAULT_MAX_TRAINING, MAX_MAX_TRAINING, maxTraining, error))
+			{
+				syslog(LOG_ERR, "%s, the server stops", error.c_str());
+				return 1;
+			}
+		}
+		director->setMaxTraining(maxTraining);
+		if(maxTraining == 0)
+			syslog(LOG_NOTICE, "Training against the server bot is off");
+		else
+			syslog(LOG_NOTICE, "At most %u training matches against the server bot run at the same time", maxTraining);
 		std::shared_ptr<TournamentEvents> events = std::make_shared<TournamentLog>(tournamentResultsFile, logLine);
 
 		if(site.usesSite())
@@ -449,6 +463,11 @@ void setup_physfs(char* argv0)
 	#endif
 	fs.addToSearchPath("data");
 	fs.addToSearchPath(fs.join("data", "rules.zip"));
+	// the bot scripts of training matches
+	#ifdef BLOBBY_DATA_DIR
+		fs.addToSearchPath(fs.join(BLOBBY_DATA_DIR, "scripts.zip"));
+	#endif
+	fs.addToSearchPath(fs.join("data", "scripts.zip"));
 }
 
 std::string statistics()

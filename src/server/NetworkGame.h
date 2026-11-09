@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Global.h"
 #include "raknet/NetworkTypes.h"
 #include "raknet/BitStream.h"
+#include "raknet/PacketPriority.h"
 #include "SpeedController.h"
 #include "DuelMatch.h"
 #include "BlobbyDebug.h"
@@ -37,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 class ThreadSafeRakServer;
 class ReplayRecorder;
 class NetworkPlayer;
+class ScriptBot;
 
 typedef std::list<packet_ptr> PacketQueue;
 
@@ -107,6 +109,19 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		/// A game where pausing is not allowed ignores pause requests, so one player cannot hold it up.
 		void setPauseAllowed( bool allowed ) { mPauseAllowed = allowed; }
 
+		/// Lets a bot script play one side, for a training match against the server. The player of that side
+		/// is a stand-in that is not connected, so nothing is sent to it. The bot gets the state of each step
+		/// on the game thread and waits at most its budget for the script, so a slow script never stalls the
+		/// network. Call it before start().
+		void setBot( PlayerSide side, std::unique_ptr<ScriptBot> bot );
+
+		/// What the bot did so far: the longest time the script took for one step, -1 before the first,
+		/// and the steps it did not finish within its budget. Safe to call from any thread.
+		long getBotMaxMicroseconds() const { return mBotMaxUs; }
+		unsigned getBotLateSteps() const { return mBotLateSteps; }
+		/// The Lua error that stopped the bot, empty while it plays. Call it after finish().
+		const std::string& getBotError() const { return mBotError; }
+
 	private:
 		void broadcastBitstream(const RakNet::BitStream& stream, const RakNet::BitStream& switchedstream);
 		void broadcastBitstream(const RakNet::BitStream& stream);
@@ -117,6 +132,11 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 
 		// process a single packet
 		void processPacket( const packet_ptr& packet );
+
+		// sends to a player, but never to the stand-in of the bot
+		void sendTo(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability, PlayerID target) const;
+		// gives the bot the state and takes its input for the next step
+		void stepBot();
 
 		ThreadSafeRakServer* mServer;
 		PlayerID mLeftPlayer;
@@ -158,5 +178,12 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		void sendRulesChecksum();
 		void giveUpStart();
 		std::vector<char> mRulesString;
+
+		// the bot of a training match, only touched by the game thread once the game started
+		std::unique_ptr<ScriptBot> mBot;
+		PlayerSide mBotSide = NO_PLAYER;
+		std::atomic<long> mBotMaxUs{-1};
+		std::atomic<unsigned> mBotLateSteps{0};
+		std::string mBotError;
 };
 

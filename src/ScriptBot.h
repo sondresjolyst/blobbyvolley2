@@ -35,7 +35,8 @@ std::vector<std::string> findBotScripts();
 
 /// Plays with one of the bot scripts of the game, through the same ScriptedInputSource as a local game.
 /// The script always plays the left blob. The load test bot asks the server for the left side, and the
-/// server then sends it the game from the left and mirrors its input back, see loadbot.cpp.
+/// server then sends it the game from the left and mirrors its input back, see tools/loadbot/loadbot.cpp.
+/// The server bot of a training match mirrors the state and the input itself, see NetworkGame::setBot.
 ///
 /// The script runs on a thread of its own, so a slow script cannot stall the network loop.
 class ScriptBot

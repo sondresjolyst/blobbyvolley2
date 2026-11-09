@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "PhysicWorld.h"
 #include "NetworkPlayer.h"
 #include "InputSource.h"
+#include "ScriptBot.h"
 
 extern std::atomic<int> SWLS_GameSteps;
 
@@ -146,9 +147,9 @@ void NetworkGame::sendRulesChecksum()
 	stream.Write(mMatch->getScoreToWin());
 	/// \todo write file author and title too. Maybe add a version number in scripts as well.
 	if (!mRulesSent[LEFT_PLAYER])
-		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+		sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
 	if (!mRulesSent[RIGHT_PLAYER])
-		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+		sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 	mRulesChecksumSentAt = std::chrono::steady_clock::now();
 	++mRulesChecksumSends;
 }
@@ -159,9 +160,9 @@ void NetworkGame::giveUpStart()
 	RakNet::BitStream stream;
 	stream.Write((unsigned char)ID_OPPONENT_DISCONNECTED);
 	if (mRulesSent[LEFT_PLAYER])
-		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+		sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
 	if (mRulesSent[RIGHT_PLAYER])
-		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+		sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 	mNotStarted = true;
 	mGameValid = false;
 }
@@ -170,6 +171,54 @@ void NetworkGame::setRulesChecksumRepeat(std::chrono::milliseconds interval, int
 {
 	mRulesChecksumRepeat = interval;
 	mMaxRulesChecksumSends = maxSends;
+}
+
+void NetworkGame::setBot( PlayerSide side, std::unique_ptr<ScriptBot> bot )
+{
+	assert(!mStartCalled);
+	if (side != LEFT_PLAYER && side != RIGHT_PLAYER)
+		return;
+	mBot = std::move(bot);
+	mBotSide = side;
+	// the bot never answers the rules checksum, it knows the rules already
+	mRulesSent[side] = true;
+}
+
+void NetworkGame::sendTo(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability, PlayerID target) const
+{
+	if (mBotSide != NO_PLAYER && target == getPlayerID(mBotSide))
+		return;
+	mServer->Send(stream, priority, reliability, target);
+}
+
+void NetworkGame::stepBot()
+{
+	if (!mBot)
+		return;
+	// the script always plays the left blob, so a bot on the right sees the game mirrored
+	DuelMatchState state = mMatch->getState();
+	if (mBotSide == RIGHT_PLAYER)
+		state.swapSides();
+	ScriptBot::Step step = mBot->step(state);
+	if (!step.error.empty())
+	{
+		// a script that fails stops, its blob then stands still
+		mBotError = step.error;
+		mBot.reset();
+		mBotSide == LEFT_PLAYER ? mLeftInput->setInput(PlayerInputAbs()) : mRightInput->setInput(PlayerInputAbs());
+		return;
+	}
+	if (step.late)
+		++mBotLateSteps;
+	else if (step.microseconds > mBotMaxUs)
+		mBotMaxUs = step.microseconds;
+	PlayerInputAbs input = step.input;
+	if (mBotSide == RIGHT_PLAYER)
+		input.swapSides();
+	if (mBotSide == LEFT_PLAYER)
+		mLeftInput->setInput(input);
+	else
+		mRightInput->setInput(input);
 }
 
 NetworkGame::~NetworkGame()
@@ -231,15 +280,15 @@ void NetworkGame::broadcastBitstream(const RakNet::BitStream& stream, const RakN
 	const RakNet::BitStream& leftStream = mSwitchLeft ? switchedstream : stream;
 	const RakNet::BitStream& rightStream = mSwitchRight ? switchedstream : stream;
 
-	mServer->Send(leftStream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
-	mServer->Send(rightStream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	sendTo(leftStream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	sendTo(rightStream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 }
 
 void NetworkGame::broadcastBitstream(const RakNet::BitStream& stream)
 {
 
-	mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
-	mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 }
 
 void NetworkGame::processPackets()
@@ -271,9 +320,9 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			stream.Write((unsigned char)ID_OPPONENT_DISCONNECTED);
 			// only the player who stays is told, the other one is gone
 			if (packet->playerId == mLeftPlayer)
-				mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+				sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 			else if (packet->playerId == mRightPlayer)
-				mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+				sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
 			else
 				broadcastBitstream(stream);
 			mMatch->pause();
@@ -344,9 +393,9 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			stream2.Write((unsigned char)ID_CHAT_MESSAGE);
 			stream2.Write(message, sizeof(message));
 			if (mLeftPlayer == packet->playerId)
-				mServer->Send(stream2, LOW_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+				sendTo(stream2, LOW_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 			else
-				mServer->Send(stream2, LOW_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+				sendTo(stream2, LOW_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
 			break;
 		}
 
@@ -360,7 +409,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				if (!previous.empty())
 				{
 					RakNet::BitStream old(const_cast<unsigned char*>(previous.data()), previous.size(), true);
-					mServer->Send(old, LOW_PRIORITY, RELIABLE_ORDERED, packet->playerId);
+					sendTo(old, LOW_PRIORITY, RELIABLE_ORDERED, packet->playerId);
 					break;
 				}
 			}
@@ -371,7 +420,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			mRecorder->send( *out );
 			assert( stream.GetData()[0] == ID_REPLAY );
 
-			mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, packet->playerId);
+			sendTo(stream, LOW_PRIORITY, RELIABLE_ORDERED, packet->playerId);
 
 			break;
 		}
@@ -397,7 +446,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				stream->Write( mRulesString.data(), mRulesString.size());
 				assert( stream->GetData()[0] == ID_RULES );
 
-				mServer->Send(*stream, HIGH_PRIORITY, RELIABLE_ORDERED, packet->playerId);
+				sendTo(*stream, HIGH_PRIORITY, RELIABLE_ORDERED, packet->playerId);
 			}
 
 			if (isGameStarted())
@@ -421,8 +470,8 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				rightStream.Write(name, sizeof(name));
 				rightStream.Write(mMatch->getPlayer(LEFT_PLAYER).getStaticColor().toInt());
 
-				mServer->Send(leftStream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
-				mServer->Send(rightStream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+				sendTo(leftStream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+				sendTo(rightStream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 			}
 
 			break;
@@ -449,6 +498,7 @@ void NetworkGame::step()
 	// don't record the pauses
 	if(!mMatch->isPaused())
 	{
+		stepBot();
 		mRecorder->record(mMatch->getState());
 
 		mMatch->step();
@@ -500,7 +550,7 @@ void NetworkGame::broadcastPhysicState(const DuelMatchState& state) const
 		ms.swapSides();
 
 	out->generic<DuelMatchState> (ms);
-	mServer->Send(stream, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, mLeftPlayer);
+	sendTo(stream, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, mLeftPlayer);
 
 	// reset state and stream
 	stream.Reset();
@@ -515,7 +565,7 @@ void NetworkGame::broadcastPhysicState(const DuelMatchState& state) const
 
 	out->generic<DuelMatchState> (ms);
 
-	mServer->Send(stream, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, mRightPlayer);
+	sendTo(stream, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, mRightPlayer);
 }
 
 // helper function that writes a single event to bit stream in a space efficient way.
@@ -543,14 +593,14 @@ void NetworkGame::broadcastGameEvents() const
 	for(auto& e : events)
 		writeEventToStream(stream, e, mSwitchLeft );
 	stream.Write((char)0);
-	mServer->Send( stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
+	sendTo( stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
 
 	stream.Reset();
 	stream.Write( (unsigned char)ID_GAME_EVENTS );
 	for(auto& e : events)
 		writeEventToStream(stream, e, mSwitchRight );
 	stream.Write((char)0);
-	mServer->Send( stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+	sendTo( stream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
 }
 
 PlayerSide NetworkGame::getWinner() const

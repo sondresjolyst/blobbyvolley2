@@ -88,7 +88,10 @@ std::string gameReportJson(const GameReport& r)
 	json += ",\"points\":[{\"playerId\":" + std::to_string(r.player1) + ",\"points\":" + std::to_string(r.points1) + "}";
 	json += ",{\"playerId\":" + std::to_string(r.player2) + ",\"points\":" + std::to_string(r.points2) + "}]";
 	json += ",\"startedAt\":\"" + formatUtcTime(r.startedAt) + "\"";
-	json += ",\"endedAt\":\"" + formatUtcTime(r.endedAt) + "\"}";
+	json += ",\"endedAt\":\"" + formatUtcTime(r.endedAt) + "\"";
+	if (r.training)
+		json += ",\"training\":true";
+	json += "}";
 	return json;
 }
 
@@ -339,10 +342,16 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 {
 	updateCooldowns(now_ms);
 
+	// training matches have their own limit, so they never hold up the tournament
 	unsigned active = 0;
+	unsigned training = 0;
 	for (const auto& s : mSeries)
 	{
-		if (s.second.running || s.second.cooling)
+		if (!s.second.running && !s.second.cooling)
+			continue;
+		if (s.second.playing.isTraining())
+			++training;
+		else
 			++active;
 	}
 
@@ -355,18 +364,23 @@ std::vector<TournamentDirector::GameOrder> TournamentDirector::takeGamesToStart(
 			continue;
 		if (now_ms < s.retryAt)
 			continue;
-		if (!isConnected(s.match.player1) || !isConnected(s.match.player2))
+		const bool isTraining = s.match.isTraining();
+		// the bot of a training match is always there
+		if (!isConnected(s.match.player1) || (!isTraining && !isConnected(s.match.player2)))
 			continue;
-		if (isBusy(s.match.player1) || isBusy(s.match.player2))
+		if (isBusy(s.match.player1) || (!isTraining && isBusy(s.match.player2)))
 			continue;
-		if (mMaxRunning != 0 && active >= mMaxRunning)
-			break;
+		if (isTraining ? training >= mMaxTraining : (mMaxRunning != 0 && active >= mMaxRunning))
+			continue;
 
 		s.running = true;
 		s.playing = s.match;
 		s.playingGame = s.nextGame;
 		s.playingEpoch = s.epoch;
-		++active;
+		if (isTraining)
+			++training;
+		else
+			++active;
 		if (!s.connectedSent)
 		{
 			s.connectedSent = true;
@@ -401,6 +415,7 @@ GameReport TournamentDirector::makeReport(int matchId, const Series& s, int poin
 	report.points2 = points2;
 	report.startedAt = startedAt;
 	report.endedAt = endedAt;
+	report.training = s.playing.isTraining();
 	return report;
 }
 
@@ -492,6 +507,9 @@ void TournamentDirector::reportLiveScore(int matchId, int points1, int points2)
 	if (found == mSeries.end() || !found->second.running || !mEvents)
 		return;
 	const Series& s = found->second;
+	// the site shows no live score of a training match
+	if (s.playing.isTraining())
+		return;
 	mEvents->liveScore(matchId, s.playingGame, s.playing.player1, points1, s.playing.player2, points2);
 }
 
@@ -542,7 +560,7 @@ PlayerTournamentStatus TournamentDirector::statusOf(int playerId, unsigned long 
 
 		if (s.failed || s.held || s.match.awaitingDecision)
 			fill(s, TournamentStatus::WAITING_FOR_ORGANIZER);
-		else if (!isConnected(s.match.opponentOf(playerId)))
+		else if (!s.match.isTraining() && !isConnected(s.match.opponentOf(playerId)))
 			fill(s, TournamentStatus::WAITING_FOR_OPPONENT);
 		else
 			fill(s, TournamentStatus::WAITING_FOR_SLOT);

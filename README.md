@@ -96,6 +96,17 @@ In tournament mode players cannot open or join games in the lobby. The lobby sho
 ```
 The server logs each started match and each game result, and adds them as lines of JSON to `tournament_results.jsonl`. A game line holds the report body that the game server API of the site expects. Set `tournament_results_file` to an empty value to only log them.
 
+##### Training against the server bot
+A match with a `bot` instead of `player2` is a training match. The player plays one game against a bot script of the game that the server runs itself, so the player joins with the normal game and join code as usual:
+```xml
+<match id="8" player1="17" bot="reduced" botDifficulty="13" ruleFile="default.lua" scoreToWin="15"/>
+```
+`bot` is a script in `data/scripts` without `.lua`: `reduced`, `axji-0-2`, `com_11`, `gintonicV9`, `hyp014` or `Union`. `botDifficulty` is 0 to 25, where 0 is the strongest bot. It is 13 by default. A training match has no `bestOf`, since it is one game. The player sees the bot as `Bot <script>` and plays on the left.
+
+The bot runs on the thread of its game and never on the network thread. It gets the state of each step and has 10 ms for the script. A slower step plays its last input again, as the load test bot does. A script that stops with a Lua error stands still for the rest of the game. When the game ends the server logs the longest step of the script and the number of late steps.
+
+`BLOBBY_MAX_TRAINING` sets how many training matches run at the same time, 6 by default. `0` turns training off, and the most is 32. Other training matches wait for a free slot. Training matches do not count for `tournament_max_matches`, and the tournament never waits for them. A player in a training match is busy, so a real match of that player starts when the training game is over. The game report of a training game has `"training": true` and player id 0 for the bot, so the site can keep it out of the real results. The server sends no live score for it.
+
 ##### Connect to the tournament site
 With the address and the token of the tournament site, the server reads the players file from the site and reports each game to it. The settings are environment variables, which come before the config file:
 - `BLOBBY_TOURNAMENT=1` turns tournament mode on, and `0` turns it off.
@@ -103,6 +114,7 @@ With the address and the token of the tournament site, the server reads the play
 - `BLOBBY_SITE_TOKEN` is the game server token from the admin page of the site.
 - `BLOBBY_DATA_DIR` is the folder for the files below. The container image uses `/data`.
 - `BLOBBY_PORT` is the UDP port the server listens on. See [Dedicated Server](#dedicated-server).
+- `BLOBBY_MAX_TRAINING` is the most training matches against the server bot that run at the same time. See [Training against the server bot](#training-against-the-server-bot).
 
 The config file can set the same as `tournament_mode`, `tournament_site_url`, `tournament_site_token` and `tournament_data_dir`. The server does not start when the address is not https or the token is missing. It never logs the token.
 
