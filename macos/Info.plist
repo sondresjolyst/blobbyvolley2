@@ -6,8 +6,12 @@
 	<string>blobby</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.dk.blobby</string>
 	<key>CFBundleName</key>
-	<string>blobby</string>
+	<string>Blobby Volley</string>
+	<key>CFBundleDisplayName</key>
+	<string>Blobby Volley</string>
 	<key>CFBundleIconFile</key>
 	<string>icon</string>
 	<key>CFBundlePackageType</key>

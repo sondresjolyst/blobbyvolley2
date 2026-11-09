@@ -123,7 +123,7 @@ For a test site, `BLOBBY_SITE_CA_FILE` adds certificates to trust, and `BLOBBY_S
 The site client needs libcurl and nlohmann_json at build time. Without them the server is built without it, and it does not start with `BLOBBY_SITE_URL` set.
 
 #### Join links
-The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. Joining with the "join link" button works the same on Windows and Linux. Opening a link with a click needs a handler, which is set up differently on each system, see below.
+The tournament site shows each player a join link of the form `blobby://join?server=<host>:<port>&code=<code>`. The link takes the game straight to the tournament server with your join code. Joining with the "join link" button works the same on Windows, Linux and macOS. Opening a link with a click needs a handler, which is set up differently on each system, see below.
 
 To join a match:
 1. Copy your join link on the tournament site.
@@ -139,6 +139,8 @@ The game checks the link strictly before it uses it. The host is a host name or 
 You can also let a click on the link open the game. The game then asks whether to join the server, and joins only when you answer Yes. Each click starts a new copy of the game, even when one is already running. A link given on the command line must be the only argument. A bad link shows a message, and the game opens the main menu.
 
 On Windows, run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
+
+On macOS, a click on a link does not open the game yet. Use the "join link" button in the game instead.
 
 On Linux, `make install` installs the helpers as `blobby-register-join-links` and `blobby-unregister-join-links`. Run `blobby-register-join-links` once. Without an install, run `linux/register-join-links.sh` from the source folder, with the path of the game as argument if `blobby` is not on your `PATH`:
 ```bash
@@ -212,6 +214,46 @@ To join a tournament match, copy your join link and click "join link" at the top
 The zip also holds `COPYING`, this README, the start script of the tournament server and the license texts of the bundled DLLs in `licenses`.
 
 Test builds: every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
+
+### Download for macOS
+Download `blobby-volley-2-<version>-macos-arm64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) for a Mac with Apple Silicon (M1 or newer). For a Mac with an Intel processor, take `blobby-volley-2-<version>-macos-x64.zip`. Double-click the zip to unpack it.
+
+The app is signed ad hoc and not notarized by Apple, so macOS blocks the first start. Pick one of these ways once:
+- Right-click `Blobby Volley.app`, choose Open and confirm with Open. On macOS 15 and newer, if no Open button is shown, open System Settings, go to Privacy & Security and click Open Anyway.
+- Or remove the quarantine flag in Terminal, in the unpacked folder:
+```bash
+xattr -dr com.apple.quarantine "Blobby Volley.app" blobby-server
+```
+
+After that, double-click `Blobby Volley.app` to play. You can move it to the Applications folder.
+The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 15 or newer.
+
+To join a tournament match, copy your join link and click "join link" at the top of the main menu. A click on a `blobby://` link does not open the game on macOS yet. See [Join links](#join-links).
+
+The `blobby-server` folder has the dedicated server. Start it in Terminal from that folder, so it finds its `data` folder:
+```bash
+cd blobby-server
+./blobby-server --no-daemon --print-msgs
+```
+The zip also holds `COPYING`, this README and the license texts of the bundled libraries in `licenses`.
+
+### Download for Linux
+Download `blobby-volley-2-<version>-linux-x64.tar.gz` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) and unpack it:
+```bash
+tar -xzf blobby-volley-2-<version>-linux-x64.tar.gz
+cd blobby-volley-2-<version>-linux-x64
+./blobby
+```
+The package has SDL2, PhysFS, libcurl and the libraries they need in `lib`. It uses OpenGL, X11, Wayland, PulseAudio, ALSA, D-Bus, systemd and the C and C++ runtime from the system, which a desktop distribution has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
+
+Start the dedicated server from the same folder, so it finds its `data` folder:
+```bash
+./blobby-server --no-daemon --print-msgs
+```
+To let a click on a join link open this copy of the game, run `sh register-join-links.sh "$PWD/blobby"` once in the folder. See [Join links](#join-links).
+The package also holds `COPYING`, this README and the copyright files of the bundled libraries in `licenses`.
+
+Test builds: every build of `main` and every pull request also uploads a macOS package for each processor and a Linux package. They are artifacts named `blobby-volley-2-<short sha>-macos-arm64`, `blobby-volley-2-<short sha>-macos-x64` and `blobby-volley-2-<short sha>-linux-x64`. Each artifact holds the zip or tar.gz, so unpack the download once more. These builds are not releases.
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.
