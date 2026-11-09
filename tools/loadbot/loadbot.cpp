@@ -416,9 +416,9 @@ namespace
 					}
 					case ID_WIN_NOTIFICATION:
 					{
-						int winner = NO_PLAYER;
-						if (readWinNotification(stream, winner))
-							endGame("won_notification", winner == LEFT_PLAYER ? 1 : 0);
+						WinNotificationData win;
+						if (readWinNotification(stream, win))
+							endGame("won_notification", win.winner == LEFT_PLAYER ? 1 : 0);
 						break;
 					}
 					case ID_OPPONENT_DISCONNECTED:

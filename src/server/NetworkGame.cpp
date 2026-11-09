@@ -71,6 +71,7 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 {
 	mScore[LEFT_PLAYER] = 0;
 	mScore[RIGHT_PLAYER] = 0;
+	mScoreToWin = scoreToWin > 0 ? scoreToWin : mMatch->getScoreToWin();
 
 	// check that both players don't have an active game
 	if(leftPlayer.getGame())
@@ -143,7 +144,8 @@ void NetworkGame::sendRulesChecksum()
 	RakNet::BitStream stream;
 	stream.Write((unsigned char)ID_RULES_CHECKSUM);
 	stream.Write(mRulesChecksum);
-	stream.Write(mMatch->getScoreToWin());
+	// the points of the match, not the points the rules file made of them, since the client runs the rules file too
+	stream.Write(mScoreToWin);
 	/// \todo write file author and title too. Maybe add a version number in scripts as well.
 	if (!mRulesSent[LEFT_PLAYER])
 		mServer->Send(stream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
@@ -470,13 +472,21 @@ void NetworkGame::step()
 			mRecorder->record(mMatch->getState());
 			mRecorder->finalize( mMatch->getScore(LEFT_PLAYER), mMatch->getScore(RIGHT_PLAYER) );
 
+			// the final score goes along, since the last game update is sent once and unreliably
+			const int left = mMatch->getScore(LEFT_PLAYER);
+			const int right = mMatch->getScore(RIGHT_PLAYER);
+
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_WIN_NOTIFICATION);
 			stream.Write(winning);
+			stream.Write(left);
+			stream.Write(right);
 
 			RakNet::BitStream switchStream;
 			switchStream.Write((unsigned char)ID_WIN_NOTIFICATION);
 			switchStream.Write(winning == LEFT_PLAYER ? RIGHT_PLAYER : LEFT_PLAYER);
+			switchStream.Write(right);
+			switchStream.Write(left);
 
 			broadcastBitstream(stream, switchStream);
 		}
