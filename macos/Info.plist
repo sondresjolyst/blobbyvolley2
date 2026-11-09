@@ -7,11 +7,11 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>no.julalan.blobby</string>
+	<string>no.sjolystinnovation.blobbyvolley2-tournament</string>
 	<key>CFBundleName</key>
-	<string>Blobby Volley JulaLAN</string>
+	<string>Blobby Volley 2 Tournament</string>
 	<key>CFBundleDisplayName</key>
-	<string>Blobby Volley JulaLAN</string>
+	<string>Blobby Volley 2 Tournament</string>
 	<key>CFBundleIconFile</key>
 	<string>icon</string>
 	<key>CFBundlePackageType</key>
