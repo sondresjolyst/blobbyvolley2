@@ -55,7 +55,7 @@ const int BLOBBY_PORT = 1234;
 const int BLOBBY_VERSION_MAJOR = 0;
 const int BLOBBY_VERSION_MINOR = 107;
 
-const char AppTitle[] = "Blobby Volley 2 Version " BLOBBY_UPSTREAM_VERSION " (" BLOBBY_FORK_NAME " " BLOBBY_FORK_VERSION ")";
+const char AppTitle[] = BLOBBY_FORK_NAME " " BLOBBY_FORK_VERSION;
 const int BASE_RESOLUTION_X = 800;
 const int BASE_RESOLUTION_Y = 600;
 
