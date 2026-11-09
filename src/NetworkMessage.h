@@ -340,8 +340,18 @@ unsigned readGameUpdateTime(RakNet::BitStream& stream);
 /// Reads the state of the game that follows the time in an ID_GAME_UPDATE packet.
 void readGameUpdateState(RakNet::BitStream& stream, DuelMatchState& state);
 
-/// Reads the winning side of an ID_WIN_NOTIFICATION packet. False when it is not a side.
-bool readWinNotification(RakNet::BitStream& stream, int& winner);
+/// The fields of an ID_WIN_NOTIFICATION packet
+struct WinNotificationData
+{
+	int winner = 0;
+	/// False for a server that sends only the winner
+	bool hasScore = false;
+	int leftScore = 0;
+	int rightScore = 0;
+};
+/// Reads an ID_WIN_NOTIFICATION packet. False when the winner is not a side. A missing or
+/// negative score leaves hasScore false.
+bool readWinNotification(RakNet::BitStream& stream, WinNotificationData& data);
 
 /// The lists of a SERVER_STATUS lobby packet, after the waiting player count
 struct ServerStatusLists

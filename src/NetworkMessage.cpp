@@ -189,11 +189,22 @@ void readGameUpdateState(RakNet::BitStream& stream, DuelMatchState& state)
 	in->generic<DuelMatchState>(state);
 }
 
-bool readWinNotification(RakNet::BitStream& stream, int& winner)
+bool readWinNotification(RakNet::BitStream& stream, WinNotificationData& data)
 {
 	stream.IgnoreBytes(1);	// ID_WIN_NOTIFICATION
-	winner = NO_PLAYER;
-	return stream.Read(winner) && isPlayerSide((PlayerSide)winner);
+	data = WinNotificationData();
+	data.winner = NO_PLAYER;
+	if (!stream.Read(data.winner) || !isPlayerSide((PlayerSide)data.winner))
+		return false;
+	int left = 0;
+	int right = 0;
+	if (stream.Read(left) && stream.Read(right) && left >= 0 && right >= 0)
+	{
+		data.hasScore = true;
+		data.leftScore = left;
+		data.rightScore = right;
+	}
+	return true;
 }
 
 
