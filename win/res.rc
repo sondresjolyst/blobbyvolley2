@@ -1,18 +1,19 @@
+#pragma code_page(65001)
 #include <winver.h>
 #include "ForkVersion.h"
 
 MAINICON ICON "icon.ico"
 
 #if BLOBBY_RC_TARGET == 2
-#define BLOBBY_RC_DESCRIPTION "Blobby Volley JulaLAN server"
+#define BLOBBY_RC_DESCRIPTION "Blobby Volley 2 Tournament server"
 #define BLOBBY_RC_NAME "blobby-server"
 #define BLOBBY_RC_FILENAME "blobby-server.exe"
 #elif BLOBBY_RC_TARGET == 3
-#define BLOBBY_RC_DESCRIPTION "Blobby Volley JulaLAN load test bot"
+#define BLOBBY_RC_DESCRIPTION "Blobby Volley 2 Tournament load test bot"
 #define BLOBBY_RC_NAME "blobby-loadbot"
 #define BLOBBY_RC_FILENAME "blobby-loadbot.exe"
 #else
-#define BLOBBY_RC_DESCRIPTION "Blobby Volley JulaLAN"
+#define BLOBBY_RC_DESCRIPTION "Blobby Volley 2 Tournament"
 #define BLOBBY_RC_NAME "blobby"
 #define BLOBBY_RC_FILENAME "blobby.exe"
 #endif
@@ -30,13 +31,13 @@ BEGIN
 	BEGIN
 		BLOCK "040904b0"
 		BEGIN
-			VALUE "CompanyName", "JulaLAN"
+			VALUE "CompanyName", "Sjølyst Innovation AS"
 			VALUE "FileDescription", BLOBBY_RC_DESCRIPTION
 			VALUE "FileVersion", BLOBBY_FORK_VERSION
 			VALUE "InternalName", BLOBBY_RC_NAME
-			VALUE "LegalCopyright", "Blobby Volley 2 authors, GPL-2.0-or-later"
+			VALUE "LegalCopyright", "Blobby Volley 2 authors and Sjølyst Innovation AS, GPL-2.0-or-later"
 			VALUE "OriginalFilename", BLOBBY_RC_FILENAME
-			VALUE "ProductName", "Blobby Volley JulaLAN"
+			VALUE "ProductName", "Blobby Volley 2 Tournament"
 			VALUE "ProductVersion", BLOBBY_FORK_VERSION
 		END
 	END
