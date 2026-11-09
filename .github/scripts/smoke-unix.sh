@@ -2,6 +2,9 @@
 # Start a packaged program without a window or sound and check that it stays up and stops when asked.
 # Usage: smoke-unix.sh <working dir> <seconds> <program> [arguments...]
 # The program path is relative to the working dir. It runs on Linux and macOS.
+# With SMOKE_LIBRARIES=1 the loader lists the libraries it opens, and the lines with SDL are
+# printed at the end. The variable has no DYLD_ prefix, because macOS removes those from the
+# environment of /bin/sh.
 set -eu
 
 work_dir=$1
@@ -12,7 +15,11 @@ shift
 
 cd "$work_dir"
 log=$(mktemp)
-env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "./$exe" "$@" > "$log" 2>&1 &
+if [ "${SMOKE_LIBRARIES:-0}" = 1 ]; then
+	env DYLD_PRINT_LIBRARIES=1 LD_DEBUG=libs SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "./$exe" "$@" > "$log" 2>&1 &
+else
+	env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "./$exe" "$@" > "$log" 2>&1 &
+fi
 pid=$!
 # Never leave the program running, even if this script exits early.
 trap 'kill -9 "$pid" 2>/dev/null || true' EXIT
@@ -43,5 +50,8 @@ if [ "$status" -ne 0 ]; then
 	cat "$log"
 	exit 1
 fi
-echo "$exe stopped cleanly"
+echo "$exe stopped cleanly after SIGTERM with status 0"
+if [ "${SMOKE_LIBRARIES:-0}" = 1 ]; then
+	grep -E 'calling init: .*SDL|^dyld.*SDL' "$log" | sed 's/^ *[0-9]*://' | sort -u || true
+fi
 rm -f "$log"

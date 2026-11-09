@@ -16,7 +16,7 @@ done
 rm -rf "$out_dir"
 mkdir -p "$out_dir"
 # fixup_bundle needs an absolute path.
-out_dir=$(cd "$out_dir" && pwd)
+out_dir=$(cd "$out_dir" && pwd -P)
 brew_prefix=$(brew --prefix)
 
 # The install step of the bundle runs fixup_bundle, which copies the libraries into the app.
@@ -37,59 +37,129 @@ cp "$build_dir/data/rules.zip" data/server.xml data/api.lua data/rules_api.lua "
 dylibbundler -of -b -cd -x "$server_dir/blobby-server" -d "$server_dir/lib" -p @executable_path/lib/
 
 # Homebrew's SDL2 is sdl2-compat, which loads SDL3 at run time from the folder it is in.
-# Neither fixup_bundle nor dylibbundler sees that, so copy SDL3 next to each copy of SDL2.
+# Neither fixup_bundle nor dylibbundler sees that, so copy SDL3 next to each copy of SDL2,
+# under the name that this build of sdl2-compat asks for.
 if [ -e "$brew_prefix/opt/sdl2-compat" ]; then
+	sdl3_name=$(strings -a "$app/Contents/Frameworks/libSDL2-2.0.0.dylib" | sed -n 's|^@loader_path/\(libSDL3[^/]*\.dylib\)$|\1|p' | head -n 1)
+	[ -n "$sdl3_name" ] || { echo "sdl2-compat does not look for SDL3 next to itself" >&2; exit 1; }
+	echo "sdl2-compat opens @loader_path/$sdl3_name"
 	for dir in "$app/Contents/Frameworks" "$server_dir/lib"; do
 		[ -f "$dir/libSDL2-2.0.0.dylib" ] || { echo "no libSDL2-2.0.0.dylib in $dir" >&2; exit 1; }
-		cp -L "$brew_prefix/opt/sdl3/lib/libSDL3.dylib" "$dir/libSDL3.dylib"
-		chmod 644 "$dir/libSDL3.dylib"
-		install_name_tool -id @loader_path/libSDL3.dylib "$dir/libSDL3.dylib"
+		cp -L "$brew_prefix/opt/sdl3/lib/libSDL3.dylib" "$dir/$sdl3_name"
+		chmod 644 "$dir/$sdl3_name"
+		install_name_tool -id "@loader_path/$sdl3_name" "$dir/$sdl3_name"
 	done
 fi
 
 cp COPYING README.md "$out_dir/"
 
-# Every library reference must point into the package or to the system.
+# Turn @executable_path and @loader_path in a path into real folders.
+# Usage: expand <path> <executable folder> <loader folder>
+expand() {
+	echo "$1" | sed -e "s|^@executable_path|$2|" -e "s|^@loader_path|$3|"
+}
+# Print the path if it is a file inside the package.
+inside() {
+	[ -f "$1" ] || return 1
+	real=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")
+	case "$real" in
+		"$out_dir"/*) echo "$real" ;;
+		*) return 1 ;;
+	esac
+}
+
+# Every library reference must point to the system or to a file inside the package,
+# also through @rpath, so a library that was left in Homebrew fails here.
 find "$out_dir" -type f \( -perm -u+x -o -name '*.dylib' \) > "$out_dir/.machos"
 : > "$out_dir/.libs"
 while read -r file; do
 	file "$file" | grep -q 'Mach-O' || continue
+	case "$file" in
+		"$app"/*) exe_dir="$app/Contents/MacOS" ;;
+		*) exe_dir="$server_dir" ;;
+	esac
+	loader_dir=$(dirname "$file")
+	# Drop run paths that lead out of the package, such as the Homebrew folder of SDL3.
+	otool -l "$file" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' > "$out_dir/.rpaths"
+	: > "$out_dir/.rpaths.kept"
+	while read -r rpath; do
+		dir=$(expand "$rpath" "$exe_dir" "$loader_dir")
+		if [ -d "$dir" ] && case "$(cd "$dir" && pwd -P)" in "$out_dir"*) true ;; *) false ;; esac; then
+			echo "$rpath" >> "$out_dir/.rpaths.kept"
+		else
+			echo "removing run path $rpath from $file"
+			install_name_tool -delete_rpath "$rpath" "$file"
+		fi
+	done < "$out_dir/.rpaths"
 	otool -L "$file" | tail -n +2 | awk '{print $1}' > "$out_dir/.refs"
-	if grep -Ev '^(/usr/lib/|/System/|@executable_path/|@loader_path/|@rpath/)' "$out_dir/.refs"; then
-		echo "$file links a library outside the package" >&2
-		exit 1
-	fi
+	while read -r ref; do
+		case "$ref" in
+			/usr/lib/*|/System/*) continue ;;
+			@executable_path/*|@loader_path/*)
+				inside "$(expand "$ref" "$exe_dir" "$loader_dir")" > /dev/null || { echo "$file links $ref, which is not in the package" >&2; exit 1; } ;;
+			@rpath/*)
+				found=false
+				# A library also sees the run paths of the program that loads it.
+				cat "$out_dir/.rpaths.kept" > "$out_dir/.search"
+				[ "$file" = "$exe_dir/blobby" ] || [ "$file" = "$exe_dir/blobby-server" ] || \
+					otool -l "$exe_dir/blobby" "$exe_dir/blobby-server" 2>/dev/null | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' >> "$out_dir/.search"
+				while read -r rpath; do
+					if inside "$(expand "$rpath" "$exe_dir" "$loader_dir")/${ref#@rpath/}" > /dev/null; then
+						found=true
+						break
+					fi
+				done < "$out_dir/.search"
+				[ "$found" = true ] || { echo "$file links $ref, which no run path finds in the package" >&2; exit 1; } ;;
+			*)
+				echo "$file links $ref, which is outside the package" >&2
+				exit 1 ;;
+		esac
+	done < "$out_dir/.refs"
 	case "$file" in
 		*.dylib) basename "$file" >> "$out_dir/.libs" ;;
 	esac
 done < "$out_dir/.machos"
 
-# Find the Homebrew formula of each bundled library and copy its license files.
+# Find the Homebrew formula of each bundled library. Write its license id and copy its license
+# texts, as the Windows package does. A library without both fails the build.
 : > "$out_dir/.formulae"
 sort -u "$out_dir/.libs" > "$out_dir/.libs.sorted"
 while read -r lib; do
 	match=$(ls "$brew_prefix"/opt/*/lib/"$lib" 2>/dev/null | head -n 1 || true)
 	[ -n "$match" ] || { echo "no Homebrew formula has $lib" >&2; exit 1; }
 	formula=$(echo "$match" | sed "s|^$brew_prefix/opt/\([^/]*\)/lib/.*$|\1|")
+	formula=$(brew info --json=v2 "$formula" | python3 -c 'import json, sys; print(json.load(sys.stdin)["formulae"][0]["name"])')
 	echo "bundled $lib from $formula"
-	echo "$formula" >> "$out_dir/.formulae"
+	echo "$formula $lib" >> "$out_dir/.formulae"
 done < "$out_dir/.libs.sorted"
-sort -u "$out_dir/.formulae" > "$out_dir/../formulae.txt"
+cut -d' ' -f1 "$out_dir/.formulae" | sort -u > "$out_dir/../formulae.txt"
 while read -r formula; do
 	keg="$brew_prefix/opt/$formula"
-	mkdir -p "$out_dir/licenses/$formula"
+	target="$out_dir/licenses/$formula"
+	mkdir -p "$target"
+	brew info --json=v2 "$formula" | python3 -c '
+import json, sys
+f = json.load(sys.stdin)["formulae"][0]
+if not f.get("license"):
+    sys.exit("no license id for " + f["name"])
+print("Name: " + f["name"])
+print("Version: " + f["versions"]["stable"])
+print("License: " + f["license"])
+print("Homepage: " + f["homepage"])
+' > "$target/LICENSE-INFO.txt"
+	echo "Libraries: $(awk -v f="$formula" '$1 == f { print $2 }' "$out_dir/.formulae" | tr '\n' ' ')" >> "$target/LICENSE-INFO.txt"
 	found=false
 	for license in "$keg"/LICENSE* "$keg"/LICENCE* "$keg"/COPYING* "$keg"/share/doc/*/LICENSE* "$keg"/share/doc/*/COPYING*; do
 		[ -f "$license" ] || continue
-		cp "$license" "$out_dir/licenses/$formula/"
+		cp "$license" "$target/"
 		found=true
 	done
-	if [ "$found" = false ]; then
-		brew info "$formula" | head -n 3 > "$out_dir/licenses/$formula/LICENSE-INFO.txt"
-		echo "$formula has no license file, wrote LICENSE-INFO.txt" >&2
-	fi
+	[ "$found" = true ] || { echo "$formula has no license text in $keg" >&2; exit 1; }
+	echo "license of $formula: $(sed -n 's/^License: //p' "$target/LICENSE-INFO.txt")"
 done < "$out_dir/../formulae.txt"
-rm -f "$out_dir/.machos" "$out_dir/.refs" "$out_dir/.libs" "$out_dir/.libs.sorted" "$out_dir/.formulae"
+rm -f "$out_dir/.machos" "$out_dir/.refs" "$out_dir/.rpaths" "$out_dir/.rpaths.kept" "$out_dir/.search" "$out_dir/.libs" "$out_dir/.libs.sorted" "$out_dir/.formulae"
+echo "bundled libraries:"
+(cd "$out_dir" && find . -name '*.dylib' | sort)
 
 # Changing the install names broke the signatures, so sign everything again ad hoc.
 for lib in "$server_dir"/lib/*.dylib; do

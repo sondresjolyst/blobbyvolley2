@@ -140,6 +140,8 @@ You can also let a click on the link open the game. The game then asks whether t
 
 On Windows, run `register-join-links.cmd` from the game folder once. It writes the handler for the current user below `HKEY_CURRENT_USER\Software\Classes\blobby` and needs no admin rights. Run it again after you move the game folder. `unregister-join-links.cmd` removes the handler. The two files call `blobby.exe --register-link-handler` and `blobby.exe --unregister-link-handler`.
 
+On macOS, a click on a link does not open the game yet. Use the "join link" button in the game instead.
+
 On Linux, `make install` installs the helpers as `blobby-register-join-links` and `blobby-unregister-join-links`. Run `blobby-register-join-links` once. Without an install, run `linux/register-join-links.sh` from the source folder, with the path of the game as argument if `blobby` is not on your `PATH`:
 ```bash
 sh linux/register-join-links.sh /path/to/blobby
@@ -226,6 +228,8 @@ xattr -dr com.apple.quarantine "Blobby Volley.app" blobby-server
 After that, double-click `Blobby Volley.app` to play. You can move it to the Applications folder.
 The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 15 or newer.
 
+To join a tournament match, copy your join link and click "join link" at the top of the main menu. A click on a `blobby://` link does not open the game on macOS yet. See [Join links](#join-links).
+
 The `blobby-server` folder has the dedicated server. Start it in Terminal from that folder, so it finds its `data` folder:
 ```bash
 cd blobby-server
@@ -240,7 +244,7 @@ tar -xzf blobby-volley-2-<version>-linux-x64.tar.gz
 cd blobby-volley-2-<version>-linux-x64
 ./blobby
 ```
-The package has SDL2, PhysFS, libcurl and the other libraries it needs in `lib`. It uses OpenGL, X11 and ALSA from the system, which every desktop has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
+The package has SDL2, PhysFS, libcurl and the libraries they need in `lib`. It uses OpenGL, X11, Wayland, PulseAudio, ALSA, D-Bus, systemd and the C and C++ runtime from the system, which a desktop distribution has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
 
 Start the dedicated server from the same folder, so it finds its `data` folder:
 ```bash

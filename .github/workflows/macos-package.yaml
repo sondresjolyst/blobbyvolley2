@@ -76,7 +76,20 @@ jobs:
           sh .github/scripts/package-macos.sh build "dist/$PACKAGE"
           find dist -type f | sort
           lipo -archs "dist/$PACKAGE/Blobby Volley.app/Contents/MacOS/blobby"
-          vtool -show-build "dist/$PACKAGE/Blobby Volley.app/Contents/MacOS/blobby" | grep -E 'minos|platform'
+      # The README says the package needs macOS 15 or newer, so nothing in it may ask for more.
+      - name: Check the minimum macOS version
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: |
+          find "dist/$PACKAGE" -type f \( -name '*.dylib' -o -path '*/MacOS/blobby' -o -name blobby-server \) | sort | while read -r file; do
+            minos=$(vtool -show-build "$file" | awk '$1 == "minos" { print $2; exit }')
+            echo "minos $minos: $file"
+            major=${minos%%.*}
+            if [ -z "$minos" ] || [ "$major" -gt 15 ]; then
+              echo "::error::$file needs macOS $minos, the README promises 15"
+              exit 1
+            fi
+          done
       # The smoke checks must not find the libraries in Homebrew.
       - name: Remove the bundled Homebrew formulae
         run: xargs brew uninstall --ignore-dependencies --force < dist/formulae.txt
@@ -87,6 +100,7 @@ jobs:
       - name: Smoke check the game
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
+          SMOKE_LIBRARIES: "1"
         run: sh .github/scripts/smoke-unix.sh "dist/$PACKAGE" 5 "Blobby Volley.app/Contents/MacOS/blobby"
       # ditto keeps the symlinks, the permissions and the signatures, which the artifact upload would lose.
       - name: Zip
