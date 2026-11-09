@@ -54,7 +54,7 @@ struct QueueObject
 	Vector2 pos1;
 	Vector2 pos2;
 	Color col;
-	float alpha;
+	float alpha = 1.0f;
 	std::string text;
 	std::vector<std::string> entries;
 	int selected;

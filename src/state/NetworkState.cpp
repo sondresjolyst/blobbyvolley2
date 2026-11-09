@@ -648,7 +648,8 @@ void NetworkGameState::step_impl()
 					RakNet::BitStream stream;
 					char message[31];
 
-					strncpy(message, mChattext.c_str(), sizeof(message));
+					strncpy(message, mChattext.c_str(), sizeof(message) - 1);
+					message[sizeof(message) - 1] = '\0';
 					stream.Write((unsigned char)ID_CHAT_MESSAGE);
 					stream.Write(message, sizeof(message));
 					mClient->Send(&stream, LOW_PRIORITY, RELIABLE_ORDERED, 0);

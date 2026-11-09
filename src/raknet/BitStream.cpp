@@ -832,10 +832,14 @@ void BitStream::Write1( void )
 // Returns true if the next data read is a 1, false if it is a 0
 bool BitStream::ReadBit( void )
 {
+#ifdef _MSC_VER
 #pragma warning( disable : 4800 )
+#endif
 	readOffset++;
 	return ( bool ) ( data[ (readOffset - 1) >> 3 ] & ( 0x80 >> ( (readOffset - 1) % 8 ) ) );
+#ifdef _MSC_VER
 #pragma warning( default : 4800 )
+#endif
 }
 
 // Align the bitstream to the byte boundary and then write the specified number of bits.

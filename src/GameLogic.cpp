@@ -217,7 +217,7 @@ void IGameLogic::onBallHitsGround(PlayerSide side)
 	// otherwise, set the squish value
 	mSquishGround = SQUISH_TOLERANCE;
 
-	mTouches[other_side(side)] = 0;
+	mTouches[side2index(other_side(side))] = 0;
 
 	OnBallHitsGroundHandler(side);
 }

@@ -1545,7 +1545,7 @@ InternalPacket* ReliabilityLayer::CreateInternalPacketFromBitStream( RakNet::Bit
 	bool bitStreamSucceeded;
 	InternalPacket* internalPacket;
 
-	if ( bitStream->GetNumberOfUnreadBits() < sizeof( internalPacket->packetNumber ) * 8 )
+	if ( bitStream->GetNumberOfUnreadBits() < (int)( sizeof( internalPacket->packetNumber ) * 8 ) )
 		return 0; // leftover bits
 
 	internalPacket = internalPacketPool.GetPointer();
@@ -2159,7 +2159,9 @@ void ReliabilityLayer::DeleteOldUnreliableSplitPackets( unsigned int time )
 
 		while ( i < splitPacketList.size() )
 		{
+#ifdef _MSC_VER
 #pragma warning( disable : 4701 ) //  warning C4701: local variable 'orderingIndexToDelete' may be used without having been initialized
+#endif
 			if ( splitPacketList[ i ]->orderingIndex == orderingIndexToDelete )
 			{
 				temp = splitPacketList[ i ];

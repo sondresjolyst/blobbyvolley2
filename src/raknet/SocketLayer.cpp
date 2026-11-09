@@ -115,7 +115,9 @@ SOCKET SocketLayer::Connect(SOCKET writeSocket, unsigned int binaryAddress, unsi
 	return writeSocket;
 }
 
+#ifdef _MSC_VER
 #pragma warning( disable : 4100 ) // warning C4100: <variable name> : unreferenced formal parameter
+#endif
 SOCKET SocketLayer::CreateBoundSocket(unsigned short port, bool blockingSocket, const char *forceHostAddress)
 {
 	SOCKET listenSocket;

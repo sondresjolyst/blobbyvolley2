@@ -409,7 +409,8 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				RakNet::BitStream leftStream;
 				leftStream.Write((unsigned char)ID_GAME_READY);
 				leftStream.Write((int)mSpeedController.getGameSpeed());
-				strncpy(name, mMatch->getPlayer(RIGHT_PLAYER).getName().c_str(), sizeof(name));
+				strncpy(name, mMatch->getPlayer(RIGHT_PLAYER).getName().c_str(), sizeof(name) - 1);
+				name[sizeof(name) - 1] = '\0';
 				leftStream.Write(name, sizeof(name));
 				leftStream.Write(mMatch->getPlayer(RIGHT_PLAYER).getStaticColor().toInt());
 
@@ -417,7 +418,8 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				RakNet::BitStream rightStream;
 				rightStream.Write((unsigned char)ID_GAME_READY);
 				rightStream.Write((int)mSpeedController.getGameSpeed());
-				strncpy(name, mMatch->getPlayer(LEFT_PLAYER).getName().c_str(), sizeof(name));
+				strncpy(name, mMatch->getPlayer(LEFT_PLAYER).getName().c_str(), sizeof(name) - 1);
+				name[sizeof(name) - 1] = '\0';
 				rightStream.Write(name, sizeof(name));
 				rightStream.Write(mMatch->getPlayer(LEFT_PLAYER).getStaticColor().toInt());
 
