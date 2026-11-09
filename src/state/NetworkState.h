@@ -82,6 +82,9 @@ private:
 	std::shared_ptr<RakClient> mClient;
 	PlayerSide mOwnSide;
 	PlayerSide mWinningPlayer;
+	/// The score from the win notification, when the server sent one
+	bool mHasFinalScore = false;
+	int mFinalScore[MAX_PLAYERS] = {0, 0};
 
 	// Chat Vars
 	std::vector<std::string> mChatlog;

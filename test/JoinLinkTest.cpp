@@ -288,7 +288,7 @@ BOOST_AUTO_TEST_CASE(builds_the_values_for_a_path)
 
 	BOOST_CHECK_EQUAL(values[0].subkey, "");
 	BOOST_CHECK_EQUAL(values[0].name, "");
-	BOOST_CHECK_EQUAL(values[0].data, "URL:Blobby Volley 2 join link");
+	BOOST_CHECK_EQUAL(values[0].data, "URL:Blobby Volley 2 Tournament join link");
 
 	BOOST_CHECK_EQUAL(values[1].subkey, "");
 	BOOST_CHECK_EQUAL(values[1].name, "URL Protocol");

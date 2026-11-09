@@ -245,11 +245,17 @@ elseif (UNIX AND NOT APPLE)
 	install(TARGETS blobby blobby-server DESTINATION bin)
 endif ()
 
-if (MSVC)
-	# set application icon
+if (WIN32)
+	# application icon and file properties, BLOBBY_RC_TARGET picks the description in res.rc
 	target_sources(blobby PRIVATE ../win/res.rc)
+	target_compile_definitions(blobby PRIVATE $<$<COMPILE_LANGUAGE:RC>:BLOBBY_RC_TARGET=1>)
 	target_sources(blobby-server PRIVATE ../win/res.rc)
-endif(MSVC)
+	target_compile_definitions(blobby-server PRIVATE $<$<COMPILE_LANGUAGE:RC>:BLOBBY_RC_TARGET=2>)
+	if (BUILD_LOADBOT)
+		target_sources(blobby-loadbot PRIVATE ../win/res.rc)
+		target_compile_definitions(blobby-loadbot PRIVATE $<$<COMPILE_LANGUAGE:RC>:BLOBBY_RC_TARGET=3>)
+	endif ()
+endif (WIN32)
 
 # Header Checks
 # Create a test target, consisting of one cpp file for each header, where the cpp file does nothing but

@@ -162,6 +162,8 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		std::atomic<bool> mGameValid;
 		std::atomic<int> mWinner;
 		std::atomic<int> mScore[MAX_PLAYERS];
+		/// The points to win the match was created with, before the rules file changed them
+		int mScoreToWin = 0;
 
 		std::mutex mPreviousReplayMutex;
 		std::vector<unsigned char> mPreviousReplay[MAX_PLAYERS];

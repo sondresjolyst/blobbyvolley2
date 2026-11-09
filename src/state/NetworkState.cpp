@@ -191,6 +191,9 @@ void NetworkGameState::step_impl()
 				readGameUpdateState(stream, ms);
 				// inject network data into game
 				mMatch->setState( ms );
+				// an update that arrives after the win does not change the final score
+				if (mNetworkState == PLAYER_WON && mHasFinalScore)
+					mMatch->setScore(mFinalScore[LEFT_PLAYER], mFinalScore[RIGHT_PLAYER]);
 				break;
 			}
 
@@ -229,16 +232,18 @@ void NetworkGameState::step_impl()
 			case ID_WIN_NOTIFICATION:
 			{
 				RakNet::BitStream stream(packet->data, packet->length, false);
-				int winner = NO_PLAYER;
-				if(!readWinNotification(stream, winner))
+				WinNotificationData win;
+				if(!readWinNotification(stream, win))
 					break;
-				mWinningPlayer = (PlayerSide)winner;
+				mWinningPlayer = (PlayerSide)win.winner;
 
-				// last point must not be added anymore, because
-				// the score is also simulated local, so it is already
-				// right. under strange circumstances this need not
-				// be true, but then the score is set to the correy value
-				// by ID_BALL_RESET
+				// the last game update with the final score is sent once and may be lost,
+				// so the score of the notification is shown and kept
+				mHasFinalScore = win.hasScore;
+				mFinalScore[LEFT_PLAYER] = win.leftScore;
+				mFinalScore[RIGHT_PLAYER] = win.rightScore;
+				if (mHasFinalScore)
+					mMatch->setScore(win.leftScore, win.rightScore);
 
 				mNetworkState = PLAYER_WON;
 				break;
@@ -648,7 +653,8 @@ void NetworkGameState::step_impl()
 					RakNet::BitStream stream;
 					char message[31];
 
-					strncpy(message, mChattext.c_str(), sizeof(message));
+					strncpy(message, mChattext.c_str(), sizeof(message) - 1);
+					message[sizeof(message) - 1] = '\0';
 					stream.Write((unsigned char)ID_CHAT_MESSAGE);
 					stream.Write(message, sizeof(message));
 					mClient->Send(&stream, LOW_PRIORITY, RELIABLE_ORDERED, 0);

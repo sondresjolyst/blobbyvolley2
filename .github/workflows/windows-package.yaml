@@ -1,13 +1,6 @@
 name: Windows package
 
 on:
-  push:
-    branches:
-      - "main"
-    paths-ignore:
-      - "**.md"
-      - "AUTHORS"
-      - "ChangeLog"
   pull_request:
     branches:
       - "main"
@@ -40,7 +33,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      artifact: ${{ steps.name.outputs.artifact }}
+      package: ${{ steps.name.outputs.package }}
 
     defaults:
       run:
@@ -67,29 +60,34 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=ON
           cmake --build build
-      - name: Package
-        run: |
-          sh .github/scripts/package-windows.sh build dist/blobby-windows
-          find dist -type f | sort
-      - name: Smoke check the server without MSYS2 on PATH
-        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby-server.exe 5
-      - name: Smoke check the game without MSYS2 on PATH
-        run: sh .github/scripts/smoke-windows.sh dist/blobby-windows blobby.exe 5
-      - name: Pick artifact name
+      - name: Pick package name
         id: name
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           VERSION: ${{ inputs.version }}
         run: |
-          if [ -n "$VERSION" ]; then
-            echo "artifact=blobby-windows-$VERSION" >> "$GITHUB_OUTPUT"
-          else
-            echo "artifact=blobby-windows-$(echo "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(echo "$SHA" | cut -c1-7)
           fi
+          echo "package=blobbyvolley2-tournament-$VERSION-windows-x64" >> "$GITHUB_OUTPUT"
+      - name: Package
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: |
+          sh .github/scripts/package-windows.sh build "dist/$PACKAGE"
+          find dist -type f | sort
+      - name: Smoke check the server without MSYS2 on PATH
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: sh .github/scripts/smoke-windows.sh "dist/$PACKAGE" blobby-server.exe 5
+      - name: Smoke check the game without MSYS2 on PATH
+        env:
+          PACKAGE: ${{ steps.name.outputs.package }}
+        run: sh .github/scripts/smoke-windows.sh "dist/$PACKAGE" blobby.exe 5
       - name: Upload package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.name.outputs.artifact }}
+          name: ${{ steps.name.outputs.package }}
           path: dist
           if-no-files-found: error
 
@@ -108,15 +106,14 @@ jobs:
       - name: Download package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ${{ needs.Package.outputs.artifact }}
+          name: ${{ needs.Package.outputs.package }}
           path: pkg
       - name: Zip and upload with the start scripts
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ inputs.release_tag }}
-          VERSION: ${{ inputs.version }}
+          PACKAGE: ${{ needs.Package.outputs.package }}
         run: |
-          asset="blobby-volley-2-$VERSION-windows-x64.zip"
-          (cd pkg && zip -r -q "../$asset" blobby-windows)
-          gh release upload "$TAG" "$asset" scripts/tournament-server.ps1 scripts/tournament-server.sh --repo "$REPO" --clobber
+          (cd pkg && zip -r -q "../$PACKAGE.zip" "$PACKAGE")
+          gh release upload "$TAG" "$PACKAGE.zip" scripts/tournament-server.ps1 scripts/tournament-server.sh --repo "$REPO" --clobber

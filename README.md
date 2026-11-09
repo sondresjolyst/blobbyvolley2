@@ -1,11 +1,13 @@
-# Blobby Volley 2 ![build workflow](https://github.com/sondresjolyst/blobbyvolley2/actions/workflows/main.yaml/badge.svg)
+# Blobby Volley 2 ![build workflow](https://github.com/sondresjolyst/blobbyvolley2-tournament/actions/workflows/main.yaml/badge.svg)
 **The head-to-head multiplayer ball game**
 
 ### Website
  http://blobbyvolley.de
 
 ### About this fork
-This repository is a fork of [danielknobe/blobbyvolley2](https://github.com/danielknobe/blobbyvolley2). To report a problem with this fork, open an issue [here](https://github.com/sondresjolyst/blobbyvolley2/issues).
+This repository is a fork of [danielknobe/blobbyvolley2](https://github.com/danielknobe/blobbyvolley2). To report a problem with this fork, open an issue [here](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues).
+
+This fork is named Blobby Volley 2 Tournament where it is installed, so it can sit next to the original Blobby Volley 2. It keeps its settings in its own user folder, so settings from the original game are not shared. The user folder is `%APPDATA%\sjolyst-innovation\blobbyvolley2-tournament` on Windows, `~/Library/Application Support/blobbyvolley2-tournament` on macOS and `~/.local/share/blobbyvolley2-tournament` on Linux.
 
 ### System requirements
 Windows, Linux or macOS
@@ -13,7 +15,7 @@ Windows, Linux or macOS
 ### Sponsor board
 The game can show a scrolling LED board with sponsor logos behind the net during a match. It shows when "show sponsors" is on in the graphic options and at least one logo is found. The option is on by default. The game ships no logos.
 
-Put the logos in a folder named `sponsors`. The game reads it from the `data` folder and from the user folder, which on Windows is `%APPDATA%\org.dk\blobby`. The game creates an empty `sponsors` folder there on start.
+Put the logos in a folder named `sponsors`. The game reads it from the `data` folder and from the user folder, which on Windows is `%APPDATA%\sjolyst-innovation\blobbyvolley2-tournament`. See [About this fork](#about-this-fork) for macOS and Linux. The game creates an empty `sponsors` folder there on start.
 
 Each logo must be a BMP file up to 160 pixels wide and 40 pixels high. 32 pixels high looks best. Opaque logos can be uncompressed 24-bit BMPs. Logos with transparency must be 32-bit BMPs with an alpha channel, saved with a V4 or V5 header and BI_BITFIELDS, so the board shows through. The logos scroll in file name order. Files that do not match are skipped with a warning.
 
@@ -50,7 +52,7 @@ The server runs as the user `blobby` with uid 999. A named volume such as `blobb
 To build the image yourself, run `docker build -t blobby-server .` in the repository root.
 
 #### Start the tournament server
-Two scripts start the tournament server in Docker, so you do not need to type the Docker commands. Each release on the [releases page](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) has them as `tournament-server.ps1` and `tournament-server.sh`, and the Windows zip has `tournament-server.ps1` too. The newest versions are also at [tournament-server.ps1](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2/main/scripts/tournament-server.ps1) and [tournament-server.sh](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2/main/scripts/tournament-server.sh). The scripts use the `latest` image. Before the first release, run `$env:BLOBBY_SCRIPT_IMAGE = 'sondresjo/blobby-server:dev'` in PowerShell or `export BLOBBY_SCRIPT_IMAGE=sondresjo/blobby-server:dev` on Linux first.
+Two scripts start the tournament server in Docker, so you do not need to type the Docker commands. Each release on the [releases page](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) has them as `tournament-server.ps1` and `tournament-server.sh`, and the Windows zip has `tournament-server.ps1` too. The newest versions are also at [tournament-server.ps1](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2-tournament/main/scripts/tournament-server.ps1) and [tournament-server.sh](https://raw.githubusercontent.com/sondresjolyst/blobbyvolley2-tournament/main/scripts/tournament-server.sh). The scripts use the `latest` image. Before the first release, run `$env:BLOBBY_SCRIPT_IMAGE = 'sondresjo/blobby-server:dev'` in PowerShell or `export BLOBBY_SCRIPT_IMAGE=sondresjo/blobby-server:dev` on Linux first.
 
 Make a game server token on the admin page of the site first. On Windows, start Docker Desktop and run this in PowerShell in the folder of the script:
 ```powershell
@@ -163,7 +165,7 @@ It writes `~/.local/share/applications/blobby-join.desktop` for the scheme `x-sc
 ### Source Code
 Clone the git repository:
 ```bash
-git clone https://github.com/sondresjolyst/blobbyvolley2.git
+git clone https://github.com/sondresjolyst/blobbyvolley2-tournament.git
 ```
 
 ### Build under Linux
@@ -218,26 +220,26 @@ export PATH="$PATH:/c/msys64/ucrt64/bin"
 ```
 
 ### Download for Windows
-Download `blobby-volley-2-<version>-windows-x64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) and unzip it.
+Download `blobbyvolley2-tournament-<version>-windows-x64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) and unzip it.
 Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
 Start the game from its own folder, as Explorer and shortcuts do.
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
 The zip also holds `COPYING`, this README, the start script of the tournament server and the license texts of the bundled DLLs in `licenses`.
 
-Test builds: every build of `main` and every pull request uploads a Windows package as an artifact named `blobby-windows-<short sha>`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
+Test builds: every pull request uploads a Windows package as an artifact named `blobbyvolley2-tournament-<short sha>-windows-x64`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
 
 ### Download for macOS
-Download `blobby-volley-2-<version>-macos-arm64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) for a Mac with Apple Silicon (M1 or newer). For a Mac with an Intel processor, take `blobby-volley-2-<version>-macos-x64.zip`. Double-click the zip to unpack it.
+Download `blobbyvolley2-tournament-<version>-macos-arm64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) for a Mac with Apple Silicon (M1 or newer). For a Mac with an Intel processor, take `blobbyvolley2-tournament-<version>-macos-x64.zip`. Double-click the zip to unpack it.
 
 The app is signed ad hoc and not notarized by Apple, so macOS blocks the first start. Pick one of these ways once:
-- Right-click `Blobby Volley.app`, choose Open and confirm with Open. On macOS 15 and newer, if no Open button is shown, open System Settings, go to Privacy & Security and click Open Anyway.
+- Right-click `Blobby Volley 2 Tournament.app`, choose Open and confirm with Open. On macOS 15 and newer, if no Open button is shown, open System Settings, go to Privacy & Security and click Open Anyway.
 - Or remove the quarantine flag in Terminal, in the unpacked folder:
 ```bash
-xattr -dr com.apple.quarantine "Blobby Volley.app" blobby-server
+xattr -dr com.apple.quarantine "Blobby Volley 2 Tournament.app" blobby-server
 ```
 
-After that, double-click `Blobby Volley.app` to play. You can move it to the Applications folder.
+After that, double-click `Blobby Volley 2 Tournament.app` to play. You can move it to the Applications folder. It has its own name and bundle id, so it does not replace the original Blobby Volley there.
 The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 15 or newer.
 
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. A click on a `blobby://` link does not open the game on macOS yet. See [Join links](#join-links).
@@ -250,10 +252,10 @@ cd blobby-server
 The zip also holds `COPYING`, this README and the license texts of the bundled libraries in `licenses`.
 
 ### Download for Linux
-Download `blobby-volley-2-<version>-linux-x64.tar.gz` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2/releases/latest) and unpack it:
+Download `blobbyvolley2-tournament-<version>-linux-x64.tar.gz` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) and unpack it:
 ```bash
-tar -xzf blobby-volley-2-<version>-linux-x64.tar.gz
-cd blobby-volley-2-<version>-linux-x64
+tar -xzf blobbyvolley2-tournament-<version>-linux-x64.tar.gz
+cd blobbyvolley2-tournament-<version>-linux-x64
 ./blobby
 ```
 The package has SDL2, PhysFS, libcurl and the libraries they need in `lib`. It uses OpenGL, X11, Wayland, PulseAudio, ALSA, D-Bus, systemd and the C and C++ runtime from the system, which a desktop distribution has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
@@ -265,7 +267,7 @@ Start the dedicated server from the same folder, so it finds its `data` folder:
 To let a click on a join link open this copy of the game, run `sh register-join-links.sh "$PWD/blobby"` once in the folder. See [Join links](#join-links).
 The package also holds `COPYING`, this README and the copyright files of the bundled libraries in `licenses`.
 
-Test builds: every build of `main` and every pull request also uploads a macOS package for each processor and a Linux package. They are artifacts named `blobby-volley-2-<short sha>-macos-arm64`, `blobby-volley-2-<short sha>-macos-x64` and `blobby-volley-2-<short sha>-linux-x64`. Each artifact holds the zip or tar.gz, so unpack the download once more. These builds are not releases.
+Test builds: every pull request also uploads a macOS package for each processor and a Linux package. They are artifacts named `blobbyvolley2-tournament-<short sha>-macos-arm64`, `blobbyvolley2-tournament-<short sha>-macos-x64` and `blobbyvolley2-tournament-<short sha>-linux-x64`. Each artifact holds the zip or tar.gz, so unpack the download once more. These builds are not releases.
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.

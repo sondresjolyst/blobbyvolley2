@@ -45,7 +45,9 @@ RakClient::RakClient()
 RakClient::~RakClient()
 {}
 
+#ifdef _MSC_VER
 #pragma warning( disable : 4100 ) // warning C4100: 'depreciated' : unreferenced formal parameter
+#endif
 bool RakClient::Connect( const char* host, unsigned short serverPort, unsigned short clientPort, unsigned int depreciated, int threadSleepTimer )
 {
 	RakPeer::Disconnect( 100 );

@@ -281,7 +281,7 @@ int main(int argc, char** argv)
 			syslog(LOG_NOTICE, "Game results are added to %s", tournamentResultsFile.c_str());
 	}
 
-	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server %s (%s %s), protocol version %i.%i, started", BLOBBY_UPSTREAM_VERSION, BLOBBY_FORK_NAME, BLOBBY_FORK_VERSION, BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
+	syslog(LOG_NOTICE, "%s server %s, protocol version %i.%i, started", BLOBBY_FORK_NAME, BLOBBY_FORK_VERSION, BLOBBY_VERSION_MAJOR, BLOBBY_VERSION_MINOR);
 	syslog(LOG_NOTICE, "Listening on UDP port %i", (int)myinfo.port);
 
 #ifdef BLOBBY_SITE_SYNC
@@ -305,7 +305,7 @@ int main(int argc, char** argv)
 		siteReporter->stop();
 #endif
 
-	syslog(LOG_NOTICE, "Blobby Volley 2 dedicated server shutting down");
+	syslog(LOG_NOTICE, "%s server shutting down", BLOBBY_FORK_NAME);
 	#ifndef WIN32
 	closelog();
 	#endif

@@ -421,16 +421,7 @@ void RenderManagerSDL::setBlobColor(int player, Color color)
 		return;
 	}
 
-	DynamicColoredTexture* handledBlobBlood;
-
-	if (player == LEFT_PLAYER)
-	{
-		handledBlobBlood = &mLeftBlobBlood;
-	}
-	if (player == RIGHT_PLAYER)
-	{
-		handledBlobBlood = &mRightBlobBlood;
-	}
+	DynamicColoredTexture* handledBlobBlood = (player == LEFT_PLAYER) ? &mLeftBlobBlood : &mRightBlobBlood;
 
 	SDL_Surface* tempSurface = colorSurface(mStandardBlobBlood, mBlobColor[player]);
 	SDL_UpdateTexture(handledBlobBlood->mSDLsf, nullptr, tempSurface->pixels, tempSurface->pitch);

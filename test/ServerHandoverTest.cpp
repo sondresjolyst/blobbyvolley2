@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "FileSystem.h"
+#include "FileWrite.h"
 #include "GenericIO.h"
 #include "Global.h"
 #include "NetworkMessage.h"
@@ -34,6 +35,7 @@
 #include "server/NetworkPlayer.h"
 #include "server/ThreadSafeRakServer.h"
 #include "server/Tournament.h"
+#include "TestDir.h"
 #include "TestServer.h"
 
 // the server binary defines these
@@ -541,6 +543,115 @@ BOOST_AUTO_TEST_CASE( game_starts_when_the_first_checksum_gets_no_answer )
 	BOOST_CHECK_EQUAL(kari.count(ID_RULES_CHECKSUM), 1);
 	BOOST_CHECK_EQUAL(ola.count(ID_GAME_READY), 1);
 	BOOST_CHECK_EQUAL(kari.count(ID_GAME_READY), 1);
+}
+
+namespace
+{
+	// Scores a point on every step: 15-15 after 30 steps, then 16-15 and 17-15.
+	const char* const SCRIPTED_RULES = R"(
+__AUTHOR__ = "test"
+__TITLE__ = "scripted points"
+steps = 0
+function IsWinning(lscore, rscore)
+	if lscore >= SCORE_TO_WIN and lscore >= rscore + 2 then
+		return true
+	end
+	if rscore >= SCORE_TO_WIN and rscore >= lscore + 2 then
+		return true
+	end
+	return false
+end
+function OnGame()
+	steps = steps + 1
+	if steps <= 30 and steps % 2 == 0 then
+		score(RIGHT_PLAYER, 1)
+	else
+		score(LEFT_PLAYER, 1)
+	end
+end
+)";
+
+	void writeScriptedRules(FileSystem& fs)
+	{
+		fs.setWriteDir(testDir());
+		fs.mkdir("rules");
+		FileWrite file("rules/scripted_points.lua");
+		file.write(SCRIPTED_RULES, std::char_traits<char>::length(SCRIPTED_RULES));
+		file.close();
+	}
+
+	// the first packet of a type that a client got
+	std::vector<unsigned char> firstPacket(const Client& client, unsigned char id)
+	{
+		for (const auto& p : client.packets)
+		{
+			if (p[0] == id)
+				return p;
+		}
+		BOOST_FAIL("packet not received");
+		return {};
+	}
+}
+
+BOOST_FIXTURE_TEST_CASE( game_ends_at_17_15_and_the_win_notification_has_the_final_score, BareServerFixture )
+{
+	writeScriptedRules(fs);
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), LEFT_PLAYER);
+	// the right player sees itself on the left
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, true, "scripted_points.lua", 15, 75.f);
+	game->start();
+
+	BOOST_REQUIRE(pump([&](){ return left.count(ID_WIN_NOTIFICATION) > 0 && right.count(ID_WIN_NOTIFICATION) > 0; }, 8000));
+	// a little longer, to see that the game stays over
+	pump([](){ return false; }, 300);
+
+	// 16-15 did not end the game
+	BOOST_CHECK_EQUAL(game->getWinner(), LEFT_PLAYER);
+	BOOST_CHECK_EQUAL(game->getScore(LEFT_PLAYER), 17);
+	BOOST_CHECK_EQUAL(game->getScore(RIGHT_PLAYER), 15);
+	BOOST_CHECK_EQUAL(left.count(ID_WIN_NOTIFICATION), 1);
+	BOOST_CHECK_EQUAL(right.count(ID_WIN_NOTIFICATION), 1);
+
+	// the last game update is sent once and unreliably, so the final score is in the reliable notification too
+	std::vector<unsigned char> leftPacket = firstPacket(left, ID_WIN_NOTIFICATION);
+	RakNet::BitStream leftWin(leftPacket.data(), leftPacket.size(), false);
+	WinNotificationData leftData;
+	BOOST_REQUIRE(readWinNotification(leftWin, leftData));
+	BOOST_CHECK_EQUAL(leftData.winner, LEFT_PLAYER);
+	BOOST_REQUIRE(leftData.hasScore);
+	BOOST_CHECK_EQUAL(leftData.leftScore, 17);
+	BOOST_CHECK_EQUAL(leftData.rightScore, 15);
+
+	std::vector<unsigned char> rightPacket = firstPacket(right, ID_WIN_NOTIFICATION);
+	RakNet::BitStream rightWin(rightPacket.data(), rightPacket.size(), false);
+	WinNotificationData rightData;
+	BOOST_REQUIRE(readWinNotification(rightWin, rightData));
+	BOOST_CHECK_EQUAL(rightData.winner, RIGHT_PLAYER);
+	BOOST_REQUIRE(rightData.hasScore);
+	BOOST_CHECK_EQUAL(rightData.leftScore, 15);
+	BOOST_CHECK_EQUAL(rightData.rightScore, 17);
+	game->finish();
+}
+
+BOOST_FIXTURE_TEST_CASE( rules_checksum_has_the_points_of_the_match_when_the_rules_change_them, BareServerFixture )
+{
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
+	// firewall plays to ten times the points of the match. The client applies the rules file itself.
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "firewall.lua", 15, 75.f);
+	game->start();
+	BOOST_REQUIRE(pump([&](){ return left.count(ID_RULES_CHECKSUM) > 0 && right.count(ID_RULES_CHECKSUM) > 0; }, 8000));
+
+	for (Client* client : {&left, &right})
+	{
+		std::vector<unsigned char> packet = firstPacket(*client, ID_RULES_CHECKSUM);
+		RakNet::BitStream stream(packet.data(), packet.size(), false);
+		RulesChecksumData rules;
+		BOOST_CHECK(readRulesChecksum(stream, rules));
+		BOOST_CHECK_EQUAL(rules.scoreToWin, 15);
+	}
+	game->finish();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

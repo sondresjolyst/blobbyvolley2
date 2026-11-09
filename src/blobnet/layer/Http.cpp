@@ -95,7 +95,7 @@ void Http::request(const std::string& path, std::stringstream& response)
 			throw Exception::HttpException("Can't resolve IP Address.");
 		}
 
-		if(mSocketLayer.Connect(inOutSocket, inet_addr(ipAddress), mPort) == -1)
+		if(mSocketLayer.Connect(inOutSocket, inet_addr(ipAddress), mPort) == INVALID_SOCKET)
 		{
 			throw Exception::HttpException("Can't connect to host.");
 		}
@@ -112,7 +112,7 @@ void Http::request(const std::string& path, std::stringstream& response)
 			{
 				throw Exception::HttpException("Can't send the request to host.");
 			}
-		} while(bytesSend < request.size());
+		} while(static_cast<std::size_t>(bytesSend) < request.size());
 	}
 	catch (const Exception::HttpException& e)
 	{
