@@ -7,11 +7,11 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.dk.blobby</string>
+	<string>no.julalan.blobby</string>
 	<key>CFBundleName</key>
-	<string>Blobby Volley</string>
+	<string>Blobby Volley JulaLAN</string>
 	<key>CFBundleDisplayName</key>
-	<string>Blobby Volley</string>
+	<string>Blobby Volley JulaLAN</string>
 	<key>CFBundleIconFile</key>
 	<string>icon</string>
 	<key>CFBundlePackageType</key>

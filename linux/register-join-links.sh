@@ -38,8 +38,8 @@ quoted=$(printf '%s' "$game" | sed -e 's/\\/\\\\\\\\/g' -e 's/"/\\\\"/g' -e 's/`
 
 desktop="[Desktop Entry]
 Type=Application
-Name=Blobby Volley 2 join link
-Comment=Opens tournament join links in Blobby Volley 2
+Name=Blobby Volley JulaLAN join link
+Comment=Opens tournament join links in Blobby Volley JulaLAN
 Icon=blobby
 Exec=\"$quoted\" %u
 MimeType=x-scheme-handler/blobby;

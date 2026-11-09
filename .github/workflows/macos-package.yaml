@@ -68,14 +68,14 @@ jobs:
           if [ -z "$VERSION" ]; then
             VERSION=$(echo "$SHA" | cut -c1-7)
           fi
-          echo "package=blobby-volley-2-$VERSION-macos-$ARCH" >> "$GITHUB_OUTPUT"
+          echo "package=julalan-blobby-$VERSION-macos-$ARCH" >> "$GITHUB_OUTPUT"
       - name: Package
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
         run: |
           sh .github/scripts/package-macos.sh build "dist/$PACKAGE"
           find dist -type f | sort
-          lipo -archs "dist/$PACKAGE/Blobby Volley.app/Contents/MacOS/blobby"
+          lipo -archs "dist/$PACKAGE/Blobby Volley JulaLAN.app/Contents/MacOS/blobby"
       # The README says the package needs macOS 15 or newer, so nothing in it may ask for more.
       - name: Check the minimum macOS version
         env:
@@ -101,7 +101,7 @@ jobs:
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
           SMOKE_LIBRARIES: "1"
-        run: sh .github/scripts/smoke-unix.sh "dist/$PACKAGE" 5 "Blobby Volley.app/Contents/MacOS/blobby"
+        run: sh .github/scripts/smoke-unix.sh "dist/$PACKAGE" 5 "Blobby Volley JulaLAN.app/Contents/MacOS/blobby"
       # ditto keeps the symlinks, the permissions and the signatures, which the artifact upload would lose.
       - name: Zip
         env:
@@ -128,7 +128,7 @@ jobs:
       - name: Download packages
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: blobby-volley-2-${{ inputs.version }}-macos-*
+          pattern: julalan-blobby-${{ inputs.version }}-macos-*
           path: pkg
           merge-multiple: true
       - name: Upload the zips
@@ -138,4 +138,4 @@ jobs:
           TAG: ${{ inputs.release_tag }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release upload "$TAG" "pkg/blobby-volley-2-$VERSION-macos-arm64.zip" "pkg/blobby-volley-2-$VERSION-macos-x64.zip" --repo "$REPO" --clobber
+          gh release upload "$TAG" "pkg/julalan-blobby-$VERSION-macos-arm64.zip" "pkg/julalan-blobby-$VERSION-macos-x64.zip" --repo "$REPO" --clobber
