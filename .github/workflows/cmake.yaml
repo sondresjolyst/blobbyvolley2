@@ -2,13 +2,6 @@
 # the ubuntu package sources
 name: Old CMake
 on:
-  push:
-    branches:
-      - "main"
-    paths-ignore:
-      - "**.md"
-      - "AUTHORS"
-      - "ChangeLog"
   pull_request:
     branches:
       - "main"

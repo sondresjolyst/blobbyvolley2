@@ -215,7 +215,7 @@ Start the game from its own folder, as Explorer and shortcuts do.
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
 The zip also holds `COPYING`, this README, the start script of the tournament server and the license texts of the bundled DLLs in `licenses`.
 
-Test builds: every build of `main` and every pull request uploads a Windows package as an artifact named `julalan-blobby-<short sha>-windows-x64`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
+Test builds: every pull request uploads a Windows package as an artifact named `julalan-blobby-<short sha>-windows-x64`. Open the workflow run on the Actions page of the fork and download the artifact. These builds are not releases.
 
 ### Download for macOS
 Download `julalan-blobby-<version>-macos-arm64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) for a Mac with Apple Silicon (M1 or newer). For a Mac with an Intel processor, take `julalan-blobby-<version>-macos-x64.zip`. Double-click the zip to unpack it.
@@ -255,7 +255,7 @@ Start the dedicated server from the same folder, so it finds its `data` folder:
 To let a click on a join link open this copy of the game, run `sh register-join-links.sh "$PWD/blobby"` once in the folder. See [Join links](#join-links).
 The package also holds `COPYING`, this README and the copyright files of the bundled libraries in `licenses`.
 
-Test builds: every build of `main` and every pull request also uploads a macOS package for each processor and a Linux package. They are artifacts named `julalan-blobby-<short sha>-macos-arm64`, `julalan-blobby-<short sha>-macos-x64` and `julalan-blobby-<short sha>-linux-x64`. Each artifact holds the zip or tar.gz, so unpack the download once more. These builds are not releases.
+Test builds: every pull request also uploads a macOS package for each processor and a Linux package. They are artifacts named `julalan-blobby-<short sha>-macos-arm64`, `julalan-blobby-<short sha>-macos-x64` and `julalan-blobby-<short sha>-linux-x64`. Each artifact holds the zip or tar.gz, so unpack the download once more. These builds are not releases.
 
 ### Build under Windows with Visual Studio and vcpkg
 1. Install Visual Studio with the **Desktop development with C++** workload.
