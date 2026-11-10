@@ -60,6 +60,11 @@ namespace
 	// wait before an assigned game whose player could not be found is tried again
 	const unsigned TOURNAMENT_RETRY_DELAY_MS = 1000;
 
+	// a game waits this long at most for a player who was just told about the sponsor board to ask for its logos,
+	// and is tried again after the short delay meanwhile
+	const unsigned SPONSOR_WAIT_MS = 2000;
+	const unsigned SPONSOR_RETRY_DELAY_MS = 100;
+
 	// the longest the bot script of a training match may take for one step before it plays its last input again,
 	// as the load test bot does
 	const std::chrono::milliseconds TRAINING_BOT_BUDGET(10);
@@ -641,6 +646,7 @@ void DedicatedServer::removeConnection(const packet_ptr& packet)
 	mSentSponsorVersion.erase(packet->playerId);
 	mSentLogos.erase(packet->playerId);
 	mHeldLogos.erase(packet->playerId);
+	mSponsorWait.erase(packet->playerId);
 	if( mJoinCodes )
 	{
 		if( mTournament )
@@ -871,13 +877,16 @@ void DedicatedServer::updateTournament()
 
 	checkTournamentGames( now );
 
+	// a new player gets its name and the sponsor board before its first game starts
+	sendTournamentStatus( now );
+	updateSponsors( now );
+
 	for( const auto& order : mTournament->takeGamesToStart( now ) )
 	{
 		startTournamentGame( order );
 	}
 
 	sendTournamentStatus( now );
-	updateSponsors( now );
 }
 
 void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
@@ -1018,6 +1027,14 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	}
 	mMissingPlayerLogged.erase( match.matchId );
 
+	// the logos a player asks for now go out before the game, not after it
+	const unsigned long long now = steadyMilliseconds();
+	if( waitsForSponsors( id1, now ) || waitsForSponsors( id2, now ) )
+	{
+		mTournament->gameNotStarted( match.matchId, true, now + SPONSOR_RETRY_DELAY_MS );
+		return;
+	}
+
 	NetworkPlayer& left = *player1->second;
 	NetworkPlayer& right = *player2->second;
 
@@ -1113,6 +1130,13 @@ void DedicatedServer::startTrainingGame(const TournamentDirector::GameOrder& ord
 		return;
 	}
 	mMissingPlayerLogged.erase( match.matchId );
+
+	const unsigned long long now = steadyMilliseconds();
+	if( waitsForSponsors( id, now ) )
+	{
+		mTournament->gameNotStarted( match.matchId, true, now + SPONSOR_RETRY_DELAY_MS );
+		return;
+	}
 
 	NetworkPlayer& human = *player->second;
 	std::vector<unsigned char> replay = finishForNextGame( human.getGame() );
@@ -1266,6 +1290,8 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 		RakNet::BitStream stream;
 		mSponsors.writeAnnouncement( stream );
 		mServer->SendOnChannel( stream, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL, player );
+		// a player who still has to fetch logos asks for them right away
+		mSponsorWait[player] = now_ms + SPONSOR_WAIT_MS;
 	}
 
 	// logos asked for during a game go out once the game is over
@@ -1284,6 +1310,12 @@ void DedicatedServer::updateSponsors(unsigned long long now_ms)
 		}
 		it = mHeldLogos.erase( it );
 	}
+}
+
+bool DedicatedServer::waitsForSponsors(PlayerID player, unsigned long long now_ms) const
+{
+	auto found = mSponsorWait.find( player );
+	return found != mSponsorWait.end() && now_ms < found->second;
 }
 
 bool DedicatedServer::inRunningGame(PlayerID player) const
@@ -1315,6 +1347,7 @@ void DedicatedServer::processSponsorRequest(PlayerID source, RakNet::BitStream& 
 
 	// a player gets each logo once, so a request cannot make the server send the same data again and again
 	std::vector<const sponsors::LogoFile*> logos = mSponsors.answer( stream, mSentLogos[source] );
+	mSponsorWait.erase( source );
 	if( inRunningGame( source ) )
 	{
 		// the logos wait until the game is over, so they do not compete with it
