@@ -247,3 +247,15 @@ BOOST_AUTO_TEST_CASE( client_connects_through_a_forwarded_port )
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE( rakpeer_player_id )
+
+BOOST_AUTO_TEST_CASE( text_shows_the_address_in_order )
+{
+	PlayerID id;
+	id.binaryAddress = inet_addr("172.18.0.6");
+	id.port = 2400;
+	BOOST_CHECK_EQUAL(id.toString(), "172.18.0.6:2400");
+}
+
+BOOST_AUTO_TEST_SUITE_END()

@@ -23,6 +23,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <vector>
 
+struct DuelMatchState;
+struct WinNotificationData;
+
 /// The skill of the simple bot when none is given.
 const int DEFAULT_SKILL = 70;
 /// The difficulty of a script bot is the bot strength of the options screen of the game.
@@ -53,3 +56,7 @@ const char* const LOADBOT_USAGE =
 /// Returns false and sets error when the arguments are not valid.
 bool parseLoadbotArgs(const std::vector<std::string>& args, const std::vector<std::string>& scripts,
 					LoadbotArgs& out, std::string& error);
+
+/// Puts the final score of a win notification into the state, since the last game update may
+/// not arrive. A notification without a score leaves the state as it is.
+void applyWinScore(const WinNotificationData& win, DuelMatchState& state);

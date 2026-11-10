@@ -418,7 +418,10 @@ namespace
 					{
 						WinNotificationData win;
 						if (readWinNotification(stream, win))
+						{
+							applyWinScore(win, state);
 							endGame("won_notification", win.winner == LEFT_PLAYER ? 1 : 0);
+						}
 						break;
 					}
 					case ID_OPPONENT_DISCONNECTED:
