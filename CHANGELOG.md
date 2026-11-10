@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/sondresjolyst/blobbyvolley2-tournament/compare/v0.1.0...v0.2.0) (2026-11-10)
+
+
+### Features
+
+* add Windows file properties to the game, server and load test bot ([#74](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/74)) ([89974b2](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/89974b2c32b88e7f6e39aad12b163f2f7c400434))
+* **server:** play training matches against a bot script on the server ([#76](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/76)) ([38ad9ef](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/38ad9eff5872f41bf9b9041d2780f832edd0a5cc))
+
+
+### Bug Fixes
+
+* **ci:** read the release tag from the manifest when release-please gives no tag for the root package ([#68](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/68)) ([56f30b4](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/56f30b4ffa4189796d21cfaa9985f6c901679d3c))
+* clear compiler warnings in the game logic, network code and RakNet ([#73](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/73)) ([1f2d50f](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/1f2d50fe54601e244420708b04200b6cca56038a))
+* log the final loadbot score and client addresses correctly ([#77](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/77)) ([4b8bee4](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/4b8bee47bb7460c11e690b3ed7f10134cfe0dfea))
+* send the final score with the win notification and the match points with the rules ([#75](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/75)) ([d98dddd](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/d98dddd519d0b27a98f4a48bb0cd71d28be2a8c4))
+* **server:** pause a tournament game while a player sends nothing ([#78](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/78)) ([f66fbea](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/f66fbeab630b59d809aa99978aef2ce0528f82b3))
+
 ## 0.1.0 (2026-11-09)
 
 
