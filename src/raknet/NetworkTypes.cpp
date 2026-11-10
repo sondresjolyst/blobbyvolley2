@@ -55,14 +55,10 @@ int operator<( const PlayerID& left, const PlayerID& right )
 
 std::string PlayerID::toString() const
 {
-	auto tmp = binaryAddress;
-	std::string ip =  std::to_string(tmp & 0xFF);
-	tmp >>= 8;
-	ip =  std::to_string(tmp & 0xFF) + "." + ip;
-	tmp >>= 8;
-	ip =  std::to_string(tmp & 0xFF) + "." + ip;
-	tmp >>= 8;
-	ip =  std::to_string(tmp & 0xFF) + "." + ip;
+	// binaryAddress holds the address in network byte order, so its first byte in memory is the first part
+	const unsigned char* bytes = reinterpret_cast<const unsigned char*>(&binaryAddress);
+	std::string ip = std::to_string(bytes[0]) + "." + std::to_string(bytes[1]) + "."
+		+ std::to_string(bytes[2]) + "." + std::to_string(bytes[3]);
 
 	return ip + ":" +  std::to_string(port);
 }

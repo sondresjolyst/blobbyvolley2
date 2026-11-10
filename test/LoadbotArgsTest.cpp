@@ -3,7 +3,11 @@
 #include <string>
 #include <vector>
 
+#include "DuelMatchState.h"
 #include "LoadbotArgs.h"
+#include "NetworkMessage.h"
+#include "raknet/BitStream.h"
+#include "raknet/PacketEnumerations.h"
 
 namespace
 {
@@ -135,6 +139,40 @@ BOOST_AUTO_TEST_CASE(refuses_broken_command_lines)
 	failure({"host", "1234", "CODE", "--skill", "50"});
 	failure({"host", "1234", "CODE", "--script", "reduced", "--script", "hyp014"});
 	failure({"host", "1234", "CODE", "--script", "reduced", "--difficulty", "1", "--difficulty", "2"});
+}
+
+BOOST_AUTO_TEST_CASE(the_win_notification_gives_the_final_score)
+{
+	DuelMatchState state;
+	state.logicState.leftScore = 4;
+	state.logicState.rightScore = 3;
+
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_WIN_NOTIFICATION);
+	stream.Write((int)LEFT_PLAYER);
+	stream.Write(5);
+	stream.Write(3);
+	WinNotificationData win;
+	BOOST_REQUIRE(readWinNotification(stream, win));
+	applyWinScore(win, state);
+	BOOST_CHECK_EQUAL(state.getScore(LEFT_PLAYER), 5);
+	BOOST_CHECK_EQUAL(state.getScore(RIGHT_PLAYER), 3);
+}
+
+BOOST_AUTO_TEST_CASE(a_win_notification_without_score_keeps_the_last_score)
+{
+	DuelMatchState state;
+	state.logicState.leftScore = 4;
+	state.logicState.rightScore = 3;
+
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_WIN_NOTIFICATION);
+	stream.Write((int)LEFT_PLAYER);
+	WinNotificationData win;
+	BOOST_REQUIRE(readWinNotification(stream, win));
+	applyWinScore(win, state);
+	BOOST_CHECK_EQUAL(state.getScore(LEFT_PLAYER), 4);
+	BOOST_CHECK_EQUAL(state.getScore(RIGHT_PLAYER), 3);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

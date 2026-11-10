@@ -24,6 +24,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <cerrno>
 #include <cstdlib>
 
+#include "DuelMatchState.h"
+#include "NetworkMessage.h"
+
 namespace
 {
 	/// Reads a whole decimal number. Returns false for empty text, other characters or an overflow.
@@ -180,4 +183,12 @@ bool parseLoadbotArgs(const std::vector<std::string>& args, const std::vector<st
 		out.difficulty = (int)difficulty;
 	}
 	return true;
+}
+
+void applyWinScore(const WinNotificationData& win, DuelMatchState& state)
+{
+	if (!win.hasScore)
+		return;
+	state.logicState.leftScore = win.leftScore;
+	state.logicState.rightScore = win.rightScore;
 }
