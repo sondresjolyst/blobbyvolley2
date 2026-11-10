@@ -1,3 +1,5 @@
+/* Changed by Sjølyst Innovation AS, 2026 */
+
 #include "IScriptableComponent.h"
 
 #include "lua.hpp"
