@@ -64,6 +64,10 @@ namespace
 	// as the load test bot does
 	const std::chrono::milliseconds TRAINING_BOT_BUDGET(10);
 
+	// a player in a running tournament game who sends nothing this long pauses the game until it is back,
+	// and its join code may then move to a new connection, which takes its place in the game
+	const std::chrono::milliseconds PLAYER_SILENCE_LIMIT(2000);
+
 	unsigned long long steadyMilliseconds()
 	{
 		auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -235,6 +239,15 @@ void DedicatedServer::processPackets()
 				removeConnection( packet );
 				break;
 			case ID_ENTER_SERVER:
+				try {
+					RakNet::BitStream stream(packet->data, packet->length, false);
+					stream.IgnoreBytes(1);	// ignore the message id
+					processEnterServer(packet->playerId, stream, std::chrono::steady_clock::now());
+				} catch (const std::exception& error) {
+					syslog(LOG_ERR, "An error occurred while processing packet (%d) from %s: %s",
+						   packet_id, packet->playerId.toString().c_str(), error.what());
+				}
+				break;
 			case ID_LOBBY:
 			case ID_BLOBBY_SERVER_PRESENT:
 			case ID_SPONSORS:
@@ -268,6 +281,7 @@ void DedicatedServer::updateGames()
 
 	if( mJoinCodes )
 		mJoinCodes->poll( steadyMilliseconds() );
+	retryWaitingEntries();
 	closeConnectionsThatDidNotEnter();
 	closeRefusedConnections();
 
@@ -440,7 +454,28 @@ void DedicatedServer::processBlobbyServerPresent( PlayerID source, RakNet::BitSt
 	}
 }
 
-void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& data) {
+void DedicatedServer::retryWaitingEntries()
+{
+	std::vector<WaitingEntry> entries;
+	entries.swap( mWaitingEntries );
+	mRetryingEntries = true;
+	for( auto& entry : entries )
+	{
+		if( !isConnected(entry.source) )
+			continue;
+		RakNet::BitStream stream(entry.packet.data(), entry.packet.size(), false);
+		stream.IgnoreBytes(1);	// ignore the message id
+		try {
+			processEnterServer( entry.source, stream, entry.since );
+		} catch (const std::exception& error) {
+			syslog(LOG_ERR, "An error occurred while processing the entry from %s: %s",
+				   entry.source.toString().c_str(), error.what());
+		}
+	}
+	mRetryingEntries = false;
+}
+
+void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& data, std::chrono::steady_clock::time_point since) {
 	mEntryDeadlines.remove(source);
 
 	// a connection enters the server only once
@@ -457,8 +492,20 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		return;
 	}
 
+	// an entry that waits already is tried again by itself
+	for( const auto& waiting : mWaitingEntries )
+	{
+		if( waiting.source == source )
+			return;
+	}
+
+	// the stream of the entry, kept in case it has to wait
+	const std::vector<unsigned char> packet(data.GetData(), data.GetData() + data.GetNumberOfBytesUsed());
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
 	const uint32_t features = readClientFeatures(data);
+	// the running game whose place this player takes again, if any
+	std::shared_ptr<NetworkGame> seat;
+	PlayerSide seatSide = NO_PLAYER;
 
 	if( mJoinCodes )
 	{
@@ -469,14 +516,46 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 			return;
 		}
 
-		// a known code entered again moves to the new connection, the old one is closed
+		// The code of a player in a running game moves only when that player lost its connection. The entry
+		// waits until the game either heard from the player again or paused because the player went silent.
 		PlayerID holder;
+		if( mJoinCodes->findHolder( newplayer->getName(), holder ) && holder != source && inRunningGame( holder ) )
+		{
+			auto game = mPlayerMap.find( holder )->second->getGame();
+			const PlayerSide side = game->getSide( holder );
+			const auto now = std::chrono::steady_clock::now();
+			const auto silence = game->getSilence( side );
+			// a player that the game paused for the other one sends nothing, but it is there
+			const bool pausedForOther = game->isWaitingForPlayer() && !game->isMissing( side );
+			if( game->pausesForSilence() && side != NO_PLAYER && !game->isMissing( side ) && !pausedForOther
+				&& silence >= std::chrono::duration_cast<std::chrono::milliseconds>( now - since )
+				&& now - since < PLAYER_SILENCE_LIMIT + std::chrono::seconds(1) )
+			{
+				if( !mRetryingEntries )
+					syslog(LOG_NOTICE, "Entry from %s waits to see whether the player of its code is still in its game",
+						   source.toString().c_str());
+				mWaitingEntries.push_back( WaitingEntry{ source, packet, since } );
+				return;
+			}
+		}
+
+		// a known code entered again moves to the new connection, the old one is closed
 		// a player in a running game keeps the code, so nobody can end a match by entering it.
+		// A player the game waits for has gone silent, a new connection takes its place in the game.
 		// A connection that is really gone times out and frees the code by itself.
-		auto canLeave = [this](const PlayerID& id){ return !inRunningGame( id ); };
+		auto canLeave = [this](const PlayerID& id){ return !inRunningGame( id ) || isMissingFromGame( id ); };
 		switch( mJoinCodes->checkHandover( source, newplayer->getName(), steadyMilliseconds(), canLeave, holder ) )
 		{
 			case JoinCodeGate::Handover::HAND_OVER:
+				if( inRunningGame( holder ) )
+				{
+					// the game keeps going with the new connection, so the old one leaves without ending it
+					std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+					auto old = mPlayerMap.find( holder );
+					seat = old->second->getGame();
+					seatSide = seat->getSide( holder );
+					old->second->setGame( nullptr );
+				}
 				handOverJoinCode( holder );
 				break;
 			case JoinCodeGate::Handover::TOO_SOON:
@@ -502,7 +581,9 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		mPlayerMap[source] = newplayer;
 	}
 
-	mMatchMaker.addPlayer(source, newplayer);
+	// a player who takes its place in a running game is not in the lobby
+	if( !seat )
+		mMatchMaker.addPlayer(source, newplayer);
 
 	if( isTournament() )
 	{
@@ -510,6 +591,22 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 		// only a game that knows tournaments gets the sponsor board
 		if( (features & CLIENT_FEATURE_TOURNAMENT) != 0 )
 			mSponsorPlayers.insert( source );
+	}
+
+	if( seat )
+	{
+		// the tournament status goes out before the game, so the client knows it plays a tournament
+		if( isTournament() )
+			sendTournamentStatus( steadyMilliseconds() );
+		// a mirrored player sees itself on the other side
+		const bool switched = newplayer->getDesiredSide() != NO_PLAYER && newplayer->getDesiredSide() != seatSide;
+		{
+			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
+			newplayer->setGame( seat );
+		}
+		seat->replacePlayer( seatSide, source, switched );
+		syslog(LOG_NOTICE, "Player '%s' from %s takes its place in the running game again",
+			   newplayer->getName().c_str(), source.toString().c_str());
 	}
 
 	syslog(LOG_DEBUG, "Player added (%d) from %s (%s), %d players available",
@@ -537,6 +634,8 @@ void DedicatedServer::removeConnection(const packet_ptr& packet)
 	mActiveConnections.erase(packet->playerId);
 	mRefusedConnections.erase(packet->playerId);
 	mEntryDeadlines.remove(packet->playerId);
+	mWaitingEntries.erase( std::remove_if( mWaitingEntries.begin(), mWaitingEntries.end(),
+		[&](const WaitingEntry& e){ return e.source == packet->playerId; } ), mWaitingEntries.end() );
 	mSentStatus.erase(packet->playerId);
 	mSponsorPlayers.erase(packet->playerId);
 	mSentSponsorVersion.erase(packet->playerId);
@@ -670,7 +769,7 @@ void DedicatedServer::processSingleMessage(MessageType message_id, PlayerID sour
 		// player connects to server
 		case ID_ENTER_SERVER:
 		{
-			processEnterServer(source, data);
+			processEnterServer(source, data, std::chrono::steady_clock::now());
 			break;
 		}
 		case ID_LOBBY:
@@ -788,6 +887,20 @@ void DedicatedServer::checkTournamentGames(unsigned long long now_ms)
 		TournamentGame& entry = *it;
 		if( !entry.reported && entry.game->getWinner() == NO_PLAYER && entry.game->isGameValid() )
 		{
+			// the log shows when a game waits for a silent player
+			const bool waiting = entry.game->isWaitingForPlayer();
+			if( waiting != entry.waiting )
+			{
+				entry.waiting = waiting;
+				if( waiting )
+					syslog(LOG_NOTICE, "Match %d: the game is paused at %d:%d, player %d sends nothing", entry.matchId,
+						   entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER),
+						   entry.game->isMissing(LEFT_PLAYER) ? entry.player1 : entry.player2);
+				else
+					syslog(LOG_NOTICE, "Match %d: the game goes on at %d:%d, every player is back", entry.matchId,
+						   entry.game->getScore(LEFT_PLAYER), entry.game->getScore(RIGHT_PLAYER));
+			}
+
 			// the site shows the score of running games
 			const int points1 = entry.game->getScore(LEFT_PLAYER);
 			const int points2 = entry.game->getScore(RIGHT_PLAYER);
@@ -940,6 +1053,8 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 
 		// a tournament game cannot be paused, so one player cannot freeze a match
 		game->setPauseAllowed( false );
+		// a player who lost the connection does not lose points meanwhile
+		game->setSilenceLimit( PLAYER_SILENCE_LIMIT );
 
 		// a late replay request reaches the new game, which answers with the old replay
 		game->setPreviousReplay( LEFT_PLAYER, std::move(replayLeft) );
@@ -975,7 +1090,7 @@ void DedicatedServer::startTournamentGame(const TournamentDirector::GameOrder& o
 	SWLS_Games++;
 	mGameList.push_back( game );
 	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
-												match.player1, match.player2, -1, -1, false, false } );
+												match.player1, match.player2, -1, -1, false, false, false } );
 
 	syslog(LOG_NOTICE, "Match %d game %d started: '%s' vs. '%s', rules %s, %d points, speed %d, best of %d",
 		   match.matchId, order.game, left.getName().c_str(), right.getName().c_str(),
@@ -1024,6 +1139,8 @@ void DedicatedServer::startTrainingGame(const TournamentDirector::GameOrder& ord
 		game->setBot( RIGHT_PLAYER, std::move(script) );
 		// a training game cannot be paused either, so it never holds a training slot for long
 		game->setPauseAllowed( false );
+		// only the player counts, the bot never goes silent
+		game->setSilenceLimit( PLAYER_SILENCE_LIMIT );
 		game->setPreviousReplay( LEFT_PLAYER, std::move(replay) );
 		{
 			std::lock_guard<std::mutex> lock( mPlayerMapMutex );
@@ -1061,7 +1178,7 @@ void DedicatedServer::startTrainingGame(const TournamentDirector::GameOrder& ord
 	SWLS_Games++;
 	mGameList.push_back( game );
 	mTournamentGames.push_back( TournamentGame{ match.matchId, game, std::chrono::system_clock::now(), false,
-												match.player1, 0, -1, -1, true, false } );
+												match.player1, 0, -1, -1, true, false, false } );
 
 	syslog(LOG_NOTICE, "Match %d training started: '%s' vs. the bot %s at difficulty %d, rules %s, %d points, speed %d",
 		   match.matchId, human.getName().c_str(), match.bot.c_str(), match.botDifficulty,
@@ -1176,6 +1293,15 @@ bool DedicatedServer::inRunningGame(PlayerID player) const
 		return false;
 	auto game = found->second->getGame();
 	return game && game->isGameValid() && game->getWinner() == NO_PLAYER;
+}
+
+bool DedicatedServer::isMissingFromGame(PlayerID player) const
+{
+	auto found = mPlayerMap.find( player );
+	if( found == mPlayerMap.end() )
+		return false;
+	auto game = found->second->getGame();
+	return game && game->isMissing( game->getSide( player ) );
 }
 
 void DedicatedServer::processSponsorRequest(PlayerID source, RakNet::BitStream& stream)
