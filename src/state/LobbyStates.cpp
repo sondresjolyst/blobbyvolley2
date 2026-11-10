@@ -155,7 +155,9 @@ void LobbyState::step_impl()
 {
 	// process packets
 	packet_ptr packet;
-	while (nullptr != (packet = mClient->Receive()))
+	// the packets after the start of a game belong to the game, which shows the name and the sponsor board they bring
+	bool gameStarted = false;
+	while (!gameStarted && nullptr != (packet = mClient->Receive()))
 	{
 		switch(packet->data[0])
 		{
@@ -299,6 +301,7 @@ void LobbyState::step_impl()
 					if (mTournament)
 						game->setTournamentLobby(mInfo);
 					switchState( game );
+					gameStarted = true;
 				}
 				}
 				break;

@@ -138,6 +138,8 @@ class DedicatedServer
 		void updateSponsors(unsigned long long now_ms);
 		void processSponsorRequest(PlayerID source, RakNet::BitStream& stream);
 		// true while the player plays a game that has no winner yet
+		/// true while a player who was just told about the sponsor board may still ask for its logos
+		bool waitsForSponsors(PlayerID player, unsigned long long now_ms) const;
 		bool inRunningGame(PlayerID player) const;
 		// true while the running game of the player is paused because that player went silent
 		bool isMissingFromGame(PlayerID player) const;
@@ -234,4 +236,6 @@ class DedicatedServer
 		std::map<PlayerID, std::set<std::string>> mSentLogos;
 		// logos a player asked for during a game, sent when the game is over
 		std::map<PlayerID, std::vector<const sponsors::LogoFile*>> mHeldLogos;
+		// until when a game of a player waits for its request for logos
+		std::map<PlayerID, unsigned long long> mSponsorWait;
 };

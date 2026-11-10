@@ -35,8 +35,12 @@
 #include "server/NetworkPlayer.h"
 #include "server/ThreadSafeRakServer.h"
 #include "server/Tournament.h"
+#include "Sha256.h"
+#include "SponsorSync.h"
+#include "TestBmp.h"
 #include "TestDir.h"
 #include "TestServer.h"
+#include "TournamentProtocol.h"
 
 // the server binary defines these
 std::atomic<int> SWLS_PacketCount{0};
@@ -112,6 +116,8 @@ namespace
 		// sends its input on every drain once it is in a game, as the game does in every frame
 		bool sendsInput = false;
 		bool inGame = false;
+		// sees every packet as it arrives, as the game does
+		std::function<void(const std::vector<unsigned char>&)> onPacket;
 
 		void enter(const std::string& name)
 		{
@@ -153,6 +159,8 @@ namespace
 				}
 				if (data[0] == ID_GAME_READY)
 					inGame = true;
+				if (onPacket)
+					onPacket(data);
 				packets.push_back(std::move(data));
 			}
 			if (sendsInput && inGame && !closed)
@@ -953,4 +961,132 @@ BOOST_AUTO_TEST_CASE( server_runs_a_normal_match_next_to_a_training )
 	BOOST_CHECK_EQUAL(f.server->getActiveGamesCount(), 2);
 }
 
+namespace
+{
+	// position of the first packet with this id, or -1
+	int firstIndex(const Client& client, unsigned char id)
+	{
+		for (std::size_t i = 0; i < client.packets.size(); ++i)
+		{
+			if (client.packets[i][0] == id)
+				return (int)i;
+		}
+		return -1;
+	}
+
+	// position of the first tournament status that names the player, or -1
+	int firstStatusNaming(const Client& client, const std::string& name)
+	{
+		for (std::size_t i = 0; i < client.packets.size(); ++i)
+		{
+			const auto& p = client.packets[i];
+			if (p.size() < 2 || p[0] != ID_LOBBY || p[1] != (unsigned char)LobbyPacketType::TOURNAMENT_STATUS)
+				continue;
+			RakNet::BitStream stream(const_cast<unsigned char*>(p.data()), p.size(), false);
+			auto in = createGenericReader(&stream);
+			unsigned char byte = 0;
+			in->byte(byte);
+			in->byte(byte);
+			if (readTournamentStatus(*in).ownName == name)
+				return (int)i;
+		}
+		return -1;
+	}
+
+	std::string makeSponsorBmp(int width, int height, unsigned char fill)
+	{
+		const std::uint32_t stride = (width * 3 + 3) / 4 * 4;
+		const std::uint32_t size = 54 + stride * height;
+		std::string d(size, char(fill));
+		std::fill(d.begin(), d.begin() + 54, char(0));
+		writeBmpHeader(d, size, 54, 40, width, height, 24, 0);
+		return d;
+	}
+
+	struct MemoryLogoCache : public sponsors::LogoCache
+	{
+		std::map<std::string, std::string> files;
+		bool load(const std::string& hash, std::string& data) override
+		{
+			auto found = files.find(hash);
+			if (found == files.end())
+				return false;
+			data = found->second;
+			return true;
+		}
+		void store(const std::string& hash, const std::string& data) override { files[hash] = data; }
+		void keepOnly(const std::set<std::string>&) override {}
+	};
+}
+
+// The client takes the name of the first tournament status. A status that comes after the
+// game started reaches a lobby that is already gone, and the game shows the config name.
+BOOST_AUTO_TEST_CASE( training_player_learns_its_name_before_the_game )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\" botDifficulty=\"0\"/>\n", true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0; }));
+	const int status = firstStatusNaming(ola, "Ola");
+	BOOST_REQUIRE_GE(status, 0);
+	BOOST_CHECK_LT(status, firstIndex(ola, ID_RULES_CHECKSUM));
+	BOOST_CHECK_EQUAL(gameReadyOpponent(ola), "Bot reduced");
+}
+
+BOOST_AUTO_TEST_CASE( second_player_of_a_match_learns_its_name_before_the_game )
+{
+	ServerFixture f(MATCH_7, true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return firstStatusNaming(ola, "Ola") >= 0; }));
+	Client& kari = f.connect();
+	kari.enter(KARI);
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0 && kari.count(ID_GAME_READY) > 0; }));
+	const int status = firstStatusNaming(kari, "Kari");
+	BOOST_REQUIRE_GE(status, 0);
+	BOOST_CHECK_LT(status, firstIndex(kari, ID_RULES_CHECKSUM));
+	BOOST_CHECK_EQUAL(gameReadyOpponent(kari), "Ola");
+	BOOST_CHECK_EQUAL(gameReadyOpponent(ola), "Kari");
+}
+
+// A player with an empty logo cache gets the board before its first game, not when the game is over.
+BOOST_AUTO_TEST_CASE( new_player_gets_the_sponsor_board_before_the_first_game )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\" botDifficulty=\"0\"/>\n", true);
+	sponsors::Board board;
+	for (unsigned char fill : {0x20, 0x60, 0xA0})
+	{
+		const std::string data = makeSponsorBmp(16, 8, fill);
+		board.logos.push_back(sponsors::LogoFile{sha256Hex(data), data});
+	}
+	bool polled = false;
+	f.server->setSponsorSource([&](sponsors::Board& out){
+		if (polled)
+			return false;
+		polled = true;
+		out = board;
+		return true;
+	});
+
+	Client& ola = f.connect();
+	MemoryLogoCache cache;
+	sponsors::BoardReceiver receiver(cache);
+	bool readyBeforeGame = false;
+	ola.onPacket = [&](const std::vector<unsigned char>& data){
+		if (data[0] == ID_GAME_READY)
+			readyBeforeGame = receiver.ready();
+		if (data[0] != ID_SPONSORS)
+			return;
+		RakNet::BitStream stream(const_cast<unsigned char*>(data.data()), data.size(), false);
+		stream.IgnoreBytes(1);
+		RakNet::BitStream answer;
+		if (receiver.handle(stream, answer) == sponsors::BoardReceiver::Result::REQUEST)
+			ola.rak.Send(&answer, LOW_PRIORITY, RELIABLE_ORDERED, sponsors::NETWORK_CHANNEL);
+	};
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0; }));
+	BOOST_CHECK(readyBeforeGame);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
+
