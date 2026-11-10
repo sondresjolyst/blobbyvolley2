@@ -1,3 +1,5 @@
+/* Changed by Sjølyst Innovation AS, 2026 */
+
 #ifndef LOBBYSTATES_H_INCLUDED
 #define LOBBYSTATES_H_INCLUDED
 
