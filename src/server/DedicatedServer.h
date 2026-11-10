@@ -108,7 +108,9 @@ class DedicatedServer
 		// packet handling functions / utility functions
 		/// This function encapsulates processing our custom packets from the server main loop.
 		void processSingleMessage(MessageType message_id, PlayerID source, RakNet::BitStream& data);
-		void processEnterServer(PlayerID source, RakNet::BitStream& stream);
+		/// since is when the entry arrived, an entry that waits for a silent player is tried again
+		void processEnterServer(PlayerID source, RakNet::BitStream& stream, std::chrono::steady_clock::time_point since);
+		void retryWaitingEntries();
 		void processBlobbyServerPresent(PlayerID source, RakNet::BitStream& stream);
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		// tells a client why it cannot enter or why its connection closes
@@ -137,6 +139,8 @@ class DedicatedServer
 		void processSponsorRequest(PlayerID source, RakNet::BitStream& stream);
 		// true while the player plays a game that has no winner yet
 		bool inRunningGame(PlayerID player) const;
+		// true while the running game of the player is paused because that player went silent
+		bool isMissingFromGame(PlayerID player) const;
 
 		// raknet server used
 		const std::unique_ptr<ThreadSafeRakServer> mServer;
@@ -177,6 +181,17 @@ class DedicatedServer
 		// a new connection has to send ID_ENTER_SERVER within ten seconds
 		EntryDeadlines mEntryDeadlines{ std::chrono::seconds(10) };
 
+		// entries with the code of a player in a running game who went quiet, they wait until it is
+		// clear whether that player is gone
+		struct WaitingEntry
+		{
+			PlayerID source;
+			std::vector<unsigned char> packet;
+			std::chrono::steady_clock::time_point since;
+		};
+		std::vector<WaitingEntry> mWaitingEntries;
+		bool mRetryingEntries = false;
+
 		// starts assigned matches, empty on a casual server
 		std::unique_ptr<TournamentDirector> mTournament;
 		// players file generation the director knows
@@ -197,6 +212,8 @@ class DedicatedServer
 			bool training;
 			// the bot stats of a training game were logged
 			bool botLogged;
+			// the game was paused for a silent player when it was checked last
+			bool waiting;
 		};
 		// logs once how the bot of a finished training game did
 		void logTrainingBot(TournamentGame& entry);

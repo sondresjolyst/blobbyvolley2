@@ -147,6 +147,9 @@ class JoinCodeGate
 		Handover checkHandover(const PlayerID& player, const std::string& name, unsigned long long now_ms,
 							const HolderCheck& holderCanLeave, PlayerID& holder);
 
+		/// Finds the connection that holds the known join code in name. Returns false when nobody holds it.
+		bool findHolder(const std::string& name, PlayerID& holder) const;
+
 		/// Frees the code of a player that left. Does nothing for an unknown player.
 		void release(const PlayerID& player);
 

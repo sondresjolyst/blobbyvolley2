@@ -109,6 +109,9 @@ namespace
 		bool closed = false;
 		// checksums this client lets pass without an answer
 		int checksumsToIgnore = 0;
+		// sends its input on every drain once it is in a game, as the game does in every frame
+		bool sendsInput = false;
+		bool inGame = false;
 
 		void enter(const std::string& name)
 		{
@@ -148,7 +151,17 @@ namespace
 					answer.Write(false);
 					rak.Send(&answer, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
 				}
+				if (data[0] == ID_GAME_READY)
+					inGame = true;
 				packets.push_back(std::move(data));
+			}
+			if (sendsInput && inGame && !closed)
+			{
+				RakNet::BitStream input;
+				input.Write((unsigned char)ID_INPUT_UPDATE);
+				input.Write((unsigned)1);
+				PlayerInputAbs().writeTo(input);
+				rak.Send(&input, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0);
 			}
 		}
 
@@ -298,6 +311,20 @@ namespace
 	};
 
 	const char* const MATCH_7 = "\t<match id=\"7\" player1=\"12\" player2=\"17\" bestOf=\"3\"/>\n";
+
+	// the name the client was told it plays against, from the last ID_GAME_READY
+	std::string gameReadyOpponentOf(const Client& client)
+	{
+		std::string opponent;
+		for (const auto& p : client.packets)
+		{
+			if (p[0] != ID_GAME_READY)
+				continue;
+			RakNet::BitStream stream(const_cast<unsigned char*>(p.data()), p.size(), false);
+			opponent = readGameReady(stream).opponent;
+		}
+		return opponent;
+	}
 }
 
 BOOST_AUTO_TEST_SUITE( ServerHandoverTest )
@@ -359,6 +386,11 @@ BOOST_AUTO_TEST_CASE( code_of_a_player_in_a_running_game_is_not_handed_over )
 	kari.enter(KARI);
 	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_GAME_READY) > 0 && kari.count(ID_GAME_READY) > 0; }));
 
+	// both players are clearly there, they send their input all the time
+	ola.sendsInput = true;
+	kari.sendsInput = true;
+	f.settle();
+
 	// the new connection is refused and the game goes on
 	Client& again = f.connect();
 	again.enter(OLA);
@@ -368,6 +400,7 @@ BOOST_AUTO_TEST_CASE( code_of_a_player_in_a_running_game_is_not_handed_over )
 	BOOST_CHECK(!ola.closed);
 	BOOST_CHECK(!ola.hasLobby(LobbyPacketType::ENTRY_REFUSED));
 	BOOST_CHECK_EQUAL(kari.count(ID_OPPONENT_DISCONNECTED), 0);
+	BOOST_CHECK_EQUAL(kari.count(ID_PAUSE), 0);
 	BOOST_CHECK(f.events->games.empty());
 
 	// once the connection of the player is gone, the code is free again
@@ -383,6 +416,72 @@ BOOST_AUTO_TEST_CASE( code_of_a_player_in_a_running_game_is_not_handed_over )
 	BOOST_CHECK(!f.events->games[0].finished);
 	BOOST_CHECK_EQUAL(f.events->games[0].matchId, 7);
 	BOOST_CHECK_EQUAL(f.events->games[0].leftPlayerId, 12);
+}
+
+BOOST_AUTO_TEST_CASE( new_connection_takes_the_place_of_a_silent_player_in_a_running_game )
+{
+	ServerFixture f(MATCH_7, true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	Client& kari = f.connect();
+	kari.enter(KARI);
+	ola.sendsInput = true;
+	kari.sendsInput = true;
+	BOOST_REQUIRE(f.pump([&](){ return ola.inGame && kari.inGame; }));
+	f.settle();
+
+	// the game of Ola stops sending, and Ola starts it again at once with the same code
+	ola.sendsInput = false;
+	Client& back = f.connect();
+	back.sendsInput = true;
+	back.enter(OLA);
+
+	// the entry waits until the game paused for Ola, then the new connection takes Ola's place
+	BOOST_REQUIRE(f.pump([&](){ return back.inGame; }));
+	BOOST_CHECK(!back.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+	BOOST_CHECK(ola.refusedWith(EntryRefusedReason::CODE_IN_USE));
+	BOOST_CHECK_EQUAL(kari.count(ID_PAUSE), 1);
+	BOOST_CHECK(f.pump([&](){ return kari.count(ID_UNPAUSE) == 1; }));
+	// the client learns it plays a tournament before the game reaches it
+	BOOST_CHECK(back.hasLobby(LobbyPacketType::TOURNAMENT_STATUS));
+	BOOST_CHECK_EQUAL(back.count(ID_RULES_CHECKSUM), 1);
+	BOOST_CHECK_EQUAL(gameReadyOpponentOf(back), "Kari");
+	BOOST_CHECK_EQUAL(kari.count(ID_GAME_READY), 1);
+
+	// the game goes on with the new connection, the old one is closed
+	BOOST_REQUIRE(f.pump([&](){ return ola.closed; }));
+	const std::size_t before = back.mark();
+	f.settle(1000);
+	BOOST_CHECK_GT(back.countSince(before, ID_GAME_UPDATE), 10);
+	BOOST_CHECK_EQUAL(kari.count(ID_OPPONENT_DISCONNECTED), 0);
+	BOOST_CHECK_EQUAL(kari.count(ID_PAUSE), 1);
+	BOOST_CHECK(f.events->games.empty());
+	BOOST_CHECK_EQUAL(f.server->getActiveGamesCount(), 1);
+}
+
+BOOST_AUTO_TEST_CASE( code_of_a_player_paused_for_its_opponent_is_not_handed_over )
+{
+	ServerFixture f(MATCH_7, true);
+	Client& ola = f.connect();
+	ola.enter(OLA);
+	Client& kari = f.connect();
+	kari.enter(KARI);
+	ola.sendsInput = true;
+	kari.sendsInput = true;
+	BOOST_REQUIRE(f.pump([&](){ return ola.inGame && kari.inGame; }));
+
+	// Kari goes silent and Ola is paused. A client in the pause sends nothing, but it is still there.
+	kari.sendsInput = false;
+	BOOST_REQUIRE(f.pump([&](){ return ola.count(ID_PAUSE) == 1; }));
+	ola.sendsInput = false;
+	f.settle(500);
+
+	Client& again = f.connect();
+	again.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return again.refusedWith(EntryRefusedReason::CODE_IN_USE); }));
+	f.settle();
+	BOOST_CHECK(!ola.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+	BOOST_CHECK(!ola.closed);
 }
 
 BOOST_AUTO_TEST_CASE( code_entered_twice_quickly_ends_with_one_connection )
@@ -634,6 +733,89 @@ BOOST_FIXTURE_TEST_CASE( game_ends_at_17_15_and_the_win_notification_has_the_fin
 	game->finish();
 }
 
+namespace
+{
+	// Scores a point for the left player every ten steps and never ends.
+	const char* const STEADY_RULES = R"(
+__AUTHOR__ = "test"
+__TITLE__ = "steady points"
+steps = 0
+function IsWinning(lscore, rscore)
+	return false
+end
+function OnGame()
+	steps = steps + 1
+	if steps % 10 == 0 then
+		score(LEFT_PLAYER, 1)
+	end
+end
+)";
+
+	void writeSteadyRules(FileSystem& fs)
+	{
+		fs.setWriteDir(testDir());
+		fs.mkdir("rules");
+		FileWrite file("rules/steady_points.lua");
+		file.write(STEADY_RULES, std::char_traits<char>::length(STEADY_RULES));
+		file.close();
+	}
+}
+
+BOOST_FIXTURE_TEST_CASE( silent_player_pauses_the_game_until_it_is_back, BareServerFixture )
+{
+	writeSteadyRules(fs);
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "steady_points.lua", 15, 75.f);
+	game->setPauseAllowed(false);
+	game->setSilenceLimit(std::chrono::milliseconds(300));
+	left.sendsInput = true;
+	right.sendsInput = true;
+	game->start();
+	BOOST_REQUIRE(pump([&](){ return game->getScore(LEFT_PLAYER) >= 3; }, 8000));
+	BOOST_CHECK(!game->isWaitingForPlayer());
+
+	// the right player sends nothing anymore, the game pauses and only the left player is told
+	right.sendsInput = false;
+	BOOST_REQUIRE(pump([&](){ return game->isWaitingForPlayer() && left.count(ID_PAUSE) == 1; }, 3000));
+	BOOST_CHECK(game->isMissing(RIGHT_PLAYER));
+	BOOST_CHECK(!game->isMissing(LEFT_PLAYER));
+	BOOST_CHECK_EQUAL(right.count(ID_PAUSE), 0);
+
+	// no points while the game waits, and the left player cannot end the pause
+	pump([](){ return false; }, 200);
+	const int paused = game->getScore(LEFT_PLAYER);
+	RakNet::BitStream unpause;
+	unpause.Write((unsigned char)ID_UNPAUSE);
+	left.rak.Send(&unpause, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
+	pump([](){ return false; }, 1500);
+	BOOST_CHECK_EQUAL(game->getScore(LEFT_PLAYER), paused);
+	BOOST_CHECK(game->isWaitingForPlayer());
+	BOOST_CHECK_EQUAL(left.count(ID_UNPAUSE), 0);
+
+	// the player is back, the game goes on
+	right.sendsInput = true;
+	BOOST_REQUIRE(pump([&](){ return !game->isWaitingForPlayer() && left.count(ID_UNPAUSE) == 1; }, 3000));
+	BOOST_CHECK(!game->isMissing(RIGHT_PLAYER));
+	BOOST_CHECK(pump([&](){ return game->getScore(LEFT_PLAYER) >= paused + 3; }, 3000));
+	BOOST_CHECK(game->isGameValid());
+	game->finish();
+}
+
+BOOST_FIXTURE_TEST_CASE( game_without_a_silence_limit_never_waits, BareServerFixture )
+{
+	writeSteadyRules(fs);
+	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
+	NetworkPlayer rightPlayer(ids[1], "right", Color(0, 0, 255), RIGHT_PLAYER);
+	game = std::make_shared<NetworkGame>(&server, leftPlayer, rightPlayer, false, false, "steady_points.lua", 15, 75.f);
+	game->start();
+	BOOST_REQUIRE(pump([&](){ return left.inGame && right.inGame; }, 8000));
+	pump([](){ return false; }, 1000);
+	BOOST_CHECK(!game->isWaitingForPlayer());
+	BOOST_CHECK_EQUAL(left.count(ID_PAUSE) + right.count(ID_PAUSE), 0);
+	game->finish();
+}
+
 BOOST_FIXTURE_TEST_CASE( rules_checksum_has_the_points_of_the_match_when_the_rules_change_them, BareServerFixture )
 {
 	NetworkPlayer leftPlayer(ids[0], "left", Color(255, 0, 0), LEFT_PLAYER);
@@ -725,6 +907,21 @@ BOOST_AUTO_TEST_CASE( player_who_leaves_abandons_the_training )
 	BOOST_CHECK(report.training);
 	BOOST_CHECK(!report.finished);
 	BOOST_CHECK_EQUAL(report.leftPlayerId, 12);
+}
+
+BOOST_AUTO_TEST_CASE( server_bot_never_pauses_a_training )
+{
+	ServerFixture f("\t<match id=\"9\" player1=\"12\" bot=\"reduced\" scoreToWin=\"15\"/>\n", true);
+	Client& ola = f.connect();
+	ola.sendsInput = true;
+	ola.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return ola.inGame; }));
+
+	// the bot has no connection and sends nothing, but only the player counts
+	f.settle(3000);
+	BOOST_CHECK_EQUAL(ola.count(ID_PAUSE), 0);
+	BOOST_CHECK(f.events->games.empty());
+	BOOST_CHECK_EQUAL(f.server->getActiveGamesCount(), 1);
 }
 
 BOOST_AUTO_TEST_CASE( unknown_bot_script_does_not_start_a_game )

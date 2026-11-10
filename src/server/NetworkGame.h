@@ -109,6 +109,26 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		/// A game where pausing is not allowed ignores pause requests, so one player cannot hold it up.
 		void setPauseAllowed( bool allowed ) { mPauseAllowed = allowed; }
 
+		/// A player who sends nothing for limit while the game runs pauses it, so no points are scored against
+		/// a blob that cannot move. The game goes on once that player is heard again, or once a connection that
+		/// took its place with replacePlayer() answered the rules checksum. The bot of a training match never
+		/// pauses the game. Zero, the default, turns this off. Call it before start().
+		void setSilenceLimit( std::chrono::milliseconds limit ) { mSilenceLimit = limit; }
+		bool pausesForSilence() const { return mSilenceLimit.count() > 0; }
+
+		/// True while the game is paused for a player who went silent. Safe to call from any thread.
+		bool isWaitingForPlayer() const { return mWaiting; }
+		/// True while the game is paused because the player of this side went silent. Safe to call from any thread.
+		bool isMissing( PlayerSide side ) const;
+		/// The side of a connection in this game, NO_PLAYER for any other connection. Safe to call from any thread.
+		PlayerSide getSide( const PlayerID& player ) const;
+		/// How long the player of this side has sent nothing. Safe to call from any thread.
+		std::chrono::milliseconds getSilence( PlayerSide side ) const;
+
+		/// Seats a new connection on a side whose player went silent. The new connection gets the rules
+		/// checksum and the game goes on once it answered. Safe to call from any thread.
+		void replacePlayer( PlayerSide side, const PlayerID& player, bool switched );
+
 		/// Lets a bot script play one side, for a training match against the server. The player of that side
 		/// is a stand-in that is not connected, so nothing is sent to it. The bot gets the state of each step
 		/// on the game thread and waits at most its budget for the script, so a slow script never stalls the
@@ -133,12 +153,27 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		// process a single packet
 		void processPacket( const packet_ptr& packet );
 
+		// the connection of a side, for the game thread
+		PlayerID idOf( PlayerSide side ) const { return side == LEFT_PLAYER ? mLeftPlayer : mRightPlayer; }
+		PlayerSide sideOf( const PlayerID& player ) const;
+		void sendGameReady( PlayerSide side );
+
+		// pauses the game while a player is silent and lets it go on once every player is back
+		void checkSilence();
+		void startWaiting();
+		void stopWaiting();
+		// seats a connection that replacePlayer() left for the game thread
+		void applyReplacement();
+		static long long steadyNow();
+
 		// sends to a player, but never to the stand-in of the bot
 		void sendTo(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability, PlayerID target) const;
 		// gives the bot the state and takes its input for the next step
 		void stepBot();
 
 		ThreadSafeRakServer* mServer;
+		// only the game thread changes the connections, and it holds this mutex while it does
+		mutable std::mutex mPlayerIdMutex;
 		PlayerID mLeftPlayer;
 		PlayerID mRightPlayer;
 		// a switched player gets mirrored data
@@ -180,6 +215,20 @@ class NetworkGame : public ObjectCounter<NetworkGame>
 		void sendRulesChecksum();
 		void giveUpStart();
 		std::vector<char> mRulesString;
+		// true once both players answered the first checksum
+		bool mHasStarted = false;
+
+		// a player who sends nothing this long pauses the game, zero for never
+		std::chrono::milliseconds mSilenceLimit{0};
+		// when each side was heard last, in steady clock nanoseconds
+		std::atomic<long long> mLastHeard[MAX_PLAYERS];
+		std::atomic<bool> mMissing[MAX_PLAYERS];
+		std::atomic<bool> mWaiting{false};
+		long long mWaitingSince = 0;
+		// a connection that takes the place of a silent player, guarded by mPlayerIdMutex
+		bool mReplacing[MAX_PLAYERS] = {false, false};
+		PlayerID mReplacement[MAX_PLAYERS];
+		bool mReplacementSwitched[MAX_PLAYERS] = {false, false};
 
 		// the bot of a training match, only touched by the game thread once the game started
 		std::unique_ptr<ScriptBot> mBot;

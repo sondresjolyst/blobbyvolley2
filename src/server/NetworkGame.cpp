@@ -72,6 +72,11 @@ NetworkGame::NetworkGame(ThreadSafeRakServer* server, NetworkPlayer& leftPlayer,
 {
 	mScore[LEFT_PLAYER] = 0;
 	mScore[RIGHT_PLAYER] = 0;
+	for (int side = 0; side < MAX_PLAYERS; ++side)
+	{
+		mLastHeard[side] = steadyNow();
+		mMissing[side] = false;
+	}
 	mScoreToWin = scoreToWin > 0 ? scoreToWin : mMatch->getScoreToWin();
 
 	// check that both players don't have an active game
@@ -128,7 +133,8 @@ void NetworkGame::start()
 				// a player who did not answer the checksum is asked again, a few times
 				if (mGameValid && !isGameStarted() && std::chrono::steady_clock::now() - mRulesChecksumSentAt >= mRulesChecksumRepeat)
 				{
-					if (mRulesChecksumSends < mMaxRulesChecksumSends)
+					// a connection that took the place of a silent player is asked until it answers or leaves
+					if (mHasStarted || mRulesChecksumSends < mMaxRulesChecksumSends)
 						sendRulesChecksum();
 					else
 						giveUpStart();
@@ -186,9 +192,154 @@ void NetworkGame::setBot( PlayerSide side, std::unique_ptr<ScriptBot> bot )
 	mRulesSent[side] = true;
 }
 
+long long NetworkGame::steadyNow()
+{
+	return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+PlayerSide NetworkGame::sideOf( const PlayerID& player ) const
+{
+	if (mBotSide != LEFT_PLAYER && player == mLeftPlayer)
+		return LEFT_PLAYER;
+	if (mBotSide != RIGHT_PLAYER && player == mRightPlayer)
+		return RIGHT_PLAYER;
+	return NO_PLAYER;
+}
+
+PlayerSide NetworkGame::getSide( const PlayerID& player ) const
+{
+	std::lock_guard<std::mutex> lock(mPlayerIdMutex);
+	return sideOf(player);
+}
+
+bool NetworkGame::isMissing( PlayerSide side ) const
+{
+	if (side != LEFT_PLAYER && side != RIGHT_PLAYER)
+		return false;
+	return mMissing[side];
+}
+
+std::chrono::milliseconds NetworkGame::getSilence( PlayerSide side ) const
+{
+	if (side != LEFT_PLAYER && side != RIGHT_PLAYER)
+		return std::chrono::milliseconds(0);
+	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::nanoseconds(steadyNow() - mLastHeard[side]));
+}
+
+void NetworkGame::replacePlayer( PlayerSide side, const PlayerID& player, bool switched )
+{
+	if (side != LEFT_PLAYER && side != RIGHT_PLAYER)
+		return;
+	// the game thread seats it, so the game never sees a connection change in the middle of a step
+	std::lock_guard<std::mutex> lock(mPlayerIdMutex);
+	mReplacing[side] = true;
+	mReplacement[side] = player;
+	mReplacementSwitched[side] = switched;
+}
+
+void NetworkGame::applyReplacement()
+{
+	bool seated = false;
+	{
+		std::lock_guard<std::mutex> lock(mPlayerIdMutex);
+		for (PlayerSide side : {LEFT_PLAYER, RIGHT_PLAYER})
+		{
+			if (!mReplacing[side])
+				continue;
+			mReplacing[side] = false;
+			(side == LEFT_PLAYER ? mLeftPlayer : mRightPlayer) = mReplacement[side];
+			(side == LEFT_PLAYER ? mSwitchLeft : mSwitchRight) = mReplacementSwitched[side];
+			// the new connection joins with the rules checksum, as at the start of a game
+			mRulesSent[side] = false;
+			mMissing[side] = true;
+			seated = true;
+		}
+	}
+	if (!seated)
+		return;
+	// the game waits for the new connection, even if the old one was heard again meanwhile
+	if (!mWaiting && mHasStarted && mWinner == NO_PLAYER)
+		startWaiting();
+	sendRulesChecksum();
+}
+
+void NetworkGame::checkSilence()
+{
+	if (mSilenceLimit.count() <= 0 || !mHasStarted || mWinner != NO_PLAYER)
+		return;
+
+	if (mWaiting)
+	{
+		// a silent player is back once it was heard after the pause began and knows the rules
+		bool everyoneBack = true;
+		for (PlayerSide side : {LEFT_PLAYER, RIGHT_PLAYER})
+		{
+			if (!mMissing[side])
+				continue;
+			if (mRulesSent[side] && mLastHeard[side] > mWaitingSince)
+				mMissing[side] = false;
+			else
+				everyoneBack = false;
+		}
+		if (everyoneBack)
+			stopWaiting();
+		return;
+	}
+
+	// during a pause of the players nobody sends input, the silence counts from its end
+	if (mMatch->isPaused())
+		return;
+
+	const long long now = steadyNow();
+	const long long limit = std::chrono::duration_cast<std::chrono::nanoseconds>(mSilenceLimit).count();
+	bool silent = false;
+	for (PlayerSide side : {LEFT_PLAYER, RIGHT_PLAYER})
+	{
+		// the bot has no connection and never goes silent
+		if (side == mBotSide)
+			continue;
+		if (now - mLastHeard[side] >= limit)
+		{
+			mMissing[side] = true;
+			silent = true;
+		}
+	}
+	if (silent)
+		startWaiting();
+}
+
+void NetworkGame::startWaiting()
+{
+	mWaitingSince = steadyNow();
+	mWaiting = true;
+	mMatch->pause();
+	// the players who are still there see the pause. The silent one is not told, so if it was only
+	// held up it keeps sending input and the game goes on as soon as that arrives.
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_PAUSE);
+	for (PlayerSide side : {LEFT_PLAYER, RIGHT_PLAYER})
+	{
+		if (!mMissing[side])
+			sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, idOf(side));
+	}
+}
+
+void NetworkGame::stopWaiting()
+{
+	const long long now = steadyNow();
+	for (int side = 0; side < MAX_PLAYERS; ++side)
+		mLastHeard[side] = now;
+	mWaiting = false;
+	mMatch->unpause();
+	// a client that was not paused ignores this
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_UNPAUSE);
+	broadcastBitstream(stream);
+}
+
 void NetworkGame::sendTo(const RakNet::BitStream& stream, PacketPriority priority, PacketReliability reliability, PlayerID target) const
 {
-	if (mBotSide != NO_PLAYER && target == getPlayerID(mBotSide))
+	if (mBotSide != NO_PLAYER && target == idOf(mBotSide))
 		return;
 	mServer->Send(stream, priority, reliability, target);
 }
@@ -295,6 +446,7 @@ void NetworkGame::broadcastBitstream(const RakNet::BitStream& stream)
 
 void NetworkGame::processPackets()
 {
+	applyReplacement();
 	while (true)
 	{
 		packet_ptr packet;
@@ -313,6 +465,11 @@ void NetworkGame::processPackets()
 /// this function processes a single packet received for this network game
 void NetworkGame::processPacket( const packet_ptr& packet )
 {
+	// any packet shows that the player is still there
+	const PlayerSide from = sideOf(packet->playerId);
+	if (from != NO_PLAYER)
+		mLastHeard[from] = steadyNow();
+
 	switch(packet->data[0])
 	{
 		case ID_CONNECTION_LOST:
@@ -363,7 +520,7 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 		case ID_PAUSE:
 		{
 			// the client only pauses when the server sends this back, so ignoring it keeps both playing
-			if (!mPauseAllowed)
+			if (!mPauseAllowed || mWaiting)
 				break;
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_PAUSE);
@@ -374,6 +531,13 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 
 		case ID_UNPAUSE:
 		{
+			// a player cannot end the pause while the game waits for the other one
+			if (mWaiting)
+				break;
+			// nobody sent input during the pause, the silence counts from now
+			const long long now = steadyNow();
+			for (int side = 0; side < MAX_PLAYERS; ++side)
+				mLastHeard[side] = now;
 			RakNet::BitStream stream;
 			stream.Write((unsigned char)ID_UNPAUSE);
 			broadcastBitstream(stream);
@@ -435,8 +599,8 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 			stream->IgnoreBytes(1);
 			stream->Read(needRules);
 			// a player answers once, a second answer to a repeated checksum is ignored
-			const PlayerSide side = mLeftPlayer == packet->playerId ? LEFT_PLAYER : RIGHT_PLAYER;
-			if (mRulesSent[side])
+			const PlayerSide side = from;
+			if (side == NO_PLAYER || mRulesSent[side])
 				break;
 			mRulesSent[side] = true;
 
@@ -451,31 +615,19 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 				sendTo(*stream, HIGH_PRIORITY, RELIABLE_ORDERED, packet->playerId);
 			}
 
-			if (isGameStarted())
+			if (isGameStarted() && mHasStarted)
 			{
-				// buffer for playernames
-				char name[PLAYER_NAME_BUFFER];
-
-				// writing data into leftStream
-				RakNet::BitStream leftStream;
-				leftStream.Write((unsigned char)ID_GAME_READY);
-				leftStream.Write((int)mSpeedController.getGameSpeed());
-				strncpy(name, mMatch->getPlayer(RIGHT_PLAYER).getName().c_str(), sizeof(name) - 1);
-				name[sizeof(name) - 1] = '\0';
-				leftStream.Write(name, sizeof(name));
-				leftStream.Write(mMatch->getPlayer(RIGHT_PLAYER).getStaticColor().toInt());
-
-				// writing data into rightStream
-				RakNet::BitStream rightStream;
-				rightStream.Write((unsigned char)ID_GAME_READY);
-				rightStream.Write((int)mSpeedController.getGameSpeed());
-				strncpy(name, mMatch->getPlayer(LEFT_PLAYER).getName().c_str(), sizeof(name) - 1);
-				name[sizeof(name) - 1] = '\0';
-				rightStream.Write(name, sizeof(name));
-				rightStream.Write(mMatch->getPlayer(LEFT_PLAYER).getStaticColor().toInt());
-
-				sendTo(leftStream, HIGH_PRIORITY, RELIABLE_ORDERED, mLeftPlayer);
-				sendTo(rightStream, HIGH_PRIORITY, RELIABLE_ORDERED, mRightPlayer);
+				// a connection that took the place of a silent player joins the running game
+				sendGameReady(side);
+			}
+			else if (isGameStarted())
+			{
+				mHasStarted = true;
+				const long long now = steadyNow();
+				for (int s = 0; s < MAX_PLAYERS; ++s)
+					mLastHeard[s] = now;
+				sendGameReady(LEFT_PLAYER);
+				sendGameReady(RIGHT_PLAYER);
 			}
 
 			break;
@@ -488,6 +640,21 @@ void NetworkGame::processPacket( const packet_ptr& packet )
 	}
 }
 
+void NetworkGame::sendGameReady( PlayerSide side )
+{
+	// the player learns the name and the colour of its opponent
+	const PlayerSide other = side == LEFT_PLAYER ? RIGHT_PLAYER : LEFT_PLAYER;
+	char name[PLAYER_NAME_BUFFER];
+	RakNet::BitStream stream;
+	stream.Write((unsigned char)ID_GAME_READY);
+	stream.Write((int)mSpeedController.getGameSpeed());
+	strncpy(name, mMatch->getPlayer(other).getName().c_str(), sizeof(name) - 1);
+	name[sizeof(name) - 1] = '\0';
+	stream.Write(name, sizeof(name));
+	stream.Write(mMatch->getPlayer(other).getStaticColor().toInt());
+	sendTo(stream, HIGH_PRIORITY, RELIABLE_ORDERED, idOf(side));
+}
+
 bool NetworkGame::isGameValid() const
 {
 	return mGameValid;
@@ -496,6 +663,7 @@ bool NetworkGame::isGameValid() const
 
 void NetworkGame::step()
 {
+	checkSilence();
 	if (!isGameStarted())
 		return;
 
@@ -629,6 +797,7 @@ int NetworkGame::getScore( PlayerSide side ) const
 
 PlayerID NetworkGame::getPlayerID( PlayerSide side ) const
 {
+	std::lock_guard<std::mutex> lock(mPlayerIdMutex);
 	if( side == LEFT_PLAYER )
 	{
 		return mLeftPlayer;
