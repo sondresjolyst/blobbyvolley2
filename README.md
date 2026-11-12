@@ -29,9 +29,9 @@ The default port is 1234. The `port` setting in the config file or the `BLOBBY_P
 Keep the port the same inside and outside a container. After the first contact the game moves to the port the server reports, so a server on port 1234 that is reached on port 1235 sends the players to port 1234. To run the server on port 1235 in Docker, use `-e BLOBBY_PORT=1235 -p 1235:1235/udp`.
 
 #### Tell players about a new version
-The server tells each game its version and decides from the versions alone. A game with a lower major or minor version than the server, or a game that sends no version, is turned away and asked to update. A game with the same major and minor version but an older patch may play and sees that a new version is out. A newer game plays without a notice.
+The server tells each game its version and decides from the versions alone. A game with a lower major or minor version than the server is turned away and asked to update. A game with the same major and minor version but an older patch may play and sees that a new version is out. A newer game plays without a notice.
 
-A feature release raises the minor version, so after a feature release every older game has to update. A fix release only raises the patch, so older games of the same minor version get the notice and can still play. Games of version 0.2.0 or older send no version, so they are always turned away.
+A feature release raises the minor version, so after a feature release every older game has to update. A fix release only raises the patch, so older games of the same minor version get the notice and can still play. A game that sends no version is 0.2.0 or older, so the server treats it as 0.2.0. It may play on a 0.2.x server and is turned away from 0.3.0 on.
 
 The settings are in the config file, and the environment variables in brackets come first:
 - `min_client_version` (`BLOBBY_MIN_CLIENT_VERSION`) can raise the oldest version that may play, such as `0.3.1`. It can never lower the limit that comes from the server version. Empty keeps that limit.

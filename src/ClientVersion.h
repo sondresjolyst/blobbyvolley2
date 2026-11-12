@@ -87,8 +87,13 @@ struct VersionPolicy
 */
 ForkVersion minimumClientVersion(const VersionPolicy& policy, const ForkVersion& server);
 
+/// The version a game that sends no version counts as. Every such game is 0.2.0 or older, and the older
+/// games of the fork cannot be told apart from it.
+ForkVersion versionOfGameWithoutVersion();
+
 /*! The notice for a client.
-	\details A client older than minimum, or one that sent no version, is turned away.
+	\details A client that sent no version counts as versionOfGameWithoutVersion(). A client older than minimum
+	is turned away.
 	A client that may play but is older than the server is told that a new version is out.
 */
 VersionNotice checkClientVersion(const ForkVersion& minimum, const ForkVersion& server, bool hasVersion,

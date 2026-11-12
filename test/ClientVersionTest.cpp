@@ -176,10 +176,20 @@ BOOST_AUTO_TEST_CASE( newer_game_plays_without_a_notice )
 	BOOST_CHECK(checkClientVersion(minimum, server, true, version(1, 0, 0)) == VersionNotice::NONE);
 }
 
-BOOST_AUTO_TEST_CASE( game_without_a_version_is_refused )
+BOOST_AUTO_TEST_CASE( game_without_a_version_counts_as_0_2_0 )
 {
-	BOOST_CHECK(checkClientVersion(version(0, 3, 0), version(0, 3, 0), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
-	BOOST_CHECK(checkClientVersion(version(0, 0, 0), version(0, 0, 1), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK(versionOfGameWithoutVersion() == version(0, 2, 0));
+	auto check = [](const ForkVersion& server) {
+		return checkClientVersion(minimumClientVersion(VersionPolicy(), server), server, false, ForkVersion());
+	};
+	// allowed on a 0.2.x server
+	BOOST_CHECK(check(version(0, 2, 0)) == VersionNotice::NONE);
+	BOOST_CHECK(check(version(0, 2, 3)) == VersionNotice::UPDATE_AVAILABLE);
+	// refused from 0.3.0 on
+	BOOST_CHECK(check(version(0, 3, 0)) == VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK(check(version(1, 0, 0)) == VersionNotice::UPDATE_REQUIRED);
+	// a raised minimum above 0.2.0 refuses it too
+	BOOST_CHECK(checkClientVersion(version(0, 2, 1), version(0, 2, 1), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
 }
 
 BOOST_AUTO_TEST_CASE( raised_minimum_refuses_an_older_patch )

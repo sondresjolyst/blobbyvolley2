@@ -181,12 +181,20 @@ ForkVersion minimumClientVersion(const VersionPolicy& policy, const ForkVersion&
 	return derived < policy.minimum ? policy.minimum : derived;
 }
 
+ForkVersion versionOfGameWithoutVersion()
+{
+	ForkVersion version;
+	version.minor = 2;
+	return version;
+}
+
 VersionNotice checkClientVersion(const ForkVersion& minimum, const ForkVersion& server, bool hasVersion,
 								 const ForkVersion& client)
 {
-	if (!hasVersion || client < minimum)
+	const ForkVersion game = hasVersion ? client : versionOfGameWithoutVersion();
+	if (game < minimum)
 		return VersionNotice::UPDATE_REQUIRED;
-	return client < server ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::NONE;
+	return game < server ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::NONE;
 }
 
 void makeServerVersionPacket(RakNet::BitStream& stream, const ServerVersionData& data)
