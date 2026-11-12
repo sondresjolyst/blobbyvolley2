@@ -64,19 +64,16 @@ void writeClientVersion(RakNet::BitStream& stream, const ForkVersion& version);
 /// Reads the client version of an ID_ENTER_SERVER packet whose features were read. False when the client sent none.
 bool readClientVersion(RakNet::BitStream& stream, ForkVersion& version);
 
-/// What a server does with a client older than its minimum version
-enum class MinClientMode : unsigned char
-{
-	/// no check
-	OFF,
-	/// the player sees that a new version is out
-	WARN,
-	/// the player is turned away
-	REJECT
-};
+/// The oldest game this server works with. Raise it in the same pull request as any server change that needs
+/// a newer game, so a forgotten setting can never let an incompatible game in. 0.0.0 accepts every game,
+/// also a game of 0.2.0 or older that sends no version. Above 0.0.0 such a game counts as older.
+/// It may not be higher than the fork version of this build, which a static_assert in ClientVersion.cpp checks.
+constexpr uint32_t MIN_COMPATIBLE_CLIENT_MAJOR = 0;
+constexpr uint32_t MIN_COMPATIBLE_CLIENT_MINOR = 0;
+constexpr uint32_t MIN_COMPATIBLE_CLIENT_PATCH = 0;
 
-/// Reads warn or reject.
-bool parseMinClientMode(const std::string& text, MinClientMode& mode);
+/// MIN_COMPATIBLE_CLIENT_MAJOR, MINOR and PATCH as a version
+ForkVersion minCompatibleClientVersion();
 
 /// What the server tells a client about its version
 enum class VersionNotice : unsigned char
@@ -89,14 +86,21 @@ enum class VersionNotice : unsigned char
 /// The version settings of a server
 struct VersionPolicy
 {
-	MinClientMode mode = MinClientMode::OFF;
+	/// min_client_version of the config, 0.0.0 when not set. It can only raise the built in minimum.
 	ForkVersion minimum;
 	/// page where players get the newest game, empty means no link
 	std::string downloadUrl;
 };
 
-/// The notice for a client. A client that sent no version is older than any minimum.
-VersionNotice checkClientVersion(const VersionPolicy& policy, bool hasVersion, const ForkVersion& client);
+/// The oldest game the server lets in: the built in minimum, or the configured one when that is higher.
+ForkVersion minimumClientVersion(const VersionPolicy& policy);
+
+/*! The notice for a client.
+	\details A client older than minimum is turned away. Above 0.0.0, a client that sent no version counts as older.
+	A client that may play but is older than the server is told that a new version is out.
+*/
+VersionNotice checkClientVersion(const ForkVersion& minimum, const ForkVersion& server, bool hasVersion,
+								 const ForkVersion& client);
 
 /// The fields of an ID_SERVER_VERSION packet
 struct ServerVersionData

@@ -511,7 +511,8 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	const uint32_t features = readClientFeatures(data);
 	ForkVersion clientVersion;
 	const bool hasVersion = readClientVersion(data, clientVersion);
-	const VersionNotice notice = checkClientVersion(mVersionPolicy, hasVersion, clientVersion);
+	const ForkVersion minimumVersion = minimumClientVersion(mVersionPolicy);
+	const VersionNotice notice = checkClientVersion(minimumVersion, currentForkVersion(), hasVersion, clientVersion);
 	// an entry that is tried again told the client already
 	if( !mRetryingEntries )
 		sendServerVersion( source, notice );
@@ -519,7 +520,7 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	{
 		syslog(LOG_NOTICE, "Client %s from %s is older than %s",
 			   hasVersion ? clientVersion.toString().c_str() : "without a version",
-			   source.toString().c_str(), mVersionPolicy.minimum.toString().c_str());
+			   source.toString().c_str(), minimumVersion.toString().c_str());
 		refuseEntry( source, EntryRefusedReason::OUTDATED_CLIENT );
 		return;
 	}
@@ -743,8 +744,7 @@ void DedicatedServer::sendServerVersion(PlayerID target, VersionNotice notice)
 	ServerVersionData data;
 	data.server = currentForkVersion();
 	data.notice = notice;
-	if( mVersionPolicy.mode != MinClientMode::OFF )
-		data.minimum = mVersionPolicy.minimum;
+	data.minimum = minimumClientVersion(mVersionPolicy);
 	data.downloadUrl = mVersionPolicy.downloadUrl;
 	RakNet::BitStream stream;
 	makeServerVersionPacket( stream, data );

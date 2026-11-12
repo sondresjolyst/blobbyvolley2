@@ -91,13 +91,12 @@ bool loadMaxTraining(const EnvironmentFunction& env, unsigned defaultValue, unsi
 struct VersionPolicyFile
 {
 	std::string minClientVersion;
-	std::string minClientMode;
 	std::string downloadUrl;
 };
 
 /*! Combines the version settings of the environment and the config file. The environment comes first.
-	\details The variables are BLOBBY_MIN_CLIENT_VERSION, BLOBBY_MIN_CLIENT_MODE and BLOBBY_DOWNLOAD_URL.
-	An empty minimum turns the check off. An empty mode means warn. An empty download page means no link.
+	\details The variables are BLOBBY_MIN_CLIENT_VERSION and BLOBBY_DOWNLOAD_URL.
+	An empty minimum keeps the built in one. An empty download page means no link.
 	Returns false and adds to errors when a value is not valid.
 */
 bool loadVersionPolicy(const VersionPolicyFile& file, const EnvironmentFunction& env, VersionPolicy& policy,

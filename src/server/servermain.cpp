@@ -146,7 +146,6 @@ int main(int argc, char** argv)
 		siteFile.siteToken = config.getString("tournament_site_token");
 		siteFile.dataDir = config.getString("tournament_data_dir");
 		versionFile.minClientVersion = config.getString("min_client_version");
-		versionFile.minClientMode = config.getString("min_client_version_mode");
 		versionFile.downloadUrl = config.getString("download_page_url");
 
 		// bring that value into a sane range
@@ -222,9 +221,12 @@ int main(int argc, char** argv)
 
 	DedicatedServer server(myinfo, rule_vec, speed_vec, maxClients);
 	server.setVersionPolicy(versionPolicy);
-	if(versionPolicy.mode != MinClientMode::OFF)
-		syslog(LOG_NOTICE, "Clients older than %s %s", versionPolicy.minimum.toString().c_str(),
-			   versionPolicy.mode == MinClientMode::REJECT ? "are turned away" : "are told to update");
+	if(!(versionPolicy.minimum == ForkVersion()) && versionPolicy.minimum < minCompatibleClientVersion())
+		syslog(LOG_NOTICE, "min_client_version %s is below the built in %s, which applies",
+			   versionPolicy.minimum.toString().c_str(), minCompatibleClientVersion().toString().c_str());
+	if(!(minimumClientVersion(versionPolicy) == ForkVersion()))
+		syslog(LOG_NOTICE, "Games older than %s are turned away", minimumClientVersion(versionPolicy).toString().c_str());
+	syslog(LOG_NOTICE, "Games older than %s are told that a new version is out", BLOBBY_FORK_VERSION);
 	if(!versionPolicy.downloadUrl.empty())
 		syslog(LOG_NOTICE, "Download page for new versions: %s", versionPolicy.downloadUrl.c_str());
 #ifdef BLOBBY_SITE_SYNC

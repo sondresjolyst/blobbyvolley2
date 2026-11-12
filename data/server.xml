@@ -8,10 +8,8 @@
 	<var name="name" value="Blobby Volley 2 Server"/>
 	<var name="description" value="replace this with a description of the server. To do this, edit data/server.xml"/>
 	<var name="rules" value="default.lua classic.lua back_defence.lua one_hit_wonder.lua the_double.lua blitz.lua firewall.lua sticky_mode.lua jumping_jack.lua tennis.lua"/>
-	<!-- Oldest game version that may play here, such as 0.3.0. Empty means no check. A game too old to send its version counts as older. BLOBBY_MIN_CLIENT_VERSION comes first. -->
+	<!-- Raises the oldest game version that may play here, such as 0.3.0. Older games are turned away. The server has its own built in oldest version, and this can never lower it. Empty keeps the built in version. Games older than the server are always told that a new version is out. BLOBBY_MIN_CLIENT_VERSION comes first. -->
 	<var name="min_client_version" value=""/>
-	<!-- warn tells players with an older game that a new version is out, reject turns them away. BLOBBY_MIN_CLIENT_MODE comes first. -->
-	<var name="min_client_version_mode" value="warn"/>
 	<!-- Page where players get the new version, such as the /last-ned page of the tournament site. The game shows a button that opens it in the browser, but only for official addresses: https on julalan.no or a subdomain, or the releases of the game on GitHub. Empty means no link. BLOBBY_DOWNLOAD_URL comes first. -->
 	<var name="download_page_url" value=""/>
 	<!-- In tournament mode players type their join code as name. The server swaps it for the nickname in the players file and refuses unknown codes. -->

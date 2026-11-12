@@ -173,24 +173,37 @@ bool readClientVersion(RakNet::BitStream& stream, ForkVersion& version)
 	return readVersion(stream, version);
 }
 
-bool parseMinClientMode(const std::string& text, MinClientMode& mode)
+// the server must accept games of its own version
+static_assert(MIN_COMPATIBLE_CLIENT_MAJOR < BLOBBY_FORK_VERSION_MAJOR
+	|| (MIN_COMPATIBLE_CLIENT_MAJOR == BLOBBY_FORK_VERSION_MAJOR
+		&& (MIN_COMPATIBLE_CLIENT_MINOR < BLOBBY_FORK_VERSION_MINOR
+			|| (MIN_COMPATIBLE_CLIENT_MINOR == BLOBBY_FORK_VERSION_MINOR
+				&& MIN_COMPATIBLE_CLIENT_PATCH <= BLOBBY_FORK_VERSION_PATCH))),
+	"MIN_COMPATIBLE_CLIENT_VERSION is higher than the fork version in version.txt");
+
+ForkVersion minCompatibleClientVersion()
 {
-	if (text == "warn")
-		mode = MinClientMode::WARN;
-	else if (text == "reject")
-		mode = MinClientMode::REJECT;
-	else
-		return false;
-	return true;
+	ForkVersion version;
+	version.major = MIN_COMPATIBLE_CLIENT_MAJOR;
+	version.minor = MIN_COMPATIBLE_CLIENT_MINOR;
+	version.patch = MIN_COMPATIBLE_CLIENT_PATCH;
+	return version;
 }
 
-VersionNotice checkClientVersion(const VersionPolicy& policy, bool hasVersion, const ForkVersion& client)
+ForkVersion minimumClientVersion(const VersionPolicy& policy)
 {
-	if (policy.mode == MinClientMode::OFF)
-		return VersionNotice::NONE;
-	if (hasVersion && !(client < policy.minimum))
-		return VersionNotice::NONE;
-	return policy.mode == MinClientMode::REJECT ? VersionNotice::UPDATE_REQUIRED : VersionNotice::UPDATE_AVAILABLE;
+	const ForkVersion builtIn = minCompatibleClientVersion();
+	return builtIn < policy.minimum ? policy.minimum : builtIn;
+}
+
+VersionNotice checkClientVersion(const ForkVersion& minimum, const ForkVersion& server, bool hasVersion,
+								 const ForkVersion& client)
+{
+	if (!hasVersion)
+		return minimum == ForkVersion() ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::UPDATE_REQUIRED;
+	if (client < minimum)
+		return VersionNotice::UPDATE_REQUIRED;
+	return client < server ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::NONE;
 }
 
 void makeServerVersionPacket(RakNet::BitStream& stream, const ServerVersionData& data)
