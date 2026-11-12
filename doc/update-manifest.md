@@ -168,8 +168,6 @@ A platform job that does not succeed for any reason leaves its package off the r
 4. It signs and uploads the manifest again, so latest.json matches the release.
 5. It checks the release again. If something is still missing, it starts the next round. After round 3 it fails and the summary names what is missing.
 
-The Release run and each repair round have a queue watchdog. A job that waits more than 60 minutes for a runner, while no other job is running, makes the watchdog cancel the run. The repair then takes over, so a stuck job does not hold the release for a day.
-
 To start a repair by hand, run the Release repair workflow from main. Leave the tag empty for the latest release, or give a tag such as `v0.3.0`. Leave the round at 1.
 
 ```sh

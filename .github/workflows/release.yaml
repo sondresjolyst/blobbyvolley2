@@ -128,15 +128,6 @@ jobs:
       version: ${{ needs.get-version.outputs.version }}
       release_tag: ${{ needs.get-version.outputs.tag }}
 
-  # Cancels the run when a package job waits too long for a runner. The release repair then builds it.
-  watchdog:
-    name: Queue watchdog
-    needs: get-version
-    if: always() && needs.get-version.outputs.publish == 'true'
-    permissions:
-      actions: write
-    uses: ./.github/workflows/queue-watchdog.yaml
-
   # Runs when a platform failed or the run was cancelled too, so the manifest lists the packages
   # that did attach. The release repair builds the missing ones and signs the manifest again.
   update-manifest:
