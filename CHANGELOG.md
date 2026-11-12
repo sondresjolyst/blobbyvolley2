@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/sondresjolyst/blobbyvolley2-tournament/compare/v0.2.0...v0.3.0) (2026-11-12)
+
+
+### Features
+
+* **release:** publish a signed update manifest with each release ([#86](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/86)) ([191ff81](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/191ff81775d71c9a31229f356b332c0a1820b15b))
+* ship the game as a launcher that installs signed updates ([#88](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/88)) ([2d993c6](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/2d993c63b551e2878c74bcc78aaf21494878c5af)), closes [#83](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/83) [#84](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/84)
+* tell players with an older game that a new version is out ([#87](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/87)) ([a496db8](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/a496db89ada8ad6f5dc8651d1c464dc3092b8877))
+
+
+### Bug Fixes
+
+* **server:** send the tournament status and the sponsor board before a game starts ([#80](https://github.com/sondresjolyst/blobbyvolley2-tournament/issues/80)) ([2b101fb](https://github.com/sondresjolyst/blobbyvolley2-tournament/commit/2b101fb74e9c2bde7dc08fe25f2190b4197d095a))
+
 ## [0.2.0](https://github.com/sondresjolyst/blobbyvolley2-tournament/compare/v0.1.0...v0.2.0) (2026-11-10)
 
 
