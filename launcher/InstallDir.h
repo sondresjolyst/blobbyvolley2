@@ -27,7 +27,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 // The version folders next to the launcher, such as app-0.3.0, see doc/launcher.md.
 
-/// A version folder counts only when it holds this file. The package build writes it last.
+/// A version folder counts only when it holds this file. The package build writes it last. It is not a
+/// hidden file, so tools that skip those, such as the artifact upload of GitHub, keep it.
 extern const char* const COMPLETE_MARKER;
 
 /// The folder name of a version, such as app-0.3.0.

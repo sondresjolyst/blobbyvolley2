@@ -40,6 +40,7 @@ jobs:
             libboost-dev \
             libcurl4-openssl-dev \
             nlohmann-json3-dev \
+            libarchive-dev \
             ${{matrix.compiler.install}}
       - name: Setup Environment
         run: |
@@ -51,7 +52,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Configure
-        run:  cmake . -DBLOBBY_SITE_SYNC=ON
+        run:  cmake . -DBLOBBY_SITE_SYNC=ON -DBLOBBY_LAUNCHER=ON
 
       - name: Build
         run: cmake --build .

@@ -53,12 +53,13 @@ jobs:
             mingw-w64-ucrt-x86_64-boost
             mingw-w64-ucrt-x86_64-curl
             mingw-w64-ucrt-x86_64-nlohmann-json
+            mingw-w64-ucrt-x86_64-libarchive
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
       - name: Build in Release mode
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=ON
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=ON -DBLOBBY_LAUNCHER=ON
           cmake --build build
       - name: Pick package name
         id: name
@@ -70,6 +71,7 @@ jobs:
             VERSION=$(echo "$SHA" | cut -c1-7)
           fi
           echo "package=blobbyvolley2-tournament-$VERSION-windows-x64" >> "$GITHUB_OUTPUT"
+          echo "app=app-$(head -n 1 version.txt | tr -d '\r')" >> "$GITHUB_OUTPUT"
       - name: Package
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
@@ -79,11 +81,18 @@ jobs:
       - name: Smoke check the server without MSYS2 on PATH
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
-        run: sh .github/scripts/smoke-windows.sh "dist/$PACKAGE" blobby-server.exe 5
-      - name: Smoke check the game without MSYS2 on PATH
+          APP: ${{ steps.name.outputs.app }}
+        run: sh .github/scripts/smoke-windows.sh "dist/$PACKAGE/$APP" blobby-server.exe 5
+      # blobby.exe is the launcher, which starts the game in the version folder and waits for it.
+      - name: Smoke check the launcher and the game without MSYS2 on PATH
         env:
           PACKAGE: ${{ steps.name.outputs.package }}
-        run: sh .github/scripts/smoke-windows.sh "dist/$PACKAGE" blobby.exe 5
+          APP: ${{ steps.name.outputs.app }}
+        run: |
+          sh .github/scripts/smoke-windows.sh "dist/$PACKAGE" blobby.exe 8
+          state="$(cygpath -u "$APPDATA")/sjolyst-innovation/blobbyvolley2-tournament/launcher"
+          cat "$state/launcher.log"
+          test -f "$state/started-${APP#app-}" || { echo "::error::The game in $APP did not report that it started"; exit 1; }
       - name: Upload package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
