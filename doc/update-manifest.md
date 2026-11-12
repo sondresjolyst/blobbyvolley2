@@ -7,7 +7,7 @@ The launcher fetches them from the latest release:
 - `https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest/download/latest.json`
 - `https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest/download/latest.json.sig`
 
-The reusable workflow `.github/workflows/update-manifest.yaml` writes them after the packaging jobs. The release and the release repair both call it. The script is `.github/scripts/make-update-manifest.sh`.
+The `sign-update-manifest` and `upload-update-manifest` jobs in `.github/workflows/release.yaml` write them after the packaging jobs. The script is `.github/scripts/make-update-manifest.sh`.
 
 ## latest.json
 
@@ -158,20 +158,6 @@ openssl pkeyutl -verify -pubin -inkey test-pub.pem -rawin -in out/latest.json -s
 
 It needs gh, jq and OpenSSL 3.
 
-## Release repair
+## Reruns
 
-A platform job that does not succeed for any reason leaves its package off the release. That includes a failed job, a cancelled job and a job that never got a runner. `.github/workflows/release-repair.yaml` fixes this without manual work.
-
-1. It runs when a Release run ends, whatever the result. A manual Release run is a dry run, so the repair skips it.
-2. It checks the latest release, or the tag it was given, with `.github/scripts/release-status.sh`. Only `vX.Y.Z` tags count. It looks for the windows-x64 zip, the linux-x64 tar.gz and the macos-arm64 and macos-x64 zips. It also checks that latest.json lists exactly those packages.
-3. It builds each missing package from the tag, with the same package workflows as the release, and attaches it.
-4. It signs and uploads the manifest again, so latest.json matches the release.
-5. It checks the release again. If something is still missing, it starts the next round. After round 3 it fails and the summary names what is missing.
-
-To start a repair by hand, run the Release repair workflow from main. Leave the tag empty for the latest release, or give a tag such as `v0.3.0`. Leave the round at 1.
-
-```sh
-gh workflow run release-repair.yaml --repo sondresjolyst/blobbyvolley2-tournament --ref main -f tag=v0.3.0
-```
-
-The signing job only runs from main, because the `update-signing` environment is limited to main.
+A platform job that does not succeed leaves its package off the release, and latest.json lists only the packages that are there. Open the Release run and use "Re-run failed jobs". GitHub runs the failed jobs again together with the jobs that need them, so the manifest is signed again with the new packages.
