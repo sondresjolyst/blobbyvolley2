@@ -2,7 +2,8 @@
 # Write and sign the update manifest for a release. See doc/update-manifest.md.
 # Usage: make-update-manifest.sh <repo> <tag> <output dir>
 # The Ed25519 private key comes as PEM text in UPDATE_SIGNING_KEY.
-# Writes latest.json and latest.json.sig to the output dir. Uploads nothing.
+# Writes latest.json and latest.json.sig to the output dir, and copies the root-signed
+# keys.json and keys.json.sig next to them. Uploads nothing.
 set -eu
 
 repo=$1
@@ -91,4 +92,16 @@ base64 < "$work/sig.bin" | tr -d '\n' > "$out_dir/latest.json.sig"
 # The raw public key is the last 32 bytes of the DER form. Compare it with the key in the client.
 public_key=$(openssl pkey -pubin -in "$work/pub.pem" -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' \n')
 echo "Signed with public key $public_key"
+
+# The signing key must be listed in the root-signed keys file and not revoked.
+keys_dir=$(dirname "$0")/../update-keys
+if [ ! -s "$keys_dir/keys.json" ] || [ ! -s "$keys_dir/keys.json.sig" ]; then
+	echo "::error::.github/update-keys/keys.json or keys.json.sig is missing, see doc/update-manifest.md." >&2
+	exit 1
+fi
+if ! jq -e --arg k "$public_key" '(.signing_keys | index($k)) != null and (.revoked | index($k)) == null' "$keys_dir/keys.json" > /dev/null; then
+	echo "::error::The signing key $public_key is not an active key in keys.json." >&2
+	exit 1
+fi
+cp "$keys_dir/keys.json" "$keys_dir/keys.json.sig" "$out_dir/"
 cat "$out_dir/latest.json"

@@ -84,6 +84,67 @@ Then move `update-signing-key.pem` to a password manager or other safe offline s
 
 If the secret is missing, the `sign-update-manifest` job fails with a message that names it. The job prints the public key it signed with, so you can compare it with the key in the launcher.
 
+## Keys and rotation
+
+There are two kinds of keys.
+
+- Root keys. There are two, A and B. Their public keys are built into the launcher. Their private keys stay offline, in two separate places, and never go to GitHub.
+- The signing key. It signs latest.json in CI and lives in the `UPDATE_SIGNING_KEY` secret.
+
+`.github/update-keys/keys.json` lists the signing keys the launcher trusts and the keys that are revoked. A root key signs it into `keys.json.sig`. The release uploads both files next to latest.json.
+
+```json
+{
+  "schema": 1,
+  "version": 1,
+  "signing_keys": ["<raw public key, hex>"],
+  "revoked": []
+}
+```
+
+The launcher checks an update like this:
+
+1. Verify `keys.json.sig` against any of its built-in root keys.
+2. Refuse the keys file if `version` is lower than the highest version it has seen before, and remember the new highest version.
+3. Verify `latest.json.sig` with a key that is in `signing_keys` and not in `revoked`.
+
+The release job fails if the key in `UPDATE_SIGNING_KEY` is not an active key in keys.json.
+
+### Make the root keys
+
+Do this once, on your own machine, outside the repo folder:
+
+```sh
+openssl genpkey -algorithm ed25519 -out update-root-a.pem
+openssl genpkey -algorithm ed25519 -out update-root-b.pem
+for k in update-root-a.pem update-root-b.pem; do
+  openssl pkey -in "$k" -pubout -outform DER | tail -c 32 | od -An -v -tx1 | tr -d ' 
+' && echo
+done
+```
+
+The two hex keys go into the launcher. Store A and B offline in two different places.
+
+### Sign the keys file
+
+```sh
+sh .github/scripts/sign-update-keys.sh /path/to/update-root-a.pem
+```
+
+Commit keys.json and keys.json.sig.
+
+### Rotate a leaked signing key
+
+1. Make a new signing key pair as in "Key setup".
+2. In keys.json, add the new public key to `signing_keys`, move the leaked key from `signing_keys` to `revoked`, and raise `version` by one.
+3. Sign keys.json with a root key and commit both files.
+4. Replace the `UPDATE_SIGNING_KEY` secret with the new private key.
+5. Make a release. Launchers pick up the new keys file with the next update check.
+
+### A leaked root key
+
+Sign a new keys file with the other root key and release a launcher that drops the leaked root key and adds a new backup root key. Launchers that have not updated still trust the leaked root key until then.
+
 ## Running it locally
 
 The script only reads the release and writes the files. It uploads nothing.

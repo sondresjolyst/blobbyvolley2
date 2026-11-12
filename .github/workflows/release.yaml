@@ -129,7 +129,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/update-keys
       - name: Write and sign latest.json
         env:
           GH_TOKEN: ${{ github.token }}
@@ -143,6 +145,8 @@ jobs:
           path: |
             manifest/latest.json
             manifest/latest.json.sig
+            manifest/keys.json
+            manifest/keys.json.sig
           if-no-files-found: error
 
   upload-update-manifest:
@@ -158,9 +162,9 @@ jobs:
         with:
           name: update-manifest
           path: manifest
-      - name: Upload latest.json and latest.json.sig
+      - name: Upload the manifest and the keys file
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ needs.get-version.outputs.tag }}
-        run: gh release upload "$TAG" manifest/latest.json manifest/latest.json.sig --repo "$REPO" --clobber
+        run: gh release upload "$TAG" manifest/latest.json manifest/latest.json.sig manifest/keys.json manifest/keys.json.sig --repo "$REPO" --clobber
