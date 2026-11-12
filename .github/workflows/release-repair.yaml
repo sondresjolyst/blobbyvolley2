@@ -94,8 +94,12 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
-          sha=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
-          status=$(gh api "repos/$REPO/compare/$sha...main" --jq .status)
+          sha=$(gh api "repos/$REPO/commits/refs/tags/$TAG" --jq .sha)
+          if ! echo "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Could not read the commit of $TAG"
+            exit 1
+          fi
+          status=$(gh api "repos/$REPO/compare/$sha...refs/heads/main" --jq .status)
           if [ "$status" != "ahead" ] && [ "$status" != "identical" ]; then
             echo "::error::$TAG points to $sha, which is not on main ($status)"
             exit 1
