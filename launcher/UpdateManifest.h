@@ -74,6 +74,9 @@ enum class UpdateFileError
 
 std::string describeUpdateFileError(UpdateFileError error);
 
+/// Highest keys.json version the launcher accepts and stores. A higher one is refused as damaged.
+constexpr uint64_t MAX_KEYS_VERSION = 1000000000;
+
 /// The signing keys that a root key vouched for.
 struct TrustedKeys
 {
@@ -83,8 +86,8 @@ struct TrustedKeys
 };
 
 /*! Checks keys.json and keys.json.sig.
-	\details The signature must come from one of roots. The version must not be lower than
-	highestSeen. The caller remembers keys.version as the new highest version.
+	\details The signature must come from one of roots. The version must be a whole number from 1 to
+	MAX_KEYS_VERSION and must not be lower than highestSeen. The caller remembers keys.version as the new highest version.
 */
 UpdateFileError verifyKeysFile(const std::string& json, const std::string& signatureText,
 							   const std::vector<PublicKey>& roots, uint64_t highestSeen, TrustedKeys& keys);

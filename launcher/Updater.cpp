@@ -61,26 +61,43 @@ namespace
 
 Fetcher::~Fetcher() = default;
 
-uint64_t readKeysVersion(const std::string& stateDir)
+bool readKeysVersion(const std::string& stateDir, uint64_t& version)
 {
+	version = 0;
+	if (stateDir.empty())
+		return true;
+	const std::string path = fsu::join(stateDir, KEYS_VERSION_FILE);
+	if (!fsu::isFile(path))
+	{
+		// a missing file means none was seen yet, anything else with that name is damage
+		return !fsu::isDirectory(path);
+	}
 	std::string text;
-	if (stateDir.empty() || !fsu::readFile(fsu::join(stateDir, KEYS_VERSION_FILE), 64, text))
-		return 0;
+	if (!fsu::readFile(path, 64, text))
+		return false;
+	if (!text.empty() && text[text.size() - 1] == '\n')
+		text.erase(text.size() - 1);
+	if (text.empty() || text.size() > 10 || (text.size() > 1 && text[0] == '0'))
+		return false;
 	uint64_t value = 0;
 	for (char c : text)
 	{
-		if (c == '\n' || c == '\r')
-			break;
-		if (c < '0' || c > '9' || value > 100000000000ull)
-			return 0;
+		if (c < '0' || c > '9')
+			return false;
 		value = value * 10 + (uint64_t)(c - '0');
 	}
-	return value;
+	if (value == 0 || value > MAX_KEYS_VERSION)
+		return false;
+	version = value;
+	return true;
 }
 
 bool writeKeysVersion(const std::string& stateDir, uint64_t version)
 {
-	return !stateDir.empty() && fsu::writeFile(fsu::join(stateDir, KEYS_VERSION_FILE), std::to_string(version) + "\n");
+	if (stateDir.empty() || version == 0 || version > MAX_KEYS_VERSION)
+		return false;
+	// writeFile writes a temporary file and renames it, so a crash leaves the old or the new number
+	return fsu::writeFile(fsu::join(stateDir, KEYS_VERSION_FILE), std::to_string(version) + "\n");
 }
 
 UpdateResult checkForUpdate(Fetcher& fetcher, const UpdaterConfig& config)
@@ -107,13 +124,19 @@ UpdateResult checkForUpdate(Fetcher& fetcher, const UpdaterConfig& config)
 			return failure(result, "could not get " + std::string(file.first) + ": " + error);
 	}
 
-	const uint64_t highest = readKeysVersion(config.stateDir);
+	uint64_t highest = 0;
+	if (!readKeysVersion(config.stateDir, highest))
+	{
+		result = failure(result, "the stored version of the key list is damaged, so the launcher does not update by itself");
+		result.useDownloadPage = true;
+		return result;
+	}
 	TrustedKeys keys;
 	UpdateFileError checked = verifyKeysFile(keysJson, keysSig, config.roots, highest, keys);
 	if (checked != UpdateFileError::NONE)
 		return failure(result, "keys.json was refused: " + describeUpdateFileError(checked));
-	if (keys.version > highest)
-		writeKeysVersion(config.stateDir, keys.version);
+	if (keys.version > highest && !writeKeysVersion(config.stateDir, keys.version))
+		return failure(result, "cannot remember the version of the key list");
 
 	UpdateManifest manifest;
 	checked = verifyManifest(manifestJson, manifestSig, keys, manifest);

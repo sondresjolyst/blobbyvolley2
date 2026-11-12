@@ -257,6 +257,13 @@ namespace
 		}
 	};
 
+	uint64_t storedKeysVersion(const std::string& stateDir)
+	{
+		uint64_t version = 0;
+		BOOST_CHECK(readKeysVersion(stateDir, version));
+		return version;
+	}
+
 	std::vector<std::string> installedVersions(const std::string& installDir)
 	{
 		std::vector<std::string> names;
@@ -452,7 +459,7 @@ BOOST_AUTO_TEST_CASE( an_install_of_the_previous_version_is_updated )
 		BOOST_REQUIRE_MESSAGE(check.status == UpdateStatus::AVAILABLE, check.error);
 		BOOST_CHECK(check.installed == version(0, 2, 0));
 		BOOST_CHECK(check.latest == version(0, 3, 0));
-		BOOST_CHECK_EQUAL(readKeysVersion(state), 1u);
+		BOOST_CHECK_EQUAL(storedKeysVersion(state), 1u);
 
 		int progressCalls = 0;
 		UpdateResult done = installUpdate(fetcher, release.config, check, [&](uint64_t, uint64_t) { ++progressCalls; return true; });
@@ -556,11 +563,85 @@ BOOST_AUTO_TEST_CASE( a_newer_key_list_is_remembered )
 	FakeRelease release(install, state, "0.3.0");
 	release.setKeys(4);
 	BOOST_CHECK(checkForUpdate(release.fetcher, release.config).status == UpdateStatus::AVAILABLE);
-	BOOST_CHECK_EQUAL(readKeysVersion(state), 4u);
+	BOOST_CHECK_EQUAL(storedKeysVersion(state), 4u);
 	// a replayed older key list is refused from now on
 	release.setKeys(3);
 	BOOST_CHECK(checkForUpdate(release.fetcher, release.config).status == UpdateStatus::FAILED);
-	BOOST_CHECK_EQUAL(readKeysVersion(state), 4u);
+	BOOST_CHECK_EQUAL(storedKeysVersion(state), 4u);
+}
+
+BOOST_AUTO_TEST_CASE( a_damaged_keys_version_file_stops_updates )
+{
+	// a missing file means no key list was seen yet
+	const std::string empty = freshDir("keys-missing");
+	uint64_t version = 99;
+	BOOST_CHECK(readKeysVersion(empty, version));
+	BOOST_CHECK_EQUAL(version, 0u);
+
+	for (const std::string& bad : {std::string(""), std::string("abc"), std::string("12x"), std::string("-3"),
+		std::string(" 5"), std::string("5\n\n"), std::string("05"), std::string("0"), std::string("1000000001"),
+		std::string("99999999999999999999999"), std::string("18446744073709551617")})
+	{
+		const std::string install = freshDir("keys-damaged");
+		const std::string state = freshDir("keys-damaged-state");
+		makeAppFolder(install, "0.2.0");
+		writeFile(fsu::join(state, "keys-version"), bad);
+		BOOST_CHECK_MESSAGE(!readKeysVersion(state, version), bad);
+		FakeRelease release(install, state, "0.3.0");
+		const UpdateResult result = release.update();
+		BOOST_CHECK_MESSAGE(result.status == UpdateStatus::FAILED, bad);
+		BOOST_CHECK_MESSAGE(result.useDownloadPage, bad);
+		BOOST_CHECK(!fsu::isDirectory(fsu::join(install, "app-0.3.0")));
+		// the damaged file is left as it is, it is never read as 0
+		std::string content;
+		BOOST_CHECK(fsu::readFile(fsu::join(state, "keys-version"), 100, content));
+		BOOST_CHECK_EQUAL(content, bad);
+	}
+
+	// a folder in place of the file is damage too
+	const std::string state = freshDir("keys-folder");
+	BOOST_REQUIRE(fsu::makeDirectory(fsu::join(state, "keys-version")));
+	BOOST_CHECK(!readKeysVersion(state, version));
+}
+
+BOOST_AUTO_TEST_CASE( keys_versions_out_of_range_are_refused )
+{
+	TestKey root(21);
+	TestKey signing(22);
+	TrustedKeys trusted;
+	for (const std::string& number : {std::string("1000000001"), std::string("18446744073709551615"),
+		std::string("18446744073709551616"), std::string("1.5"), std::string("1e3"), std::string("-1")})
+	{
+		const std::string keys = "{\"schema\":1,\"version\":" + number + ",\"signing_keys\":[\"" + signing.hex()
+			+ "\"],\"revoked\":[]}";
+		BOOST_CHECK_MESSAGE(verifyKeysFile(keys, root.sign(keys), {root.publicKey}, 0, trusted) == UpdateFileError::BAD_FORMAT, number);
+	}
+	const std::string highest = makeKeysJson(MAX_KEYS_VERSION, {&signing}, {});
+	BOOST_CHECK(verifyKeysFile(highest, root.sign(highest), {root.publicKey}, 0, trusted) == UpdateFileError::NONE);
+
+	const std::string state = freshDir("keys-range");
+	BOOST_CHECK(writeKeysVersion(state, MAX_KEYS_VERSION));
+	BOOST_CHECK(!writeKeysVersion(state, MAX_KEYS_VERSION + 1));
+	BOOST_CHECK(!writeKeysVersion(state, 0));
+	BOOST_CHECK_EQUAL(storedKeysVersion(state), MAX_KEYS_VERSION);
+}
+
+BOOST_AUTO_TEST_CASE( the_keys_version_is_written_atomically )
+{
+	const std::string state = freshDir("keys-atomic");
+	const std::string path = fsu::join(state, "keys-version");
+	// what a crash during an earlier write left behind
+	writeFile(path + ".tmp", "garbage");
+	BOOST_REQUIRE(writeKeysVersion(state, 3));
+	BOOST_REQUIRE(writeKeysVersion(state, 12));
+	std::string content;
+	BOOST_REQUIRE(fsu::readFile(path, 100, content));
+	BOOST_CHECK_EQUAL(content, "12\n");
+	BOOST_CHECK(!fsu::isFile(path + ".tmp"));
+	std::vector<std::string> names;
+	BOOST_REQUIRE(fsu::list(state, names));
+	BOOST_CHECK_EQUAL(names.size(), 1u);
+	BOOST_CHECK_EQUAL(storedKeysVersion(state), 12u);
 }
 
 BOOST_AUTO_TEST_CASE( a_cancelled_download_installs_nothing )

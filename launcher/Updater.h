@@ -91,10 +91,16 @@ struct UpdateResult
 	/// the version of the manifest
 	AppVersion latest;
 	PlatformPackage package;
+	/// The launcher cannot update safely by itself and the player should use the download page.
+	bool useDownloadPage = false;
 };
 
-/// The highest version of keys.json that the launcher has seen, 0 when none.
-uint64_t readKeysVersion(const std::string& stateDir);
+/*! Reads the highest version of keys.json that the launcher has seen.
+	\details A missing file gives 0. A file that cannot be read, or that does not hold a whole number
+	from 1 to MAX_KEYS_VERSION, returns false, so a damaged file never lets an older key list in.
+*/
+bool readKeysVersion(const std::string& stateDir, uint64_t& version);
+/// Writes the version under a temporary name and renames it into place.
 bool writeKeysVersion(const std::string& stateDir, uint64_t version);
 
 /*! Fetches and checks keys.json, latest.json and their signatures.

@@ -305,7 +305,7 @@ UpdateFileError verifyKeysFile(const std::string& json, const std::string& signa
 	if (!readKeyList(*signing, signingKeys) || !readKeyList(*revoked, revokedKeys))
 		return UpdateFileError::BAD_FORMAT;
 	const uint64_t number = version->get<uint64_t>();
-	if (number == 0)
+	if (number == 0 || number > MAX_KEYS_VERSION)
 		return UpdateFileError::BAD_FORMAT;
 	if (number < highestSeen)
 		return UpdateFileError::OLD_KEYS;
