@@ -509,6 +509,21 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	const std::vector<unsigned char> packet(data.GetData(), data.GetData() + data.GetNumberOfBytesUsed());
 	auto newplayer = std::make_shared<NetworkPlayer>(source, data);
 	const uint32_t features = readClientFeatures(data);
+	ForkVersion clientVersion;
+	const bool hasVersion = readClientVersion(data, clientVersion);
+	const ForkVersion minimumVersion = minimumClientVersion(mVersionPolicy, currentForkVersion());
+	const VersionNotice notice = checkClientVersion(minimumVersion, currentForkVersion(), hasVersion, clientVersion);
+	// an entry that is tried again told the client already
+	if( !mRetryingEntries )
+		sendServerVersion( source, notice );
+	if( notice == VersionNotice::UPDATE_REQUIRED )
+	{
+		syslog(LOG_NOTICE, "Client %s from %s is older than %s",
+			   hasVersion ? clientVersion.toString().c_str() : "without a version",
+			   source.toString().c_str(), minimumVersion.toString().c_str());
+		refuseEntry( source, EntryRefusedReason::OUTDATED_CLIENT );
+		return;
+	}
 	// the running game whose place this player takes again, if any
 	std::shared_ptr<NetworkGame> seat;
 	PlayerSide seatSide = NO_PLAYER;
@@ -716,6 +731,24 @@ void DedicatedServer::sendEntryRefused(PlayerID target, EntryRefusedReason reaso
 	stream.Write((unsigned char)reason);
 	// the same priority as the other lobby packets, so the reason does not wait in the
 	// client behind an earlier packet of this channel that is still on its way
+	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, target);
+}
+
+void DedicatedServer::setVersionPolicy(const VersionPolicy& policy)
+{
+	mVersionPolicy = policy;
+}
+
+void DedicatedServer::sendServerVersion(PlayerID target, VersionNotice notice)
+{
+	ServerVersionData data;
+	data.server = currentForkVersion();
+	data.notice = notice;
+	data.minimum = minimumClientVersion(mVersionPolicy, currentForkVersion());
+	data.downloadUrl = mVersionPolicy.downloadUrl;
+	RakNet::BitStream stream;
+	makeServerVersionPacket( stream, data );
+	// the same priority and channel as the lobby packets, so it arrives before a refusal
 	mServer->Send(stream, LOW_PRIORITY, RELIABLE_ORDERED, target);
 }
 

@@ -16,6 +16,7 @@ include_directories(.)
 set(common_SRC
 	base64.cpp base64.h
 	BlobbyDebug.cpp BlobbyDebug.h
+	ClientVersion.cpp ClientVersion.h
 	Clock.cpp Clock.h
 	DuelMatch.cpp DuelMatch.h
 	FileRead.cpp FileRead.h
@@ -190,6 +191,7 @@ if (BUILD_LOADBOT)
 		../tools/loadbot/LoadbotArgs.cpp
 		ScriptBot.cpp
 		BlobbyDebug.cpp
+		ClientVersion.cpp
 		Clock.cpp
 		Color.cpp
 		DuelMatch.cpp

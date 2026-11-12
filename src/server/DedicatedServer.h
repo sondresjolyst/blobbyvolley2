@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "server/EntryDeadlines.h"
 #include "server/Tournament.h"
 #include "SponsorSync.h"
+#include "ClientVersion.h"
 
 class ThreadSafeRakServer;
 
@@ -100,6 +101,9 @@ class DedicatedServer
 		typedef std::function<bool(sponsors::Board&)> SponsorSource;
 		void setSponsorSource( SponsorSource source, unsigned interval_ms = 1000 );
 
+		/// Sets the oldest client version and the download page that the server tells the clients about.
+		void setVersionPolicy( const VersionPolicy& policy );
+
 	private:
 		// creates a new game with those players
 		// does not add the game to the active game list
@@ -116,6 +120,8 @@ class DedicatedServer
 		void refuseEntry(PlayerID source, EntryRefusedReason reason);
 		// tells a client why it cannot enter or why its connection closes
 		void sendEntryRefused(PlayerID target, EntryRefusedReason reason);
+		// tells a client the version of the server and whether it should update
+		void sendServerVersion(PlayerID target, VersionNotice notice);
 		void closeRefusedConnections();
 		void closeConnectionsThatDidNotEnter();
 		// forgets a connection that closed: lobby, game, tournament and every per connection map
@@ -152,6 +158,8 @@ class DedicatedServer
 		bool mAcceptNewPlayers;
 		// true, if this is a player hosted local server
 		bool mPlayerHosted;
+		// oldest client version and download page
+		VersionPolicy mVersionPolicy;
 		// server info with server config
 		ServerInfo mServerInfo;
 

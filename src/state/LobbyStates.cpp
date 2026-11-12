@@ -45,6 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "TournamentProtocol.h"
 #include "Global.h"
 #include "JoinLink.h"
+#include "ClientVersion.h"
 
 namespace
 {
@@ -70,6 +71,43 @@ namespace
 		if (SDL_ShowMessageBox(&data, &chosen) != 0)
 			return false;
 		return chosen == 1;
+	}
+
+	/// What the server of the open connection said about its version. It stays while a tournament player
+	/// goes from the lobby to a game and back on the same connection.
+	ServerVersionData gServerVersion;
+
+	/// Opens the download page of the server in the browser, only for an official address.
+	/// The game never downloads anything from it.
+	void openDownloadPage(const std::string& url)
+	{
+		if (!isOfficialDownloadUrl(url))
+			return;
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+		if (SDL_OpenURL(url.c_str()) != 0)
+			std::cerr << "Could not open " << url << ": " << SDL_GetError() << std::endl;
+#else
+		std::cerr << "Open " << url << " in a browser to get the new version" << std::endl;
+#endif
+	}
+
+	/// The line that tells the player about a newer version, empty when there is nothing to tell
+	std::string versionNoticeText(const IMGUI& imgui, const ServerVersionData& data)
+	{
+		switch (data.notice)
+		{
+			case VersionNotice::UPDATE_AVAILABLE:
+			{
+				const ForkVersion newest = data.server < data.minimum ? data.minimum : data.server;
+				return imgui.getText(TextManager::NET_NEW_VERSION) + newest.toString();
+			}
+			case VersionNotice::UPDATE_REQUIRED:
+				return imgui.getText(TextManager::NET_VERSION_REQUIRED) + data.minimum.toString()
+					+ imgui.getText(TextManager::NET_OR_NEWER);
+			case VersionNotice::NONE:
+				break;
+		}
+		return std::string();
 	}
 
 	/// The server a join link points to.
@@ -117,6 +155,8 @@ void LobbyState::init()
 		return;
 
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
+	// a new connection, the server tells its version again
+	gServerVersion = ServerVersionData();
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
 	{
@@ -282,6 +322,14 @@ void LobbyState::step_impl()
 				}
 				}
 				break;
+			case ID_SERVER_VERSION:
+				{
+				RakNet::BitStream stream(packet->data, packet->length, false);
+				ServerVersionData data;
+				if (readServerVersionPacket(stream, data))
+					gServerVersion = data;
+				}
+				break;
 			case ID_SPONSORS:
 				// only a tournament server sends the board, after the tournament status
 				if (mTournament)
@@ -370,6 +418,17 @@ void LobbyState::step_impl()
 	}
 
 
+
+	// a newer version of the game is out
+	const std::string versionNotice = versionNoticeText(imgui, gServerVersion);
+	if (!versionNotice.empty())
+	{
+		imgui.doOverlay(GEN_ID, Vector2(25, 478), Vector2(775, 502), Color(128, 0, 0));
+		imgui.doText(GEN_ID, Vector2(35, 484), versionNotice, TF_SMALL_FONT);
+		// only the player opens the page, in the browser, and only an official one
+		if (isOfficialDownloadUrl(gServerVersion.downloadUrl) && imgui.doButton(GEN_ID, Vector2(430, 530), TextManager::NET_DOWNLOAD_PAGE))
+			openDownloadPage(gServerVersion.downloadUrl);
+	}
 
 	// back button
 	if (imgui.doButton(GEN_ID, Vector2(50, 530), TextManager::LBL_CANCEL))

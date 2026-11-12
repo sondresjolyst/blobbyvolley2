@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include <string>
 #include <vector>
 
+#include "ClientVersion.h"
+
 /// Tournament settings as the server config file gives them.
 struct SiteConfigFile
 {
@@ -84,3 +86,18 @@ bool loadServerPort(int filePort, const EnvironmentFunction& env, int& port, std
 */
 bool loadMaxTraining(const EnvironmentFunction& env, unsigned defaultValue, unsigned maxValue, unsigned& value,
 					std::string& error);
+
+/// Version settings as the server config file gives them.
+struct VersionPolicyFile
+{
+	std::string minClientVersion;
+	std::string downloadUrl;
+};
+
+/*! Combines the version settings of the environment and the config file. The environment comes first.
+	\details The variables are BLOBBY_MIN_CLIENT_VERSION and BLOBBY_DOWNLOAD_URL.
+	An empty minimum keeps the built in one. An empty download page means no link.
+	Returns false and adds to errors when a value is not valid.
+*/
+bool loadVersionPolicy(const VersionPolicyFile& file, const EnvironmentFunction& env, VersionPolicy& policy,
+					   std::vector<std::string>& errors);

@@ -53,7 +53,8 @@ enum MessageType
 	ID_RULES,
 	ID_SERVER_STATUS,
 	ID_LOBBY,
-	ID_SPONSORS
+	ID_SPONSORS,
+	ID_SERVER_VERSION
 };
 
 // General Information:
@@ -112,7 +113,9 @@ enum MessageType
 //		color (int)
 //		features marker (uint32, CLIENT_FEATURES_MARKER), only from newer clients
 //		features (uint32, ClientFeature bits), only from newer clients
-//	Servers read only the fields they know, so the two trailing fields do not
+//		version marker (uint32, CLIENT_VERSION_MARKER), only from newer clients
+//		fork version major, minor, patch (uint32 each), only from newer clients
+//	Servers read only the fields they know, so the trailing fields do not
 //	bother older servers. A tournament server refuses a client without the
 //	tournament feature, since that client cannot play a best-of series.
 //
@@ -240,6 +243,21 @@ enum MessageType
 //		hash (64 hex characters)
 //		size (uint32)
 //		data
+//
+// ID_SERVER_VERSION
+//	Description:
+//		Sent from server to client as answer to ID_ENTER_SERVER, before any other
+//		answer. It tells the fork version of the server and whether the client
+//		should update. Older clients ignore packet types they do not know.
+//		A client the server turns away for its version gets ENTRY_REFUSED with
+//		OUTDATED_CLIENT right after this packet. See ClientVersion.h.
+//	Structure:
+//		ID_SERVER_VERSION
+//		server fork version major, minor, patch (uint32 each)
+//		notice (VersionNotice as unsigned char)
+//		minimum client version major, minor, patch (uint32 each), 0.0.0 when none
+//		download page length (unsigned char), download page (http or https address)
+//	Clients read only the fields they know, so newer servers may add fields at the end.
 //
 
 enum class LobbyPacketType : unsigned char

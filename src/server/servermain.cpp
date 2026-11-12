@@ -132,6 +132,7 @@ int main(int argc, char** argv)
 	int tournamentMaxMatches = 0;
 	int tournamentNextGameDelay = DEFAULT_NEXT_GAME_DELAY;
 	SiteConfigFile siteFile;
+	VersionPolicyFile versionFile;
 
 	UserConfig config;
 	try
@@ -144,6 +145,8 @@ int main(int argc, char** argv)
 		siteFile.siteUrl = config.getString("tournament_site_url");
 		siteFile.siteToken = config.getString("tournament_site_token");
 		siteFile.dataDir = config.getString("tournament_data_dir");
+		versionFile.minClientVersion = config.getString("min_client_version");
+		versionFile.downloadUrl = config.getString("download_page_url");
 
 		// bring that value into a sane range
 		if(maxClients <= 0 || maxClients > 150)
@@ -163,6 +166,17 @@ int main(int argc, char** argv)
 			for(const auto& error : errors)
 				syslog(LOG_ERR, "%s", error.c_str());
 			syslog(LOG_ERR, "The tournament settings are not valid, the server stops");
+			return 1;
+		}
+	}
+	VersionPolicy versionPolicy;
+	{
+		std::vector<std::string> errors;
+		if(!loadVersionPolicy(versionFile, [](const char* name){ return std::getenv(name); }, versionPolicy, errors))
+		{
+			for(const auto& error : errors)
+				syslog(LOG_ERR, "%s", error.c_str());
+			syslog(LOG_ERR, "The version settings are not valid, the server stops");
 			return 1;
 		}
 	}
@@ -206,6 +220,12 @@ int main(int argc, char** argv)
 	std::transform(speed_vec_str.begin(), speed_vec_str.end(), std::back_inserter(speed_vec), [](const std::string& v ){ return std::stof(v);});
 
 	DedicatedServer server(myinfo, rule_vec, speed_vec, maxClients);
+	server.setVersionPolicy(versionPolicy);
+	syslog(LOG_NOTICE, "Games older than %s are turned away",
+		   minimumClientVersion(versionPolicy, currentForkVersion()).toString().c_str());
+	syslog(LOG_NOTICE, "Games older than %s are told that a new version is out", BLOBBY_FORK_VERSION);
+	if(!versionPolicy.downloadUrl.empty())
+		syslog(LOG_NOTICE, "Download page for new versions: %s", versionPolicy.downloadUrl.c_str());
 #ifdef BLOBBY_SITE_SYNC
 	std::shared_ptr<SiteReporter> siteReporter;
 #endif
