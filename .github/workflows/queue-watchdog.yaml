@@ -1,0 +1,54 @@
+name: Queue watchdog
+
+# timeout-minutes does not count the time a job waits for a runner, and GitHub only drops a
+# queued job after a day. This job watches the other jobs of the run. When a job has waited
+# for a runner too long and no job is running any more, it cancels the run, so the release
+# repair can build the missing packages.
+on:
+  workflow_call:
+    inputs:
+      queue_minutes:
+        description: "Minutes a job may wait for a runner"
+        type: number
+        required: false
+        default: 60
+
+jobs:
+  watch:
+    name: Watch the queue
+    runs-on: ubuntu-26.04
+    timeout-minutes: 300
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel the run if a job is stuck in the queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          QUEUE_MINUTES: ${{ inputs.queue_minutes }}
+        run: |
+          limit=$((QUEUE_MINUTES * 60))
+          while :; do
+            jobs=$(gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name | endswith("Watch the queue") | not)]') || { sleep 60; continue; }
+            open=$(echo "$jobs" | jq '[.[] | select(.status != "completed")] | length')
+            if [ "$open" = 0 ]; then
+              echo "All other jobs have finished."
+              exit 0
+            fi
+            running=$(echo "$jobs" | jq '[.[] | select(.status == "in_progress")] | length')
+            now=$(date -u +%s)
+            stuck=$(echo "$jobs" | jq -r --argjson now "$now" --argjson limit "$limit" \
+              '.[] | select(.status == "queued" and ($now - (.created_at | fromdateiso8601)) > $limit) | .name')
+            if [ -n "$stuck" ] && [ "$running" = 0 ]; then
+              echo "$stuck" | while read -r name; do
+                echo "::error::$name waited more than $QUEUE_MINUTES minutes for a runner"
+              done
+              echo "Cancelling the run so the release repair takes over."
+              gh run cancel "$RUN_ID" --repo "$REPO"
+              exit 0
+            fi
+            sleep 60
+          done

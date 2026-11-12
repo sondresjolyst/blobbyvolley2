@@ -1,0 +1,223 @@
+name: Release repair
+
+# Builds the platform packages that are missing on a release and signs the update manifest again.
+# It runs after every Release run and can be started by hand. Each round that leaves something
+# missing starts the next round, up to three rounds. See doc/update-manifest.md.
+run-name: Release repair ${{ inputs.tag || 'of the latest release' }}${{ inputs.round && format(', round {0}', inputs.round) || '' }}
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release to repair, such as v0.3.0. Empty means the latest release."
+        type: string
+        required: false
+        default: ""
+      round:
+        description: "Repair round. Start at 1. Each round starts the next one until round 3."
+        type: string
+        required: false
+        default: "1"
+
+# One repair at a time, so two runs never sign the manifest of a release at once.
+concurrency:
+  group: release-repair
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the release
+    # A manual Release run is a dry run and makes no release.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      round: ${{ steps.release.outputs.round }}
+      repair: ${{ steps.status.outputs.repair }}
+      build: ${{ steps.status.outputs.build }}
+      windows: ${{ steps.status.outputs.windows }}
+      linux: ${{ steps.status.outputs.linux }}
+      macos_arm64: ${{ steps.status.outputs.macos_arm64 }}
+      macos_x64: ${{ steps.status.outputs.macos_x64 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Pick the release and the round
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_ROUND: ${{ inputs.round }}
+          MAX_ROUNDS: "3"
+        run: |
+          tag=$INPUT_TAG
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --repo "$REPO" --json tagName --jq .tagName)
+            if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "The latest release '$tag' is not a vX.Y.Z release, so there is nothing to repair."
+              echo "repair=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          elif ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$tag' is not a vX.Y.Z tag"
+            exit 1
+          fi
+          round=${INPUT_ROUND:-1}
+          if ! echo "$round" | grep -Eq '^[1-9][0-9]*$' || [ "$round" -gt "$MAX_ROUNDS" ]; then
+            echo "::error::The round must be a number from 1 to $MAX_ROUNDS, not '$round'"
+            exit 1
+          fi
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "round=$round"
+            echo "repair=true"
+          } >> "$GITHUB_OUTPUT"
+      - name: Find what is missing
+        id: status
+        if: steps.release.outputs.repair == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          ROUND: ${{ steps.release.outputs.round }}
+        run: |
+          sh .github/scripts/release-status.sh "$REPO" "$TAG" > status.txt
+          missing=$(sed -n 's/^missing=//p' status.txt)
+          manifest_ok=$(sed -n 's/^manifest_ok=//p' status.txt)
+          build=false
+          for entry in windows:windows-x64 linux:linux-x64 macos_arm64:macos-arm64 macos_x64:macos-x64; do
+            case " $missing " in
+              *" ${entry#*:} "*) value=true; build=true ;;
+              *) value=false ;;
+            esac
+            echo "${entry%%:*}=$value" >> "$GITHUB_OUTPUT"
+          done
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          if [ -z "$missing" ] && [ "$manifest_ok" = true ]; then
+            echo "$TAG has every package and a matching manifest." >> "$GITHUB_STEP_SUMMARY"
+            echo "repair=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Round $ROUND for $TAG. Missing: ${missing:-nothing}. Manifest up to date: $manifest_ok." >> "$GITHUB_STEP_SUMMARY"
+            echo "repair=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  windows:
+    name: Windows package
+    needs: check
+    if: needs.check.outputs.windows == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows-package.yaml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      release_tag: ${{ needs.check.outputs.tag }}
+      ref: ${{ needs.check.outputs.tag }}
+
+  linux:
+    name: Linux package
+    needs: check
+    if: needs.check.outputs.linux == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/linux-package.yaml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      release_tag: ${{ needs.check.outputs.tag }}
+      ref: ${{ needs.check.outputs.tag }}
+
+  macos-arm64:
+    name: macOS arm64 package
+    needs: check
+    if: needs.check.outputs.macos_arm64 == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/macos-package.yaml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      release_tag: ${{ needs.check.outputs.tag }}
+      ref: ${{ needs.check.outputs.tag }}
+      arch: arm64
+
+  macos-x64:
+    name: macOS x64 package
+    needs: check
+    if: needs.check.outputs.macos_x64 == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/macos-package.yaml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      release_tag: ${{ needs.check.outputs.tag }}
+      ref: ${{ needs.check.outputs.tag }}
+      arch: x64
+
+  watchdog:
+    name: Queue watchdog
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    permissions:
+      actions: write
+    uses: ./.github/workflows/queue-watchdog.yaml
+
+  # Runs when a build failed or the run was cancelled too, so latest.json lists what is on the release.
+  update-manifest:
+    name: Update manifest
+    needs: [check, windows, linux, macos-arm64, macos-x64]
+    if: always() && needs.check.outputs.repair == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/update-manifest.yaml
+    with:
+      tag: ${{ needs.check.outputs.tag }}
+
+  verify:
+    name: Check the release again
+    needs: [check, windows, linux, macos-arm64, macos-x64, update-manifest]
+    if: always() && needs.check.outputs.repair == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Start the next round or report what is still missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
+          ROUND: ${{ needs.check.outputs.round }}
+          MAX_ROUNDS: "3"
+        run: |
+          sh .github/scripts/release-status.sh "$REPO" "$TAG" > status.txt
+          missing=$(sed -n 's/^missing=//p' status.txt)
+          manifest_ok=$(sed -n 's/^manifest_ok=//p' status.txt)
+          if [ -z "$missing" ] && [ "$manifest_ok" = true ]; then
+            echo "Round $ROUND repaired $TAG. It has every package and a matching manifest." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          problem="Missing packages: ${missing:-none}. Manifest up to date: $manifest_ok."
+          if [ "$ROUND" -lt "$MAX_ROUNDS" ]; then
+            next=$((ROUND + 1))
+            gh workflow run release-repair.yaml --repo "$REPO" --ref "$GITHUB_REF_NAME" -f tag="$TAG" -f round="$next"
+            echo "::warning::Round $ROUND of $MAX_ROUNDS did not repair $TAG. $problem Started round $next."
+            echo "Round $ROUND of $MAX_ROUNDS did not repair $TAG. $problem Started round $next." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::$TAG is still broken after $MAX_ROUNDS repair rounds. $problem Fix the cause, then start Release repair by hand with tag $TAG and round 1."
+          echo "$TAG is still broken after $MAX_ROUNDS repair rounds. $problem" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

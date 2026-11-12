@@ -19,16 +19,28 @@ on:
         type: string
         required: false
         default: ""
+      arch:
+        description: "arm64 or x64 builds only that one. Empty builds both."
+        type: string
+        required: false
+        default: ""
+      ref:
+        description: "Commit, branch or tag to build. Empty means the commit that started the run."
+        type: string
+        required: false
+        default: ""
 
 # github.workflow is the caller's name in a called run, so the prefix keeps
-# this group apart from the caller's group.
+# this group apart from the caller's group. The arch keeps the two calls in a release apart.
 concurrency:
-  group: macos-${{ github.workflow }}-${{ github.ref }}
+  group: macos-${{ inputs.arch }}-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   Package:
     name: macOS (${{ matrix.arch }})
+    # The release-please PR only changes version files, so it leaves the few macOS runners to the release.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     permissions:
@@ -37,9 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: arm64, os: macos-15 }
-          - { arch: x64, os: macos-15-intel }
+        include: ${{ fromJSON(inputs.arch == 'arm64' && '[{"arch":"arm64","os":"macos-15"}]' || inputs.arch == 'x64' && '[{"arch":"x64","os":"macos-15-intel"}]' || '[{"arch":"arm64","os":"macos-15"},{"arch":"x64","os":"macos-15-intel"}]') }}
 
     steps:
       - name: Install dependencies
@@ -47,6 +57,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref }}
       - name: Build the app bundle in Release mode
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_MACOS_BUNDLE=ON -DBLOBBY_SITE_SYNC=ON
@@ -121,7 +132,7 @@ jobs:
       - name: Download packages
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: blobbyvolley2-tournament-${{ inputs.version }}-macos-*
+          pattern: blobbyvolley2-tournament-${{ inputs.version }}-macos-${{ inputs.arch || '*' }}
           path: pkg
           merge-multiple: true
       - name: Upload the zips
@@ -129,6 +140,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ inputs.release_tag }}
-          VERSION: ${{ inputs.version }}
         run: |
-          gh release upload "$TAG" "pkg/blobbyvolley2-tournament-$VERSION-macos-arm64.zip" "pkg/blobbyvolley2-tournament-$VERSION-macos-x64.zip" --repo "$REPO" --clobber
+          ls -l pkg
+          gh release upload "$TAG" pkg/*.zip --repo "$REPO" --clobber
