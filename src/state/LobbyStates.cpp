@@ -77,10 +77,11 @@ namespace
 	/// goes from the lobby to a game and back on the same connection.
 	ServerVersionData gServerVersion;
 
-	/// Opens the download page of the server in the browser. The game never downloads anything from it.
+	/// Opens the download page of the server in the browser, only for an official address.
+	/// The game never downloads anything from it.
 	void openDownloadPage(const std::string& url)
 	{
-		if (!isDownloadUrl(url))
+		if (!isOfficialDownloadUrl(url))
 			return;
 #if SDL_VERSION_ATLEAST(2, 0, 14)
 		if (SDL_OpenURL(url.c_str()) != 0)
@@ -424,8 +425,8 @@ void LobbyState::step_impl()
 	{
 		imgui.doOverlay(GEN_ID, Vector2(25, 478), Vector2(775, 502), Color(128, 0, 0));
 		imgui.doText(GEN_ID, Vector2(35, 484), versionNotice, TF_SMALL_FONT);
-		// only the player opens the page, in the browser
-		if (!gServerVersion.downloadUrl.empty() && imgui.doButton(GEN_ID, Vector2(430, 530), TextManager::NET_DOWNLOAD_PAGE))
+		// only the player opens the page, in the browser, and only an official one
+		if (isOfficialDownloadUrl(gServerVersion.downloadUrl) && imgui.doButton(GEN_ID, Vector2(430, 530), TextManager::NET_DOWNLOAD_PAGE))
 			openDownloadPage(gServerVersion.downloadUrl);
 	}
 

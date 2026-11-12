@@ -12,7 +12,7 @@
 	<var name="min_client_version" value=""/>
 	<!-- warn tells players with an older game that a new version is out, reject turns them away. BLOBBY_MIN_CLIENT_MODE comes first. -->
 	<var name="min_client_version_mode" value="warn"/>
-	<!-- Page where players get the new version, such as the /last-ned page of the tournament site. The game shows a button that opens it in the browser. Empty means no link. BLOBBY_DOWNLOAD_URL comes first. -->
+	<!-- Page where players get the new version, such as the /last-ned page of the tournament site. The game shows a button that opens it in the browser, but only for official addresses: https on julalan.no or a subdomain, or the releases of the game on GitHub. Empty means no link. BLOBBY_DOWNLOAD_URL comes first. -->
 	<var name="download_page_url" value=""/>
 	<!-- In tournament mode players type their join code as name. The server swaps it for the nickname in the players file and refuses unknown codes. -->
 	<var name="tournament_mode" value="false"/>

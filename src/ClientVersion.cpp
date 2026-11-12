@@ -125,6 +125,37 @@ bool isDownloadUrl(const std::string& url)
 	return true;
 }
 
+bool isOfficialDownloadUrl(const std::string& url)
+{
+	const std::string scheme = "https://";
+	if (!isDownloadUrl(url) || url.compare(0, scheme.size(), scheme) != 0)
+		return false;
+	if (url.find('\\') != std::string::npos)
+		return false;
+	const std::size_t end = url.find_first_of("/?#", scheme.size());
+	const std::string host = url.substr(scheme.size(), end == std::string::npos ? std::string::npos : end - scheme.size());
+	const std::string path = end == std::string::npos ? std::string() : url.substr(end);
+
+	// only lowercase letters, digits, dots and dashes, so no user, no port and no other tricks
+	if (host.empty() || host.front() == '.' || host.back() == '.' || host.find("..") != std::string::npos)
+		return false;
+	for (char c : host)
+	{
+		if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-'))
+			return false;
+	}
+
+	const std::string site = "julalan.no";
+	const std::string subdomain = "." + site;
+	if (host == site)
+		return true;
+	if (host.size() > subdomain.size() && host.compare(host.size() - subdomain.size(), subdomain.size(), subdomain) == 0)
+		return true;
+	const std::string repository = "/sondresjolyst/blobbyvolley2-tournament/";
+	return host == "github.com" && path.compare(0, repository.size(), repository) == 0
+		&& path.find("..") == std::string::npos;
+}
+
 void writeClientVersion(RakNet::BitStream& stream, const ForkVersion& version)
 {
 	stream.Write(CLIENT_VERSION_MARKER);

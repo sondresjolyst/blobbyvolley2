@@ -51,6 +51,11 @@ bool parseForkVersion(const std::string& text, ForkVersion& version);
 bool isDownloadUrl(const std::string& url);
 constexpr std::size_t MAX_DOWNLOAD_URL_LENGTH = 200;
 
+/// True for a download link the game opens: a download link with https, no user, no port and no backslash,
+/// whose lowercase host is julalan.no or a subdomain of it, or github.com with a path below
+/// /sondresjolyst/blobbyvolley2-tournament/. Anyone can run a server, so other links are only shown as text.
+bool isOfficialDownloadUrl(const std::string& url);
+
 /// Marks the client version at the end of ID_ENTER_SERVER, after the features. The bytes spell BVER.
 constexpr uint32_t CLIENT_VERSION_MARKER = 0x52455642;
 

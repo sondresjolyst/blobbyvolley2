@@ -109,6 +109,29 @@ BOOST_AUTO_TEST_CASE( download_url_must_be_http_or_https )
 	BOOST_CHECK(!isDownloadUrl("https://example.org/\xc3\xa6"));
 }
 
+BOOST_AUTO_TEST_CASE( only_official_download_pages_open )
+{
+	for (const char* good : {"https://julalan.no", "https://julalan.no/last-ned", "https://www.julalan.no/last-ned?x=1",
+							 "https://a.b.julalan.no/", "https://julalan.no#last-ned",
+							 "https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest"})
+	{
+		BOOST_CHECK_MESSAGE(isOfficialDownloadUrl(good), good);
+	}
+	for (const char* bad : {"https://evil.com/last-ned", "https://julalan.no.evil.com/last-ned",
+							"https://eviljulalan.no/last-ned", "https://julalan.no@evil.com/last-ned",
+							"https://evil.com@julalan.no/", "http://julalan.no/last-ned",
+							"https://github.com/other/repo/releases", "https://github.com/sondresjolyst/blobbyvolley2-tournament",
+							"https://github.com/sondresjolyst/blobbyvolley2-tournament-evil/",
+							"https://github.com/sondresjolyst/blobbyvolley2-tournament/../../other/repo",
+							"https://julalan.no:8443/last-ned", "https://julalan.no:443/", "https://JULALAN.NO/last-ned",
+							"https://julalan.no\\@evil.com/", "https://evil.com\\.julalan.no/", "https://julalan.no./",
+							"https://.julalan.no/", "https://a..julalan.no/", "https://julalan.no/\\evil", "",
+							"julalan.no", "ftp://julalan.no/", "https://xn--julalan-.no.evil.com/"})
+	{
+		BOOST_CHECK_MESSAGE(!isOfficialDownloadUrl(bad), bad);
+	}
+}
+
 BOOST_AUTO_TEST_CASE( no_minimum_means_no_notice )
 {
 	VersionPolicy off;
