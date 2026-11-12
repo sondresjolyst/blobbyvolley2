@@ -28,9 +28,9 @@ jobs:
         - { name: Windows (MINGW64), os: windows-latest, shell: 'msys2 {0}', msystem: mingw64, msys-env: mingw-w64-x86_64 }
         - { name: Ubuntu 22.04,      os: ubuntu-22.04,   shell: sh }
         - { name: Ubuntu 24.04,      os: ubuntu-24.04,   shell: sh }
-        - { name: MacOS Sequoia,     os: macos-15,       shell: sh }
+        - { name: macOS,             os: macos-latest,   shell: sh }
         # The release-please PR only changes version files, so it leaves the few macOS runners to the release.
-        exclude: ${{ fromJSON(startsWith(github.head_ref, 'release-please--') && '[{"platform":{"name":"MacOS Sequoia","os":"macos-15","shell":"sh"}}]' || '[]') }}
+        exclude: ${{ fromJSON(startsWith(github.head_ref, 'release-please--') && '[{"platform":{"name":"macOS","os":"macos-latest","shell":"sh"}}]' || '[]') }}
 
     defaults:
       run:

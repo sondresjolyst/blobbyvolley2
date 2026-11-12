@@ -244,7 +244,7 @@ Test builds: every pull request uploads a Windows package as an artifact named `
 Download `blobbyvolley2-tournament-<version>-macos-arm64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) for a Mac with Apple Silicon (M1 or newer). For a Mac with an Intel processor, take `blobbyvolley2-tournament-<version>-macos-x64.zip`. Double-click the zip to unpack it.
 
 The app is signed ad hoc and not notarized by Apple, so macOS blocks the first start. Pick one of these ways once:
-- Right-click `Blobby Volley 2 Tournament.app`, choose Open and confirm with Open. On macOS 15 and newer, if no Open button is shown, open System Settings, go to Privacy & Security and click Open Anyway.
+- Right-click `Blobby Volley 2 Tournament.app`, choose Open and confirm with Open. If no Open button is shown, open System Settings, go to Privacy & Security and click Open Anyway.
 - Or remove the quarantine flag in Terminal, in the unpacked folder:
 ```bash
 xattr -dr com.apple.quarantine "Blobby Volley 2 Tournament.app" blobby-server
@@ -252,7 +252,7 @@ xattr -dr com.apple.quarantine "Blobby Volley 2 Tournament.app" blobby-server
 
 After that, double-click `Blobby Volley 2 Tournament.app` to play. You can move it to the Applications folder. It has its own name and bundle id, so it does not replace the original Blobby Volley there.
 The Mac app does not update itself. When a tournament server says that a new version is out, get it from the download page.
-The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 15 or newer.
+The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 26 or newer.
 
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. A click on a `blobby://` link does not open the game on macOS yet. See [Join links](#join-links).
 
