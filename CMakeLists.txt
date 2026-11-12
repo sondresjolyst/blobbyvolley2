@@ -19,6 +19,7 @@ include(deps/physfs.cmake)
 add_subdirectory(data)
 add_subdirectory(src)
 add_subdirectory(deps)
+add_subdirectory(launcher)
 
 add_subdirectory(linux)
 

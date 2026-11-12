@@ -76,8 +76,16 @@ find_package(nlohmann_json 3.10 CONFIG REQUIRED)
 target_sources(blobbytest PRIVATE SiteSyncTest.cpp ../src/server/SiteSync.cpp ../src/server/SiteSync.h)
 target_link_libraries(blobbytest nlohmann_json::nlohmann_json)
 
+# the launcher tests need the update library, which needs nlohmann_json
+if (TARGET blobby-update)
+	target_sources(blobbytest PRIVATE UpdateManifestTest.cpp UpdateTestKeys.h)
+	target_link_libraries(blobbytest blobby-update)
+else ()
+	message(STATUS "The launcher is not built, so its tests are left out")
+endif ()
+
 target_include_directories(blobbytest PRIVATE ${Boost_INCLUDE_DIR} ${PHYSFS_INCLUDE_DIR} ${SDL2_INCLUDE_DIRS} ../src ../tools/loadbot)
-target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"" "BLOBBY_TEST_VERSION_FILE=\"${PROJECT_SOURCE_DIR}/version.txt\"")
+target_compile_definitions(blobbytest PRIVATE "BOOST_TEST_DYN_LINK=1" "BLOBBY_TEST_DATA_DIR=\"${PROJECT_SOURCE_DIR}/data\"" "BLOBBY_TEST_VERSION_FILE=\"${PROJECT_SOURCE_DIR}/version.txt\"" "BLOBBY_TEST_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 target_link_libraries(blobbytest ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY} ${PHYSFS_LIBRARY} ${SDL2_LIBRARIES} lua raknet tinyxml2)
 
 if (MSVC)
