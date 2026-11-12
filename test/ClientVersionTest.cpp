@@ -123,6 +123,8 @@ BOOST_AUTO_TEST_CASE( only_official_download_pages_open )
 							"https://github.com/other/repo/releases", "https://github.com/sondresjolyst/blobbyvolley2-tournament",
 							"https://github.com/sondresjolyst/blobbyvolley2-tournament-evil/",
 							"https://github.com/sondresjolyst/blobbyvolley2-tournament/../../other/repo",
+							"https://github.com/sondresjolyst/blobbyvolley2-tournament/%2e%2e/%2e%2e/other/repo",
+							"https://github.com/sondresjolyst/blobbyvolley2-tournament/%2E%2E/x", "https://julalan.no/last-ned%20",
 							"https://julalan.no:8443/last-ned", "https://julalan.no:443/", "https://JULALAN.NO/last-ned",
 							"https://julalan.no\\@evil.com/", "https://evil.com\\.julalan.no/", "https://julalan.no./",
 							"https://.julalan.no/", "https://a..julalan.no/", "https://julalan.no/\\evil", "",

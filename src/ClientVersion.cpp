@@ -130,7 +130,8 @@ bool isOfficialDownloadUrl(const std::string& url)
 	const std::string scheme = "https://";
 	if (!isDownloadUrl(url) || url.compare(0, scheme.size(), scheme) != 0)
 		return false;
-	if (url.find('\\') != std::string::npos)
+	// no backslash, and no percent escapes that a browser could turn into "../" in the path
+	if (url.find_first_of("\\%") != std::string::npos)
 		return false;
 	const std::size_t end = url.find_first_of("/?#", scheme.size());
 	const std::string host = url.substr(scheme.size(), end == std::string::npos ? std::string::npos : end - scheme.size());
