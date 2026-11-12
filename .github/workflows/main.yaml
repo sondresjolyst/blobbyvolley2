@@ -28,15 +28,39 @@ jobs:
         - { name: Windows (MINGW64), os: windows-latest, shell: 'msys2 {0}', msystem: mingw64, msys-env: mingw-w64-x86_64 }
         - { name: Ubuntu 22.04,      os: ubuntu-22.04,   shell: sh }
         - { name: Ubuntu 24.04,      os: ubuntu-24.04,   shell: sh }
-        - { name: MacOS Sequoia,     os: macos-15,       shell: sh }
+        - { name: macOS,             os: macos-latest,   shell: sh }
+        # The release-please PR only changes version files, so it leaves the few macOS runners to the release.
+        exclude: ${{ fromJSON(startsWith(github.head_ref, 'release-please--') && '[{"platform":{"name":"macOS","os":"macos-latest","shell":"sh"}}]' || '[]') }}
 
     defaults:
       run:
         shell: ${{ matrix.platform.shell }}
 
     steps:
+      # A slow package mirror can fail the setup, so it gets a second try.
       - name: Setup Windows
+        id: msys2
         if: matrix.platform.shell == 'msys2 {0}'
+        continue-on-error: true
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: ${{ matrix.platform.msystem }}
+          install: >-
+            ${{ matrix.platform.msys-env }}-gcc
+            ${{ matrix.platform.msys-env }}-cmake
+            ${{ matrix.platform.msys-env }}-ninja
+            ${{ matrix.platform.msys-env }}-SDL2
+            ${{ matrix.platform.msys-env }}-physfs
+            ${{ matrix.platform.msys-env }}-boost
+            ${{ matrix.platform.msys-env }}-curl
+            ${{ matrix.platform.msys-env }}-nlohmann-json
+            ${{ matrix.platform.msys-env }}-libarchive
+      - name: Wait before the second try
+        if: steps.msys2.outcome == 'failure'
+        shell: pwsh
+        run: Start-Sleep -Seconds 60
+      - name: Setup Windows, second try
+        if: steps.msys2.outcome == 'failure'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: ${{ matrix.platform.msystem }}
