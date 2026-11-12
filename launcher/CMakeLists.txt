@@ -29,7 +29,7 @@ add_library(blobby-update STATIC
 	FsUtil.cpp FsUtil.h
 	InstallDir.cpp InstallDir.h
 	PackageExtract.cpp PackageExtract.h
-	Process.cpp Process.h
+	ChildProcess.cpp ChildProcess.h
 	UpdateManifest.cpp UpdateManifest.h
 	Updater.cpp Updater.h
 	Utf8.h

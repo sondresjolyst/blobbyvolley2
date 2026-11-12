@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "FsUtil.h"
 #include "InstallDir.h"
 #include "LauncherLink.h"
-#include "Process.h"
+#include "ChildProcess.h"
 #include "ProgressWindow.h"
 #include "Updater.h"
 

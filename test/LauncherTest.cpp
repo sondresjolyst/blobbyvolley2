@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "JoinLink.h"
 #include "LauncherLink.h"
 #include "PackageExtract.h"
-#include "Process.h"
+#include "ChildProcess.h"
 #include "Sha256.h"
 #include "TestDir.h"
 #include "UpdateTestKeys.h"
