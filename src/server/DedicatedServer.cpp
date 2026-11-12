@@ -511,7 +511,7 @@ void DedicatedServer::processEnterServer(PlayerID source, RakNet::BitStream& dat
 	const uint32_t features = readClientFeatures(data);
 	ForkVersion clientVersion;
 	const bool hasVersion = readClientVersion(data, clientVersion);
-	const ForkVersion minimumVersion = minimumClientVersion(mVersionPolicy);
+	const ForkVersion minimumVersion = minimumClientVersion(mVersionPolicy, currentForkVersion());
 	const VersionNotice notice = checkClientVersion(minimumVersion, currentForkVersion(), hasVersion, clientVersion);
 	// an entry that is tried again told the client already
 	if( !mRetryingEntries )
@@ -744,7 +744,7 @@ void DedicatedServer::sendServerVersion(PlayerID target, VersionNotice notice)
 	ServerVersionData data;
 	data.server = currentForkVersion();
 	data.notice = notice;
-	data.minimum = minimumClientVersion(mVersionPolicy);
+	data.minimum = minimumClientVersion(mVersionPolicy, currentForkVersion());
 	data.downloadUrl = mVersionPolicy.downloadUrl;
 	RakNet::BitStream stream;
 	makeServerVersionPacket( stream, data );

@@ -173,35 +173,18 @@ bool readClientVersion(RakNet::BitStream& stream, ForkVersion& version)
 	return readVersion(stream, version);
 }
 
-// the server must accept games of its own version
-static_assert(MIN_COMPATIBLE_CLIENT_MAJOR < BLOBBY_FORK_VERSION_MAJOR
-	|| (MIN_COMPATIBLE_CLIENT_MAJOR == BLOBBY_FORK_VERSION_MAJOR
-		&& (MIN_COMPATIBLE_CLIENT_MINOR < BLOBBY_FORK_VERSION_MINOR
-			|| (MIN_COMPATIBLE_CLIENT_MINOR == BLOBBY_FORK_VERSION_MINOR
-				&& MIN_COMPATIBLE_CLIENT_PATCH <= BLOBBY_FORK_VERSION_PATCH))),
-	"MIN_COMPATIBLE_CLIENT_VERSION is higher than the fork version in version.txt");
-
-ForkVersion minCompatibleClientVersion()
+ForkVersion minimumClientVersion(const VersionPolicy& policy, const ForkVersion& server)
 {
-	ForkVersion version;
-	version.major = MIN_COMPATIBLE_CLIENT_MAJOR;
-	version.minor = MIN_COMPATIBLE_CLIENT_MINOR;
-	version.patch = MIN_COMPATIBLE_CLIENT_PATCH;
-	return version;
-}
-
-ForkVersion minimumClientVersion(const VersionPolicy& policy)
-{
-	const ForkVersion builtIn = minCompatibleClientVersion();
-	return builtIn < policy.minimum ? policy.minimum : builtIn;
+	ForkVersion derived;
+	derived.major = server.major;
+	derived.minor = server.minor;
+	return derived < policy.minimum ? policy.minimum : derived;
 }
 
 VersionNotice checkClientVersion(const ForkVersion& minimum, const ForkVersion& server, bool hasVersion,
 								 const ForkVersion& client)
 {
-	if (!hasVersion)
-		return minimum == ForkVersion() ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::UPDATE_REQUIRED;
-	if (client < minimum)
+	if (!hasVersion || client < minimum)
 		return VersionNotice::UPDATE_REQUIRED;
 	return client < server ? VersionNotice::UPDATE_AVAILABLE : VersionNotice::NONE;
 }

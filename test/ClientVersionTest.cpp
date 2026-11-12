@@ -133,47 +133,61 @@ BOOST_AUTO_TEST_CASE( only_official_download_pages_open )
 	}
 }
 
-BOOST_AUTO_TEST_CASE( built_in_minimum_is_not_above_the_own_version )
+BOOST_AUTO_TEST_CASE( minimum_is_the_major_and_minor_of_the_server )
 {
-	BOOST_CHECK(!(currentForkVersion() < minCompatibleClientVersion()));
-	BOOST_CHECK(minCompatibleClientVersion() == version(MIN_COMPATIBLE_CLIENT_MAJOR, MIN_COMPATIBLE_CLIENT_MINOR,
-														MIN_COMPATIBLE_CLIENT_PATCH));
+	BOOST_CHECK(minimumClientVersion(VersionPolicy(), version(0, 3, 1)) == version(0, 3, 0));
+	BOOST_CHECK(minimumClientVersion(VersionPolicy(), version(1, 0, 4)) == version(1, 0, 0));
+	BOOST_CHECK(minimumClientVersion(VersionPolicy(), version(0, 0, 7)) == version(0, 0, 0));
 }
 
-BOOST_AUTO_TEST_CASE( config_can_only_raise_the_built_in_minimum )
+BOOST_AUTO_TEST_CASE( config_can_only_raise_the_derived_minimum )
 {
-	BOOST_CHECK(minimumClientVersion(VersionPolicy()) == minCompatibleClientVersion());
-	BOOST_CHECK(minimumClientVersion(policy(version(999, 0, 0))) == version(999, 0, 0));
-	// a lower config minimum never lowers the built in one
-	BOOST_CHECK(!(minimumClientVersion(policy(version(0, 0, 0))) < minCompatibleClientVersion()));
+	BOOST_CHECK(minimumClientVersion(policy(version(0, 3, 1)), version(0, 3, 2)) == version(0, 3, 1));
+	BOOST_CHECK(minimumClientVersion(policy(version(0, 4, 0)), version(0, 3, 2)) == version(0, 4, 0));
+	// a lower config minimum never lowers the derived one
+	BOOST_CHECK(minimumClientVersion(policy(version(0, 1, 0)), version(0, 3, 2)) == version(0, 3, 0));
 }
 
-BOOST_AUTO_TEST_CASE( no_minimum_accepts_every_game )
+BOOST_AUTO_TEST_CASE( game_of_an_older_minor_is_refused )
 {
-	const ForkVersion none;
 	const ForkVersion server = version(0, 3, 0);
-	BOOST_CHECK(checkClientVersion(none, server, true, version(0, 3, 0)) == VersionNotice::NONE);
-	BOOST_CHECK(checkClientVersion(none, server, true, version(0, 4, 0)) == VersionNotice::NONE);
-	// an older game plays and hears about the new version
-	BOOST_CHECK(checkClientVersion(none, server, true, version(0, 2, 9)) == VersionNotice::UPDATE_AVAILABLE);
-	// a game that sends no version plays too
-	BOOST_CHECK(checkClientVersion(none, server, false, ForkVersion()) == VersionNotice::UPDATE_AVAILABLE);
+	const ForkVersion minimum = minimumClientVersion(VersionPolicy(), server);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 2, 9)) == VersionNotice::UPDATE_REQUIRED);
+	const ForkVersion major = version(1, 0, 0);
+	BOOST_CHECK(checkClientVersion(minimumClientVersion(VersionPolicy(), major), major, true, version(0, 9, 9))
+				== VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 0)) == VersionNotice::NONE);
 }
 
-BOOST_AUTO_TEST_CASE( game_below_the_minimum_is_refused )
+BOOST_AUTO_TEST_CASE( game_of_an_older_patch_is_warned )
 {
-	const ForkVersion minimum = version(0, 3, 0);
-	const ForkVersion server = version(0, 4, 2);
-	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 2, 9)) == VersionNotice::UPDATE_REQUIRED);
+	const ForkVersion server = version(0, 3, 1);
+	const ForkVersion minimum = minimumClientVersion(VersionPolicy(), server);
 	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 0)) == VersionNotice::UPDATE_AVAILABLE);
-	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 4, 2)) == VersionNotice::NONE);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 1)) == VersionNotice::NONE);
+}
+
+BOOST_AUTO_TEST_CASE( newer_game_plays_without_a_notice )
+{
+	const ForkVersion server = version(0, 3, 1);
+	const ForkVersion minimum = minimumClientVersion(VersionPolicy(), server);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 2)) == VersionNotice::NONE);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 4, 0)) == VersionNotice::NONE);
 	BOOST_CHECK(checkClientVersion(minimum, server, true, version(1, 0, 0)) == VersionNotice::NONE);
 }
 
-BOOST_AUTO_TEST_CASE( game_without_a_version_is_older_than_a_minimum_above_zero )
+BOOST_AUTO_TEST_CASE( game_without_a_version_is_refused )
 {
-	BOOST_CHECK(checkClientVersion(version(0, 0, 1), version(0, 3, 0), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
 	BOOST_CHECK(checkClientVersion(version(0, 3, 0), version(0, 3, 0), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK(checkClientVersion(version(0, 0, 0), version(0, 0, 1), false, ForkVersion()) == VersionNotice::UPDATE_REQUIRED);
+}
+
+BOOST_AUTO_TEST_CASE( raised_minimum_refuses_an_older_patch )
+{
+	const ForkVersion server = version(0, 3, 2);
+	const ForkVersion minimum = minimumClientVersion(policy(version(0, 3, 1)), server);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 0)) == VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK(checkClientVersion(minimum, server, true, version(0, 3, 1)) == VersionNotice::UPDATE_AVAILABLE);
 }
 
 BOOST_AUTO_TEST_CASE( enter_server_packet_carries_features_and_version )
