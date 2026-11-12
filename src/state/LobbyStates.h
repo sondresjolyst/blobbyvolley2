@@ -83,6 +83,9 @@ class LobbyState : public State
 		const char* getStateName() const override;
 
 	private:
+		/// Writes the update request for the launcher and closes the game.
+		void askLauncherToUpdate();
+
 		std::shared_ptr<RakClient> mClient;
 		PlayerIdentity mLocalPlayer;
 		ServerInfo mInfo;

@@ -223,6 +223,10 @@ void TextManager::setDefault()
 	mStrings[NET_VERSION_REQUIRED] = "this server needs game version ";
 	mStrings[NET_OR_NEWER] = " or newer";
 	mStrings[NET_DOWNLOAD_PAGE] = "download page";
+	mStrings[NET_UPDATE_NOW] = "update now";
+	mStrings[NET_NOT_NOW] = "not now";
+	mStrings[NET_BACK] = "back";
+	mStrings[NET_UPDATE_REQUEST_FAILED] = "the game could not start the update";
 	mStrings[TNM_NO_MATCH] = "no match for you yet";
 	mStrings[TNM_WAITING_OPPONENT] = "waiting for your opponent";
 	mStrings[TNM_WAITING_SLOT] = "waiting for a free slot";

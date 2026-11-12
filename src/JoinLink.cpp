@@ -334,6 +334,21 @@ namespace
 
 	bool runningExePath(std::string& path)
 	{
+		// started by the launcher, links must open the launcher, since the version folder changes with each update
+		DWORD launcherLength = GetEnvironmentVariableW(L"BLOBBY_LAUNCHER", nullptr, 0);
+		if (launcherLength > 1)
+		{
+			std::wstring launcher(launcherLength, L'\0');
+			launcherLength = GetEnvironmentVariableW(L"BLOBBY_LAUNCHER", &launcher[0], launcherLength);
+			launcher.resize(launcherLength);
+			const DWORD attributes = GetFileAttributesW(launcher.c_str());
+			if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				path = narrow(launcher);
+				return !path.empty();
+			}
+		}
+
 		std::wstring buffer(32768, L'\0');
 		DWORD length = GetModuleFileNameW(nullptr, &buffer[0], static_cast<DWORD>(buffer.size()));
 		if (length == 0 || length >= buffer.size())
