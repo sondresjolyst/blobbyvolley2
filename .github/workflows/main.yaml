@@ -49,6 +49,7 @@ jobs:
             ${{ matrix.platform.msys-env }}-boost
             ${{ matrix.platform.msys-env }}-curl
             ${{ matrix.platform.msys-env }}-nlohmann-json
+            ${{ matrix.platform.msys-env }}-libarchive
       - name: Setup Linux
         if: runner.os == 'Linux'
         run: |
@@ -59,7 +60,8 @@ jobs:
             libphysfs-dev \
             libboost-test-dev \
             libcurl4-openssl-dev \
-            nlohmann-json3-dev
+            nlohmann-json3-dev \
+            libarchive-dev
       - name: Setup MacOS
         if: runner.os == 'macOS'
         run: |

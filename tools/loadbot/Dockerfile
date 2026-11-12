@@ -19,9 +19,10 @@ COPY data ./data
 COPY src ./src
 COPY linux ./linux
 COPY macos ./macos
+COPY launcher ./launcher
 COPY tools/loadbot/*.cpp tools/loadbot/*.h ./tools/loadbot/
 
-RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=OFF -DBUILD_LOADBOT=ON \
+RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DBLOBBY_SITE_SYNC=OFF -DBLOBBY_LAUNCHER=OFF -DBUILD_LOADBOT=ON \
     && cmake --build /build --parallel --target blobby-loadbot
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2

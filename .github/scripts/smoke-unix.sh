@@ -5,6 +5,7 @@
 # With SMOKE_LIBRARIES=1 the loader lists the libraries it opens, and the lines with SDL are
 # printed at the end. The variable has no DYLD_ prefix, because macOS removes those from the
 # environment of /bin/sh.
+# BLOBBY_LAUNCHER_NO_UPDATE=1 keeps the launcher from looking for updates on GitHub.
 set -eu
 
 work_dir=$1
@@ -16,9 +17,9 @@ shift
 cd "$work_dir"
 log=$(mktemp)
 if [ "${SMOKE_LIBRARIES:-0}" = 1 ]; then
-	env DYLD_PRINT_LIBRARIES=1 LD_DEBUG=libs SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "./$exe" "$@" > "$log" 2>&1 &
+	env DYLD_PRINT_LIBRARIES=1 LD_DEBUG=libs SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy BLOBBY_LAUNCHER_NO_UPDATE=1 "./$exe" "$@" > "$log" 2>&1 &
 else
-	env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "./$exe" "$@" > "$log" 2>&1 &
+	env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy BLOBBY_LAUNCHER_NO_UPDATE=1 "./$exe" "$@" > "$log" 2>&1 &
 fi
 pid=$!
 # Never leave the program running, even if this script exits early.

@@ -20,8 +20,9 @@ COPY data ./data
 COPY src ./src
 COPY linux ./linux
 COPY macos ./macos
+COPY launcher ./launcher
 
-RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DBLOBBY_SITE_SYNC=ON \
+RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DBLOBBY_SITE_SYNC=ON -DBLOBBY_LAUNCHER=OFF \
     && cmake --build /build --parallel --target blobby-server rules_zip scripts_zip
 
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2

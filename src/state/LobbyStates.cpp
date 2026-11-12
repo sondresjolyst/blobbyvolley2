@@ -46,6 +46,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "Global.h"
 #include "JoinLink.h"
 #include "ClientVersion.h"
+#include "GameLauncher.h"
+#include "LauncherLink.h"
+#include "InputManager.h"
 
 namespace
 {
@@ -76,6 +79,10 @@ namespace
 	/// What the server of the open connection said about its version. It stays while a tournament player
 	/// goes from the lobby to a game and back on the same connection.
 	ServerVersionData gServerVersion;
+	/// The player picked not now for the version notice of this connection.
+	bool gVersionNoticeDismissed = false;
+	/// The request to the launcher could not be written, so the download page is offered instead.
+	bool gUpdateRequestFailed = false;
 
 	/// Opens the download page of the server in the browser, only for an official address.
 	/// The game never downloads anything from it.
@@ -157,6 +164,8 @@ void LobbyState::init()
 	mClient = std::shared_ptr<RakClient>(new RakClient(), [](RakClient* client) { client->Disconnect(25); delete client; });
 	// a new connection, the server tells its version again
 	gServerVersion = ServerVersionData();
+	gVersionNoticeDismissed = false;
+	gUpdateRequestFailed = false;
 
 	if (!mClient->Connect(mInfo.hostname, mInfo.port, 0, 0, RAKNET_THREAD_SLEEP_TIME))
 	{
@@ -421,17 +430,29 @@ void LobbyState::step_impl()
 
 	// a newer version of the game is out
 	const std::string versionNotice = versionNoticeText(imgui, gServerVersion);
-	if (!versionNotice.empty())
+	// a game from a launcher that can update asks the launcher, any other game links to the download page
+	const bool launcherUpdates = startedByUpdatingLauncher() && !gUpdateRequestFailed;
+	bool refusedForVersion = false;
+	if (!versionNotice.empty() && !gVersionNoticeDismissed)
 	{
 		imgui.doOverlay(GEN_ID, Vector2(25, 478), Vector2(775, 502), Color(128, 0, 0));
-		imgui.doText(GEN_ID, Vector2(35, 484), versionNotice, TF_SMALL_FONT);
+		imgui.doText(GEN_ID, Vector2(35, 484), gUpdateRequestFailed ? imgui.getText(TextManager::NET_UPDATE_REQUEST_FAILED)
+			: versionNotice, TF_SMALL_FONT);
+		if (launcherUpdates)
+		{
+			refusedForVersion = gServerVersion.notice == VersionNotice::UPDATE_REQUIRED;
+			if (imgui.doButton(GEN_ID, Vector2(300, 530), TextManager::NET_UPDATE_NOW))
+				askLauncherToUpdate();
+			if (!refusedForVersion && imgui.doButton(GEN_ID, Vector2(580, 530), TextManager::NET_NOT_NOW))
+				gVersionNoticeDismissed = true;
+		}
 		// only the player opens the page, in the browser, and only an official one
-		if (isOfficialDownloadUrl(gServerVersion.downloadUrl) && imgui.doButton(GEN_ID, Vector2(430, 530), TextManager::NET_DOWNLOAD_PAGE))
+		else if (isOfficialDownloadUrl(gServerVersion.downloadUrl) && imgui.doButton(GEN_ID, Vector2(430, 530), TextManager::NET_DOWNLOAD_PAGE))
 			openDownloadPage(gServerVersion.downloadUrl);
 	}
 
 	// back button
-	if (imgui.doButton(GEN_ID, Vector2(50, 530), TextManager::LBL_CANCEL))
+	if (imgui.doButton(GEN_ID, Vector2(50, 530), refusedForVersion ? TextManager::NET_BACK : TextManager::LBL_CANCEL))
 	{
 		if( mPrevious == PreviousState::ONLINE )
 			switchState( new OnlineSearchState );
@@ -440,6 +461,29 @@ void LobbyState::step_impl()
 		else
 			switchState( new MainMenuState );
 	}
+}
+
+void LobbyState::askLauncherToUpdate()
+{
+	// the launcher starts the new game with a link back to this server, which needs the join code
+	std::string link;
+	if (!mJoinCode.empty())
+	{
+		JoinLink server;
+		server.host = mInfo.hostname;
+		server.port = (uint16_t)mInfo.port;
+		server.code = mJoinCode;
+		JoinLink checked;
+		if (parseJoinLink(formatJoinLink(server), checked) == JoinLinkError::NONE)
+			link = formatJoinLink(checked);
+	}
+	if (!requestLauncherUpdate(link))
+	{
+		gUpdateRequestFailed = true;
+		return;
+	}
+	// the launcher updates once the game has closed
+	getApp().getInputManager().setEndBlobby();
 }
 
 const char* LobbyState::getStateName() const

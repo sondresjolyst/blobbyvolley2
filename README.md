@@ -188,13 +188,13 @@ CMake version is 3.11.
 
 Debian-based Distros:
 ```bash
-apt-get install g++ cmake libsdl2-dev libboost-dev libphysfs-dev libcurl4-openssl-dev nlohmann-json3-dev
+apt-get install g++ cmake libsdl2-dev libboost-dev libphysfs-dev libcurl4-openssl-dev nlohmann-json3-dev libarchive-dev
 ```
 Arch-based Distros:
 ```bash
-pacman -S gcc cmake sdl2 boost physfs curl nlohmann-json
+pacman -S gcc cmake sdl2 boost physfs curl nlohmann-json libarchive
 ```
-libcurl and nlohmann_json are only needed for the tournament site client of the server.
+libcurl and nlohmann_json are only needed for the tournament site client of the server and for the launcher. The launcher also needs libarchive. Without them the game and the server are still built.
 2. Compile:
 ```bash
 cmake .
@@ -212,7 +212,7 @@ src/blobby
 
 3. Install dependencies:
 ```bash
-pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-physfs mingw-w64-ucrt-x86_64-boost mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-nlohmann-json
+pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-physfs mingw-w64-ucrt-x86_64-boost mingw-w64-ucrt-x86_64-curl mingw-w64-ucrt-x86_64-nlohmann-json mingw-w64-ucrt-x86_64-libarchive
 ```
 4. Compile in the project directory:
 ```bash
@@ -231,10 +231,10 @@ export PATH="$PATH:/c/msys64/ucrt64/bin"
 ```
 
 ### Download for Windows
-Download `blobbyvolley2-tournament-<version>-windows-x64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) and unzip it.
-Double-click `blobby.exe` to play. `blobby-server.exe` starts a dedicated server.
+Download `blobbyvolley2-tournament-<version>-windows-x64.zip` from the [latest release](https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/latest) and unzip it into a new folder, not over an older copy.
+Double-click `blobby.exe` to play. It is a small launcher that installs new versions and starts the game in the folder `app-<version>`. Keep the game in a folder you can write to, such as Downloads or Documents, and not in Program Files, so it can update itself. See [doc/launcher.md](doc/launcher.md).
+`app-<version>\blobby-server.exe` starts a dedicated server.
 The package has all the DLLs it needs, so MSYS2 does not have to be installed.
-Start the game from its own folder, as Explorer and shortcuts do.
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. See [Join links](#join-links).
 The zip also holds `COPYING`, this README, the start script of the tournament server and the license texts of the bundled DLLs in `licenses`.
 
@@ -251,6 +251,7 @@ xattr -dr com.apple.quarantine "Blobby Volley 2 Tournament.app" blobby-server
 ```
 
 After that, double-click `Blobby Volley 2 Tournament.app` to play. You can move it to the Applications folder. It has its own name and bundle id, so it does not replace the original Blobby Volley there.
+The Mac app does not update itself. When a tournament server says that a new version is out, get it from the download page.
 The app has the libraries it needs, so Homebrew does not have to be installed. It needs macOS 15 or newer.
 
 To join a tournament match, copy your join link and click "join link" at the top of the main menu. A click on a `blobby://` link does not open the game on macOS yet. See [Join links](#join-links).
@@ -269,10 +270,12 @@ tar -xzf blobbyvolley2-tournament-<version>-linux-x64.tar.gz
 cd blobbyvolley2-tournament-<version>-linux-x64
 ./blobby
 ```
-The package has SDL2, PhysFS, libcurl and the libraries they need in `lib`. It uses OpenGL, X11, Wayland, PulseAudio, ALSA, D-Bus, systemd and the C and C++ runtime from the system, which a desktop distribution has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
+`./blobby` is a small launcher that installs new versions and starts the game in the folder `app-<version>`, see [doc/launcher.md](doc/launcher.md). Unpack the package into a folder you can write to, so it can update itself.
+The package has SDL2, PhysFS, libcurl, libarchive and the libraries they need in the `lib` folders. It uses OpenGL, X11, Wayland, PulseAudio, ALSA, D-Bus, systemd and the C and C++ runtime from the system, which a desktop distribution has. It is built on Ubuntu 22.04 and runs on that and newer distributions.
 
-Start the dedicated server from the same folder, so it finds its `data` folder:
+Start the dedicated server from its version folder, so it finds its `data` folder:
 ```bash
+cd app-<version>
 ./blobby-server --no-daemon --print-msgs
 ```
 To let a click on a join link open this copy of the game, run `sh register-join-links.sh "$PWD/blobby"` once in the folder. See [Join links](#join-links).

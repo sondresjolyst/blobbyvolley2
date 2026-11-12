@@ -48,6 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "state/LobbyStates.h"
 #include "BlobbyApp.h"
 #include "JoinLink.h"
+#include "GameLauncher.h"
 
 // this global allows the host game thread to be killed
 extern std::atomic<bool> gKillHostThread;
@@ -298,6 +299,8 @@ int main(int argc, char* argv[])
 			first_state.reset(new MainMenuState());
 
 		BlobbyApp app( std::move(first_state), gameConfig );
+		// the launcher goes back to the previous version when this one never got this far
+		bool startReported = false;
 
 		while (running)
 		{
@@ -344,6 +347,11 @@ int main(int argc, char* argv[])
 				app.getIMGUI().end(app.getRenderManager());
 				app.getRenderManager().getBlood().step(app.getRenderManager());
 				app.getRenderManager().refresh();
+				if (!startReported)
+				{
+					markStartedForLauncher();
+					startReported = true;
+				}
 			}
 			scontroller.update();
 		}

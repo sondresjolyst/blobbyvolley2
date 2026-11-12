@@ -65,7 +65,9 @@ set (blobby_SRC ${common_SRC} ${inputdevice_SRC}
 	IMGUI.cpp IMGUI.h
 	InputDevice.h
 	InputManager.cpp InputManager.h
+	GameLauncher.cpp GameLauncher.h
 	JoinLink.cpp JoinLink.h
+	LauncherLink.cpp LauncherLink.h
 	LocalInputSource.cpp LocalInputSource.h
 	FontIndex.cpp FontIndex.h
 	FutureResult.h
