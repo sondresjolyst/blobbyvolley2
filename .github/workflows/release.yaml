@@ -113,3 +113,32 @@ jobs:
     with:
       version: ${{ needs.get-version.outputs.version }}
       release_tag: ${{ needs.get-version.outputs.tag }}
+
+  update-manifest:
+    name: Update manifest
+    needs: [get-version, windows, macos, linux]
+    # Runs when a platform failed too, so the manifest lists the packages that did attach.
+    if: ${{ !cancelled() && needs.get-version.outputs.publish == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Write and sign latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.get-version.outputs.tag }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: sh .github/scripts/make-update-manifest.sh "$REPO" "$TAG" manifest
+      - name: Upload latest.json and latest.json.sig
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.get-version.outputs.tag }}
+        run: gh release upload "$TAG" manifest/latest.json manifest/latest.json.sig --repo "$REPO" --clobber
