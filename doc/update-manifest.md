@@ -71,16 +71,18 @@ openssl pkey -in update-signing-key.pem -pubout -outform DER | tail -c 32 | od -
 openssl pkey -in update-signing-key.pem -pubout -outform DER | tail -c 32 | base64
 ```
 
-Create the `release` environment and store the private key in it:
+Create the `update-signing` environment, limit it to `main`, and store the private key in it. Only the `sign-update-manifest` job uses this environment, and that job has no write access. A separate job uploads the files.
 
 ```sh
-gh api --method PUT repos/sondresjolyst/blobbyvolley2-tournament/environments/release
-gh secret set UPDATE_SIGNING_KEY --env release --repo sondresjolyst/blobbyvolley2-tournament < update-signing-key.pem
+R=repos/sondresjolyst/blobbyvolley2-tournament
+gh api --method PUT $R/environments/update-signing --input - <<< '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
+gh api --method POST $R/environments/update-signing/deployment-branch-policies -f name=main -f type=branch
+gh secret set UPDATE_SIGNING_KEY --env update-signing --repo sondresjolyst/blobbyvolley2-tournament < update-signing-key.pem
 ```
 
 Then move `update-signing-key.pem` to a password manager or other safe offline storage and delete the local copy.
 
-If the secret is missing, the `update-manifest` job fails with a message that names it. The job prints the public key it signed with, so you can compare it with the key in the launcher.
+If the secret is missing, the `sign-update-manifest` job fails with a message that names it. The job prints the public key it signed with, so you can compare it with the key in the launcher.
 
 ## Running it locally
 

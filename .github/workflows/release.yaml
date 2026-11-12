@@ -114,16 +114,17 @@ jobs:
       version: ${{ needs.get-version.outputs.version }}
       release_tag: ${{ needs.get-version.outputs.tag }}
 
-  update-manifest:
-    name: Update manifest
+  sign-update-manifest:
+    name: Sign update manifest
     needs: [get-version, windows, macos, linux]
     # Runs when a platform failed too, so the manifest lists the packages that did attach.
     if: ${{ !cancelled() && needs.get-version.outputs.publish == 'true' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    environment: release
+    # Only this job can read the signing key. It has no write access.
+    environment: update-signing
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -136,6 +137,27 @@ jobs:
           TAG: ${{ needs.get-version.outputs.tag }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: sh .github/scripts/make-update-manifest.sh "$REPO" "$TAG" manifest
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: update-manifest
+          path: |
+            manifest/latest.json
+            manifest/latest.json.sig
+          if-no-files-found: error
+
+  upload-update-manifest:
+    name: Upload update manifest
+    needs: [get-version, sign-update-manifest]
+    if: ${{ !cancelled() && needs.sign-update-manifest.result == 'success' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: update-manifest
+          path: manifest
       - name: Upload latest.json and latest.json.sig
         env:
           GH_TOKEN: ${{ github.token }}

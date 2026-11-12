@@ -14,7 +14,7 @@ for tool in gh jq openssl sha256sum base64 od; do
 done
 
 if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
-	echo "::error::UPDATE_SIGNING_KEY is empty. Add the secret to the release environment, see doc/update-manifest.md." >&2
+	echo "::error::UPDATE_SIGNING_KEY is empty. Add the secret to the update-signing environment, see doc/update-manifest.md." >&2
 	exit 1
 fi
 
