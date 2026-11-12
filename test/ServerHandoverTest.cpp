@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <random>
@@ -22,6 +23,7 @@
 
 #include "FileSystem.h"
 #include "FileWrite.h"
+#include "ClientVersion.h"
 #include "GenericIO.h"
 #include "Global.h"
 #include "NetworkMessage.h"
@@ -124,6 +126,46 @@ namespace
 			RakNet::BitStream stream;
 			makeEnterServerPacket(stream, PlayerIdentity(name));
 			rak.Send(&stream, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
+		}
+
+		// enters as a client of 0.2.0, which sends no version
+		void enterWithoutVersion(const std::string& name)
+		{
+			RakNet::BitStream stream;
+			stream.Write((unsigned char)ID_ENTER_SERVER);
+			stream.Write((int)LEFT_PLAYER);
+			char buffer[PLAYER_NAME_BUFFER] = {0};
+			std::strncpy(buffer, name.c_str(), sizeof(buffer) - 1);
+			stream.Write(buffer, sizeof(buffer));
+			stream.Write((int)0);
+			stream.Write(CLIENT_FEATURES_MARKER);
+			stream.Write((uint32_t)CLIENT_FEATURE_TOURNAMENT);
+			rak.Send(&stream, HIGH_PRIORITY, RELIABLE_ORDERED, 0);
+		}
+
+		// the last ID_SERVER_VERSION, and the index of that packet or -1
+		int serverVersion(ServerVersionData& data) const
+		{
+			int index = -1;
+			for (std::size_t i = 0; i < packets.size(); ++i)
+			{
+				if (packets[i][0] != ID_SERVER_VERSION)
+					continue;
+				RakNet::BitStream stream(const_cast<unsigned char*>(packets[i].data()), packets[i].size(), false);
+				if (readServerVersionPacket(stream, data))
+					index = (int)i;
+			}
+			return index;
+		}
+
+		int firstLobbyIndex() const
+		{
+			for (std::size_t i = 0; i < packets.size(); ++i)
+			{
+				if (packets[i][0] == ID_LOBBY)
+					return (int)i;
+			}
+			return -1;
 		}
 
 		void sendLobby(LobbyPacketType type, const std::function<void(GenericOut&)>& body)
@@ -242,6 +284,13 @@ namespace
 		std::shared_ptr<RecordingEvents> events = std::make_shared<RecordingEvents>();
 		std::vector<std::unique_ptr<Client>> clients;
 		unsigned short port = 0;
+
+		// a casual server without join codes
+		ServerFixture() : fs("./test")
+		{
+			fs.addToSearchPath(BLOBBY_TEST_DATA_DIR);
+			startOnFreePort();
+		}
 
 		ServerFixture(const std::string& matches, bool director) : fs("./test")
 		{
@@ -1090,3 +1139,119 @@ BOOST_AUTO_TEST_CASE( new_player_gets_the_sponsor_board_before_the_first_game )
 
 BOOST_AUTO_TEST_SUITE_END()
 
+BOOST_AUTO_TEST_SUITE( ClientVersionServerTest )
+
+namespace
+{
+	VersionPolicy minimumOf(MinClientMode mode, const std::string& minimum, const std::string& url = "")
+	{
+		VersionPolicy policy;
+		policy.mode = mode;
+		BOOST_REQUIRE(parseForkVersion(minimum, policy.minimum));
+		policy.downloadUrl = url;
+		return policy;
+	}
+}
+
+BOOST_AUTO_TEST_CASE( server_tells_its_version_without_a_notice )
+{
+	ServerFixture f;
+	Client& client = f.connect();
+	client.enter("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.hasLobby(LobbyPacketType::SERVER_STATUS); }));
+	ServerVersionData data;
+	const int index = client.serverVersion(data);
+	BOOST_REQUIRE(index >= 0);
+	BOOST_CHECK(index < client.firstLobbyIndex());
+	BOOST_CHECK(data.server == currentForkVersion());
+	BOOST_CHECK(data.notice == VersionNotice::NONE);
+	BOOST_CHECK(data.minimum == ForkVersion());
+	BOOST_CHECK(data.downloadUrl.empty());
+	f.settle();
+	BOOST_CHECK_EQUAL(client.count(ID_SERVER_VERSION), 1);
+}
+
+BOOST_AUTO_TEST_CASE( older_client_is_warned_and_plays )
+{
+	ServerFixture f;
+	f.server->setVersionPolicy(minimumOf(MinClientMode::WARN, "999.0.0", "https://example.org/last-ned"));
+	Client& client = f.connect();
+	client.enter("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.hasLobby(LobbyPacketType::SERVER_STATUS); }));
+	ServerVersionData data;
+	BOOST_REQUIRE(client.serverVersion(data) >= 0);
+	BOOST_CHECK(data.notice == VersionNotice::UPDATE_AVAILABLE);
+	BOOST_CHECK(data.minimum.major == 999u);
+	BOOST_CHECK_EQUAL(data.downloadUrl, "https://example.org/last-ned");
+	BOOST_CHECK(!client.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+	BOOST_CHECK_EQUAL(f.server->getWaitingPlayers(), 1);
+}
+
+BOOST_AUTO_TEST_CASE( new_enough_client_gets_no_notice )
+{
+	ServerFixture f;
+	f.server->setVersionPolicy(minimumOf(MinClientMode::REJECT, currentForkVersion().toString()));
+	Client& client = f.connect();
+	client.enter("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.hasLobby(LobbyPacketType::SERVER_STATUS); }));
+	ServerVersionData data;
+	BOOST_REQUIRE(client.serverVersion(data) >= 0);
+	BOOST_CHECK(data.notice == VersionNotice::NONE);
+	BOOST_CHECK(!client.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+}
+
+BOOST_AUTO_TEST_CASE( older_client_is_refused_with_the_reason_after_the_version )
+{
+	ServerFixture f;
+	f.server->setVersionPolicy(minimumOf(MinClientMode::REJECT, "999.0.0", "https://example.org/last-ned"));
+	Client& client = f.connect();
+	client.enter("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.refusedWith(EntryRefusedReason::OUTDATED_CLIENT); }));
+	ServerVersionData data;
+	const int index = client.serverVersion(data);
+	BOOST_REQUIRE(index >= 0);
+	BOOST_CHECK(index < client.firstLobbyIndex());
+	BOOST_CHECK(data.notice == VersionNotice::UPDATE_REQUIRED);
+	BOOST_CHECK_EQUAL(data.downloadUrl, "https://example.org/last-ned");
+	BOOST_REQUIRE(f.pump([&](){ return client.closed; }));
+	BOOST_CHECK(!client.hasLobby(LobbyPacketType::SERVER_STATUS));
+	BOOST_CHECK_EQUAL(f.server->getConnectedClients(), 0);
+}
+
+BOOST_AUTO_TEST_CASE( client_without_a_version_counts_as_older )
+{
+	ServerFixture f;
+	f.server->setVersionPolicy(minimumOf(MinClientMode::REJECT, "0.0.0"));
+	Client& client = f.connect();
+	client.enterWithoutVersion("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.refusedWith(EntryRefusedReason::OUTDATED_CLIENT); }));
+	ServerVersionData data;
+	BOOST_REQUIRE(client.serverVersion(data) >= 0);
+	BOOST_CHECK(data.notice == VersionNotice::UPDATE_REQUIRED);
+}
+
+BOOST_AUTO_TEST_CASE( client_without_a_version_plays_when_there_is_no_minimum )
+{
+	ServerFixture f;
+	Client& client = f.connect();
+	client.enterWithoutVersion("Ola");
+	BOOST_REQUIRE(f.pump([&](){ return client.hasLobby(LobbyPacketType::SERVER_STATUS); }));
+	BOOST_CHECK(!client.hasLobby(LobbyPacketType::ENTRY_REFUSED));
+}
+
+BOOST_AUTO_TEST_CASE( tournament_player_is_refused_for_its_version_before_its_code_is_checked )
+{
+	ServerFixture f("", true);
+	f.server->setVersionPolicy(minimumOf(MinClientMode::REJECT, "999.0.0"));
+	Client& client = f.connect();
+	client.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return client.refusedWith(EntryRefusedReason::OUTDATED_CLIENT); }));
+	BOOST_CHECK(!client.hasLobby(LobbyPacketType::TOURNAMENT_STATUS));
+	// the code stays free for an up to date game
+	f.server->setVersionPolicy(VersionPolicy());
+	Client& updated = f.connect();
+	updated.enter(OLA);
+	BOOST_REQUIRE(f.pump([&](){ return updated.hasLobby(LobbyPacketType::TOURNAMENT_STATUS); }));
+}
+
+BOOST_AUTO_TEST_SUITE_END()

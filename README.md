@@ -28,6 +28,14 @@ The default port is 1234. The `port` setting in the config file or the `BLOBBY_P
 
 Keep the port the same inside and outside a container. After the first contact the game moves to the port the server reports, so a server on port 1234 that is reached on port 1235 sends the players to port 1234. To run the server on port 1235 in Docker, use `-e BLOBBY_PORT=1235 -p 1235:1235/udp`.
 
+#### Tell players about a new version
+The server tells each game its version and can ask players with an older game to update. The settings are in the config file, and the environment variables in brackets come first:
+- `min_client_version` (`BLOBBY_MIN_CLIENT_VERSION`) is the oldest game version for this server, such as `0.3.0`. Empty means no check. A game of version 0.2.0 or older does not send its version, so it counts as older.
+- `min_client_version_mode` (`BLOBBY_MIN_CLIENT_MODE`) is `warn` or `reject`. With `warn` the player sees that a new version is out and can still play. With `reject` the server turns the player away and asks for an update. The default is `warn`.
+- `download_page_url` (`BLOBBY_DOWNLOAD_URL`) is the page with the new version, such as the `/last-ned` page of the tournament site. It must be an `http` or `https` address. The game shows a button that opens it in the browser. Empty means no button.
+
+The server does not start when one of the values is not valid. Games older than this feature only see the reject message, as a request to update the game.
+
 #### Run the server in Docker
 A container image of the dedicated server is published on Docker Hub as `sondresjo/blobby-server`. The `dev` tag follows the main branch. Each release gets a tag with its version, such as `0.1.0`, and the `latest` tag points to the newest release. `latest` exists only after the first release, so until then use `sondresjo/blobby-server:dev` in the commands below. On Windows, start Docker Desktop and run:
 ```bash

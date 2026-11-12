@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "DuelMatchState.h"
 #include "Global.h"
 #include "TournamentProtocol.h"
+#include "ClientVersion.h"
 
 /* implementation */
 ServerInfo::ServerInfo(RakNet::BitStream& stream, const char* ip, uint16_t p)
@@ -130,6 +131,9 @@ void makeEnterServerPacket(RakNet::BitStream& stream, const PlayerIdentity& play
 	// tell the server what this client can do
 	stream.Write(CLIENT_FEATURES_MARKER);
 	stream.Write((uint32_t)CLIENT_FEATURE_TOURNAMENT);
+
+	// and which version it is, so the server can tell it about a newer one
+	writeClientVersion(stream, currentForkVersion());
 }
 
 uint32_t readClientFeatures(RakNet::BitStream& stream)

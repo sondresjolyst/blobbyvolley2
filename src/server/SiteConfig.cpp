@@ -283,3 +283,39 @@ bool loadMaxTraining(const EnvironmentFunction& env, unsigned defaultValue, unsi
 	value = read;
 	return true;
 }
+
+bool loadVersionPolicy(const VersionPolicyFile& file, const EnvironmentFunction& env, VersionPolicy& policy,
+					   std::vector<std::string>& errors)
+{
+	auto pick = [&](const char* name, const std::string& fileValue) {
+		const char* value = fromEnv(env, name);
+		return value ? std::string(value) : fileValue;
+	};
+	const std::string minimum = pick("BLOBBY_MIN_CLIENT_VERSION", file.minClientVersion);
+	const std::string mode = pick("BLOBBY_MIN_CLIENT_MODE", file.minClientMode);
+	const std::string url = pick("BLOBBY_DOWNLOAD_URL", file.downloadUrl);
+
+	const std::size_t before = errors.size();
+	VersionPolicy read;
+	MinClientMode chosen = MinClientMode::WARN;
+	if (!mode.empty() && !parseMinClientMode(mode, chosen))
+		errors.push_back("min_client_version_mode or BLOBBY_MIN_CLIENT_MODE must be warn or reject");
+	if (!minimum.empty())
+	{
+		if (!parseForkVersion(minimum, read.minimum))
+			errors.push_back("min_client_version or BLOBBY_MIN_CLIENT_VERSION must be a version like 1.2.3");
+		read.mode = chosen;
+	}
+	if (!url.empty())
+	{
+		if (isDownloadUrl(url))
+			read.downloadUrl = url;
+		else
+			errors.push_back("download_page_url or BLOBBY_DOWNLOAD_URL must be an http or https address of at most "
+							 + std::to_string(MAX_DOWNLOAD_URL_LENGTH) + " characters without spaces");
+	}
+	if (errors.size() != before)
+		return false;
+	policy = read;
+	return true;
+}

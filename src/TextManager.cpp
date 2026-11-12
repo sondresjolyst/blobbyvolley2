@@ -219,6 +219,10 @@ void TextManager::setDefault()
 	mStrings[NET_UNKNOWN_CODE] = "unknown join code";
 	mStrings[NET_CODE_IN_USE] = "join code already in use";
 	mStrings[NET_UPDATE_GAME] = "please update your game";
+	mStrings[NET_NEW_VERSION] = "a new version of the game is out: ";
+	mStrings[NET_VERSION_REQUIRED] = "this server needs game version ";
+	mStrings[NET_OR_NEWER] = " or newer";
+	mStrings[NET_DOWNLOAD_PAGE] = "download page";
 	mStrings[TNM_NO_MATCH] = "no match for you yet";
 	mStrings[TNM_WAITING_OPPONENT] = "waiting for your opponent";
 	mStrings[TNM_WAITING_SLOT] = "waiting for a free slot";
