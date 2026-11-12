@@ -10,19 +10,33 @@ if (SWITCH OR ANDROID)
 	return()
 endif ()
 
-find_package(nlohmann_json 3.10 CONFIG QUIET)
+if (BLOBBY_LAUNCHER STREQUAL "OFF")
+	return()
+endif ()
 
-if (NOT nlohmann_json_FOUND)
+find_package(nlohmann_json 3.10 CONFIG QUIET)
+find_package(LibArchive QUIET)
+
+if (NOT nlohmann_json_FOUND OR NOT LibArchive_FOUND)
 	if (BLOBBY_LAUNCHER STREQUAL "ON")
-		message(FATAL_ERROR "BLOBBY_LAUNCHER is ON, but nlohmann_json was not found")
+		message(FATAL_ERROR "BLOBBY_LAUNCHER is ON, but nlohmann_json or libarchive was not found")
 	endif ()
-	message(STATUS "nlohmann_json not found, the launcher and its tests are left out")
+	message(STATUS "nlohmann_json or libarchive not found, the launcher and its tests are left out")
 	return()
 endif ()
 
 add_library(blobby-update STATIC
+	FsUtil.cpp FsUtil.h
+	InstallDir.cpp InstallDir.h
+	PackageExtract.cpp PackageExtract.h
 	UpdateManifest.cpp UpdateManifest.h
+	Updater.cpp Updater.h
+	Utf8.h
+	../src/LauncherLink.cpp ../src/LauncherLink.h
 	../src/Sha256.cpp ../src/Sha256.h
 	)
-target_include_directories(blobby-update PUBLIC . ../src)
-target_link_libraries(blobby-update PUBLIC monocypher nlohmann_json::nlohmann_json)
+target_include_directories(blobby-update PUBLIC . ../src ${LibArchive_INCLUDE_DIRS})
+target_link_libraries(blobby-update PUBLIC monocypher nlohmann_json::nlohmann_json ${LibArchive_LIBRARIES})
+if (NOT MSVC)
+	target_compile_options(blobby-update PRIVATE -Wall)
+endif ()

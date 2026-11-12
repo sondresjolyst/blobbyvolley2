@@ -78,7 +78,7 @@ target_link_libraries(blobbytest nlohmann_json::nlohmann_json)
 
 # the launcher tests need the update library, which needs nlohmann_json
 if (TARGET blobby-update)
-	target_sources(blobbytest PRIVATE UpdateManifestTest.cpp UpdateTestKeys.h)
+	target_sources(blobbytest PRIVATE UpdateManifestTest.cpp LauncherTest.cpp UpdateTestKeys.h)
 	target_link_libraries(blobbytest blobby-update)
 else ()
 	message(STATUS "The launcher is not built, so its tests are left out")
