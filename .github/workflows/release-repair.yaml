@@ -184,14 +184,6 @@ jobs:
       ref: ${{ needs.check.outputs.sha }}
       arch: x64
 
-  watchdog:
-    name: Queue watchdog
-    needs: check
-    if: needs.check.outputs.build == 'true'
-    permissions:
-      actions: write
-    uses: ./.github/workflows/queue-watchdog.yaml
-
   # Runs when a build failed or the run was cancelled too, so latest.json lists what is on the release.
   update-manifest:
     name: Update manifest
