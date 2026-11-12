@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #include "JoinLink.h"
 #include "LauncherLink.h"
 #include "PackageExtract.h"
+#include "Process.h"
 #include "Sha256.h"
 #include "TestDir.h"
 #include "UpdateTestKeys.h"
@@ -671,6 +672,15 @@ BOOST_AUTO_TEST_CASE( a_second_launcher_cannot_update_at_the_same_time )
 		BOOST_CHECK(installUpdate(release.fetcher, release.config, check, ProgressFunction()).status == UpdateStatus::FAILED);
 	}
 	BOOST_CHECK(installUpdate(release.fetcher, release.config, check, ProgressFunction()).status == UpdateStatus::INSTALLED);
+}
+
+BOOST_AUTO_TEST_CASE( windows_command_lines_keep_the_arguments )
+{
+	BOOST_CHECK_EQUAL(windowsCommandLine("C:/Games/app-0.3.0/blobby.exe", {}), "C:/Games/app-0.3.0/blobby.exe");
+	BOOST_CHECK_EQUAL(windowsCommandLine("C:/My Games/blobby.exe", {"blobby://join?server=a.b:1&code=ABCDEFGHJK"}),
+					  "\"C:/My Games/blobby.exe\" blobby://join?server=a.b:1&code=ABCDEFGHJK");
+	BOOST_CHECK_EQUAL(windowsCommandLine("a", {"", "x y", "say \"hi\"", "C:\\dir\\", "a\\\"b", "C:\\my dir\\"}),
+					  "a \"\" \"x y\" \"say \\\"hi\\\"\" C:\\dir\\ \"a\\\\\\\"b\" \"C:\\my dir\\\\\"");
 }
 
 BOOST_AUTO_TEST_CASE( update_requests_carry_a_join_link )
