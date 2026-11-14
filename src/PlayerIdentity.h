@@ -50,6 +50,6 @@ class PlayerIdentity
 	private:
 		std::string mName;
 		Color mStaticColor;
-		bool mOscillating;
-		PlayerSide mPreferredSide;
+		bool mOscillating = false;
+		PlayerSide mPreferredSide = NO_PLAYER;
 };
