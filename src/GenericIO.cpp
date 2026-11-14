@@ -470,7 +470,13 @@ namespace detail
 	{
 		unsigned int target = 0;
 		io.uint32(target);
-		value = (PlayerSide)target;
+		// a value from the network can be anything, and casting it to PlayerSide would be undefined
+		if (target == static_cast<unsigned int>(LEFT_PLAYER))
+			value = LEFT_PLAYER;
+		else if (target == static_cast<unsigned int>(RIGHT_PLAYER))
+			value = RIGHT_PLAYER;
+		else
+			value = NO_PLAYER;
 	}
 
 	GENERATE_STD_SERIALIZER_OUT(PlayerID)

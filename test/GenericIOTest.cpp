@@ -233,6 +233,23 @@ BOOST_AUTO_TEST_CASE( generic_io_network_short_read_is_zero )
 	BOOST_CHECK_EQUAL(side, (PlayerSide)0);
 }
 
+BOOST_AUTO_TEST_CASE( generic_io_network_unknown_player_side_is_no_player )
+{
+	RakNet::BitStream stream;
+	std::shared_ptr<GenericOut> out = createGenericWriter(&stream);
+	out->uint32(7);
+	out->generic<PlayerSide>(NO_PLAYER);
+	out->generic<PlayerSide>(RIGHT_PLAYER);
+	std::shared_ptr<GenericIn> in = createGenericReader(&stream);
+	PlayerSide side = LEFT_PLAYER;
+	in->generic<PlayerSide>(side);
+	BOOST_CHECK_EQUAL(side, NO_PLAYER);
+	in->generic<PlayerSide>(side);
+	BOOST_CHECK_EQUAL(side, NO_PLAYER);
+	in->generic<PlayerSide>(side);
+	BOOST_CHECK_EQUAL(side, RIGHT_PLAYER);
+}
+
 BOOST_AUTO_TEST_CASE( generic_io_network_element_size_bound )
 {
 	// 50 elements of 4 bytes announced, but only 25 bytes of data follow.

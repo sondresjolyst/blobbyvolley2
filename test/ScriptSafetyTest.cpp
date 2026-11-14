@@ -121,8 +121,8 @@ BOOST_FIXTURE_TEST_CASE( set_state_maps_unknown_sides_to_no_player, ScriptFixtur
 	GameLogicPtr logic = createGameLogic(RULES_FILE, 15);
 
 	GameLogicState state = logic->getState();
-	state.servingPlayer = (PlayerSide)7;
-	state.winningPlayer = (PlayerSide)-5;
+	state.servingPlayer = MAX_PLAYERS;
+	state.winningPlayer = MAX_PLAYERS;
 	logic->setState(state);
 	BOOST_CHECK_EQUAL( logic->getServingPlayer(), NO_PLAYER );
 	BOOST_CHECK_EQUAL( logic->getWinningPlayer(), NO_PLAYER );
