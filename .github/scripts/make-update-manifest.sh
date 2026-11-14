@@ -1,6 +1,8 @@
 #!/bin/sh
 # Write and sign the update manifest for a release. See doc/update-manifest.md.
-# Usage: make-update-manifest.sh <repo> <tag> <output dir>
+# Usage: make-update-manifest.sh <repo> <tag> <output dir> <packages dir>
+# The packages dir holds the packages this release run built. The manifest lists their hashes,
+# and the script fails if a release asset differs from the package that was built.
 # The Ed25519 private key comes as PEM text in UPDATE_SIGNING_KEY.
 # Writes latest.json and latest.json.sig to the output dir, and copies the root-signed
 # keys.json and keys.json.sig next to them. Uploads nothing.
@@ -9,6 +11,7 @@ set -eu
 repo=$1
 tag=$2
 out_dir=$3
+packages_dir=$4
 
 for tool in gh jq openssl sha256sum base64 od; do
 	command -v "$tool" > /dev/null 2>&1 || { echo "$tool is missing" >&2; exit 1; }
@@ -46,13 +49,23 @@ for entry in windows-x64:zip macos-arm64:zip macos-x64:zip linux-x64:tar.gz; do
 		echo "No $platform asset on $tag, leaving it out"
 		continue
 	fi
-	gh release download "$tag" --repo "$repo" --pattern "$file" --dir "$work/assets" --clobber
-	size=$(wc -c < "$work/assets/$file" | tr -d ' ')
-	if [ "$size" != "$listed_size" ]; then
-		echo "$file is $size bytes but the release lists $listed_size" >&2
+	built="$packages_dir/$file"
+	if [ ! -f "$built" ]; then
+		echo "::error::$file is on $tag but was not built in this run" >&2
 		exit 1
 	fi
-	sha256=$(sha256sum "$work/assets/$file" | cut -d' ' -f1)
+	gh release download "$tag" --repo "$repo" --pattern "$file" --dir "$work/assets" --clobber
+	size=$(wc -c < "$built" | tr -d ' ')
+	if [ "$size" != "$listed_size" ]; then
+		echo "::error::$file is $size bytes but the release lists $listed_size" >&2
+		exit 1
+	fi
+	sha256=$(sha256sum "$built" | cut -d' ' -f1)
+	asset_sha256=$(sha256sum "$work/assets/$file" | cut -d' ' -f1)
+	if [ "$asset_sha256" != "$sha256" ]; then
+		echo "::error::The $file on $tag differs from the package built in this run" >&2
+		exit 1
+	fi
 	jq -n -c \
 		--arg name "$platform" \
 		--arg url "https://github.com/$repo/releases/download/$tag/$file" \

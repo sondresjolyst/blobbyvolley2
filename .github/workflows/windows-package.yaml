@@ -150,3 +150,11 @@ jobs:
         run: |
           (cd pkg && zip -r -q "../$PACKAGE.zip" "$PACKAGE")
           gh release upload "$TAG" "$PACKAGE.zip" scripts/tournament-server.ps1 scripts/tournament-server.sh --repo "$REPO" --clobber
+      # The manifest job signs the hash of this exact zip.
+      - name: Keep the release zip
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ needs.Package.outputs.package }}-zip
+          path: ${{ needs.Package.outputs.package }}.zip
+          if-no-files-found: error
+          overwrite: true
