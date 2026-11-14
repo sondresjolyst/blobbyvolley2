@@ -58,3 +58,7 @@ test_compile
 /joincodes_test_*.xml
 /blobbytest_atomic.txt
 /test/blobbytest
+
+# Local tool folders
+/.claude/
+/.playwright-mcp/
