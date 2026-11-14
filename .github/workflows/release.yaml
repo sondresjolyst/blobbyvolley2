@@ -81,49 +81,13 @@ jobs:
       tag_latest: true
       push: ${{ needs.get-version.outputs.publish == 'true' }}
 
-  windows:
-    name: Windows package
+  packages:
+    name: Packages
     needs: get-version
     if: always() && needs.get-version.result == 'success'
     permissions:
       contents: write
-    uses: ./.github/workflows/windows-package.yaml
-    with:
-      version: ${{ needs.get-version.outputs.version }}
-      release_tag: ${{ needs.get-version.outputs.tag }}
-
-  # Each arch attaches its zip on its own, so a late arch does not hold back the other.
-  macos-arm64:
-    name: macOS arm64 package
-    needs: get-version
-    if: always() && needs.get-version.result == 'success'
-    permissions:
-      contents: write
-    uses: ./.github/workflows/macos-package.yaml
-    with:
-      version: ${{ needs.get-version.outputs.version }}
-      release_tag: ${{ needs.get-version.outputs.tag }}
-      arch: arm64
-
-  macos-x64:
-    name: macOS x64 package
-    needs: get-version
-    if: always() && needs.get-version.result == 'success'
-    permissions:
-      contents: write
-    uses: ./.github/workflows/macos-package.yaml
-    with:
-      version: ${{ needs.get-version.outputs.version }}
-      release_tag: ${{ needs.get-version.outputs.tag }}
-      arch: x64
-
-  linux:
-    name: Linux package
-    needs: get-version
-    if: always() && needs.get-version.result == 'success'
-    permissions:
-      contents: write
-    uses: ./.github/workflows/linux-package.yaml
+    uses: ./.github/workflows/package.yaml
     with:
       version: ${{ needs.get-version.outputs.version }}
       release_tag: ${{ needs.get-version.outputs.tag }}
@@ -132,7 +96,7 @@ jobs:
   # After "Re-run failed jobs" these jobs run again and sign the manifest with the new packages.
   sign-update-manifest:
     name: Sign update manifest
-    needs: [get-version, windows, macos-arm64, macos-x64, linux]
+    needs: [get-version, packages]
     if: ${{ !cancelled() && needs.get-version.outputs.publish == 'true' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15

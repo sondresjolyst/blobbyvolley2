@@ -128,3 +128,100 @@ jobs:
           sudo apt-get install xvfb
           cmake --build . --target blobby-runtest
           xvfb-run src/blobby-runtest
+
+  old-cmake:
+    name: Old CMake
+    permissions:
+      contents: read
+    runs-on: ubuntu-26.04
+    env:
+      CMAKE_VERSION: 3.11.0
+    steps:
+      - name: Setup Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+            libsdl2-dev \
+            libphysfs-dev \
+            libboost-dev
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Get CMake
+        # note: newer versions of cmake have changed the naming scheme to use lower-case 'linux',
+        # which will break this script
+        run: |
+          wget -q https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz
+          tar -xf cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz
+          mv cmake-${CMAKE_VERSION}-Linux-x86_64 old-cmake
+      - name: Configure CMake and Build
+        run: |
+          echo "Using CMake"
+          old-cmake/bin/cmake --version
+          echo "Configuring"
+          old-cmake/bin/cmake .
+          echo "Building"
+          old-cmake/bin/cmake --build .
+
+  compilers:
+    permissions:
+      contents: read
+    name: ${{ matrix.compiler.name }}
+    runs-on: ${{ matrix.compiler.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { name: "Clang 12", cxx: "clang++-12", cc: "clang-12", install: "clang-12",        os: "ubuntu-22.04"}
+          - { name: "Clang 19", cxx: "clang++-19", cc: "clang-19", install: "clang-19",        os: "ubuntu-24.04"}
+          - { name: "GCC 9",    cxx: "g++-9",      cc: "gcc-9",    install: "g++-9 gcc-9",     os: "ubuntu-22.04"}
+          - { name: "GCC 14",   cxx: "g++-14",     cc: "gcc-14",   install: "g++-14 gcc-14",   os: "ubuntu-24.04"}
+
+    steps:
+      - name: Install Packages
+        env:
+          INSTALL: ${{ matrix.compiler.install }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install \
+            cmake \
+            libsdl2-dev \
+            libphysfs-dev \
+            libboost-dev \
+            libcurl4-openssl-dev \
+            nlohmann-json3-dev \
+            libarchive-dev \
+            ${{matrix.compiler.install}}
+      - name: Setup Environment
+        env:
+          MATRIX_CXX: ${{ matrix.compiler.cxx }}
+          MATRIX_CC: ${{ matrix.compiler.cc }}
+        run: |
+          echo "CXX=$MATRIX_CXX" >> "$GITHUB_ENV"
+          echo "CC=$MATRIX_CC" >> "$GITHUB_ENV"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Configure
+        run:  cmake . -DBLOBBY_SITE_SYNC=ON -DBLOBBY_LAUNCHER=ON
+
+      - name: Build
+        run: cmake --build .
+
+      - name: Header check
+        run: cmake --build . --target test-compile-headers
+
+  vcpkg:
+    name: Vcpkg
+    permissions:
+      contents: read
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Build
+        run: |
+          cmake -B . -S . -DCMAKE_TOOLCHAIN_FILE="c:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          cmake --build .
