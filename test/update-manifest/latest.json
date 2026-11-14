@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "version": "0.3.0",
+  "tag": "v0.3.0",
+  "released": "2026-11-10T17:10:32Z",
+  "platforms": [
+    {
+      "name": "windows-x64",
+      "url": "https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/download/v0.3.0/blobbyvolley2-tournament-0.3.0-windows-x64.zip",
+      "size": 16,
+      "sha256": "3992676f18da11f085d8a44bfe167e9b2669b442d9714d9b481a0db2cf982198"
+    },
+    {
+      "name": "linux-x64",
+      "url": "https://github.com/sondresjolyst/blobbyvolley2-tournament/releases/download/v0.3.0/blobbyvolley2-tournament-0.3.0-linux-x64.tar.gz",
+      "size": 14,
+      "sha256": "8da79a819db33c565b0c200c57c31dec6752178995ef22476a54a52fa4ad412d"
+    }
+  ]
+}

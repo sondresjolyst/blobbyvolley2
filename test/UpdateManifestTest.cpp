@@ -336,4 +336,22 @@ BOOST_AUTO_TEST_CASE( the_key_list_in_the_repository_is_signed_by_a_root_key )
 	BOOST_CHECK(!trusted.active.empty());
 }
 
+BOOST_AUTO_TEST_CASE( the_manifest_script_output_verifies )
+{
+	// made by test/update-manifest/regenerate.sh, which runs make-update-manifest.sh with TestKey(4)
+	const std::string json = readSourceFile("test/update-manifest/latest.json");
+	const std::string signature = readSourceFile("test/update-manifest/latest.json.sig");
+	BOOST_REQUIRE(!json.empty());
+	BOOST_CHECK_EQUAL(json.find('\r'), std::string::npos);
+	Keys k;
+	UpdateManifest manifest;
+	BOOST_REQUIRE(verifyManifest(json, signature, k.trusted(), manifest) == UpdateFileError::NONE);
+	BOOST_CHECK(manifest.version == version(0, 3, 0));
+	BOOST_CHECK_EQUAL(manifest.tag, "v0.3.0");
+	BOOST_REQUIRE_EQUAL(manifest.platforms.size(), 2u);
+	BOOST_CHECK_EQUAL(manifest.platforms[0].name, "windows-x64");
+	BOOST_CHECK_EQUAL(manifest.platforms[0].size, 16u);
+	BOOST_CHECK_EQUAL(manifest.platforms[1].name, "linux-x64");
+}
+
 BOOST_AUTO_TEST_SUITE_END()
