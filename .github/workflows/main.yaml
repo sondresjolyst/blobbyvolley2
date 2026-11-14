@@ -101,12 +101,11 @@ jobs:
       - name: Run unit tests with sanitizers
         if: matrix.platform.os == 'ubuntu-24.04'
         env:
-          SANITIZE: -fsanitize=address,undefined -fno-omit-frame-pointer
+          SANITIZE: -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer
         run: |
           cmake -S . -B build-sanitize -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="$SANITIZE" -DCMAKE_CXX_FLAGS="$SANITIZE" -DCMAKE_EXE_LINKER_FLAGS="$SANITIZE"
           cmake --build build-sanitize --parallel
-          build-sanitize/test/blobbytest 2>&1 | tee sanitize.log
-          ! grep -n 'runtime error' sanitize.log
+          build-sanitize/test/blobbytest
       # Check that blobby builds
       - name: Configure CMake and Build
         run: |
