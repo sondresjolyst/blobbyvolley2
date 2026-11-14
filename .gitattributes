@@ -5,3 +5,5 @@ linux/*.sh text eol=lf
 scripts/*.sh text eol=lf
 tools/loadbot/*.sh text eol=lf
 .github/update-keys/* -text
+test/update-manifest/*.sh text eol=lf
+test/update-manifest/latest.json* -text

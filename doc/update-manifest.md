@@ -160,6 +160,16 @@ openssl pkeyutl -verify -pubin -inkey test-pub.pem -rawin -in out/latest.json -s
 
 It needs gh, jq and OpenSSL 3.
 
+## Test fixture
+
+`test/update-manifest/latest.json` and `latest.json.sig` are real output of the script. The unit tests check that the launcher verifies them. Make them again after a change to the script:
+
+```sh
+sh test/update-manifest/regenerate.sh
+```
+
+It signs with a throwaway test key from `test/UpdateTestKeys.h` and uses a stub gh, so it reads no release. It needs jq and OpenSSL 3. In Git Bash on Windows, set `TMPDIR` to a `C:/...` path first so a native jq can read the files.
+
 ## Reruns
 
 A platform job that does not succeed leaves its package off the release, and latest.json lists only the packages that are there. Open the Release run and use "Re-run failed jobs". GitHub runs the failed jobs again together with the jobs that need them, so the manifest is signed again with the new packages.
