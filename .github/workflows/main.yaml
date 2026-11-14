@@ -136,6 +136,7 @@ jobs:
     runs-on: ubuntu-26.04
     env:
       CMAKE_VERSION: 3.11.0
+      CMAKE_SHA256: 5babc7953b50715028a05823d18fd91b62805b10aa7811e5fd02b27224d60f10
     steps:
       - name: Setup Linux
         run: |
@@ -152,6 +153,7 @@ jobs:
         # which will break this script
         run: |
           wget -q https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz
+          echo "${CMAKE_SHA256}  cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz" | sha256sum -c
           tar -xf cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz
           mv cmake-${CMAKE_VERSION}-Linux-x86_64 old-cmake
       - name: Configure CMake and Build
