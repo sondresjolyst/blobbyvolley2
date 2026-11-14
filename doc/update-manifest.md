@@ -9,6 +9,8 @@ The launcher fetches them from the latest release:
 
 The `sign-update-manifest` and `upload-update-manifest` jobs in `.github/workflows/release.yaml` write them after the packaging jobs. The script is `.github/scripts/make-update-manifest.sh`.
 
+The signing job hashes the packages that the same workflow run built, which it gets as build artifacts. It also downloads each release asset and fails if the asset differs from the built package. A file swapped on the release after upload is therefore never signed.
+
 ## latest.json
 
 ```json
