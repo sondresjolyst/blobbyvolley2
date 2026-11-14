@@ -394,6 +394,31 @@ BOOST_AUTO_TEST_CASE( archive_paths_are_checked )
 	}
 }
 
+BOOST_AUTO_TEST_CASE( windows_device_names_are_found )
+{
+	for (const char* bad : {"CON", "con", "Prn", "aux", "NUL", "nul.txt", "NUL.tar.gz", "com1", "COM9", "lpt1",
+							"LPT9.log", "nul .txt", "name.", "name ", "dir.", ".."})
+	{
+		BOOST_CHECK_MESSAGE(isUnsafeWindowsName(bad), bad);
+	}
+	for (const char* good : {"blobby", "console", "nul2", "com", "com0", "com10", "lpt", "auxiliary", "con-x.txt",
+							 "app-0.3.0", ".hidden", "a.b"})
+	{
+		BOOST_CHECK_MESSAGE(!isUnsafeWindowsName(good), good);
+	}
+}
+
+BOOST_AUTO_TEST_CASE( windows_device_names_in_archive_paths )
+{
+#ifdef _WIN32
+	for (const char* bad : {"pkg/nul", "pkg/CON.txt", "com1/x", "pkg/x.", "pkg/x /y", "pkg/lpt9/"})
+	{
+		BOOST_CHECK_MESSAGE(!isSafeArchivePath(bad), bad);
+	}
+#endif
+	BOOST_CHECK(isSafeArchivePath("pkg/console/nul2.txt"));
+}
+
 BOOST_AUTO_TEST_CASE( packages_unpack_with_their_folders )
 {
 	for (PackageFormat format : {PackageFormat::ZIP, PackageFormat::TAR_GZ})
