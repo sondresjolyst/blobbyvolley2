@@ -3,6 +3,7 @@
 
 #include "FileRead.h"
 #include "FileWrite.h"
+#include "FileExceptions.h"
 #include "FileSystem.h"
 #include "Color.h"
 #include <iostream>
@@ -204,6 +205,56 @@ BOOST_AUTO_TEST_CASE( generic_io_network_oversized_string )
 	in->generic<std::string>(str);
 	BOOST_CHECK(str.empty());
 	BOOST_CHECK_EQUAL(stream.GetNumberOfUnreadBits(), 0);
+}
+
+BOOST_FIXTURE_TEST_CASE( generic_io_file_oversized_string, FSFixture )
+{
+	{
+		std::shared_ptr<FileWrite> write = std::make_shared<FileWrite>("oversized.tmp");
+		std::shared_ptr<GenericOut> out = createGenericWriter(write);
+		out->uint32(0xFFFFFFF0u);
+		out->uint32(1);
+	}
+
+	std::shared_ptr<FileRead> read = std::make_shared<FileRead>("oversized.tmp");
+	std::shared_ptr<GenericIn> in = createGenericReader(read);
+	std::string str = "abc";
+	BOOST_CHECK_THROW(in->generic<std::string>(str), EOFException);
+	BOOST_CHECK(str.empty());
+	BOOST_CHECK_EQUAL(read->tell(), read->length());
+}
+
+BOOST_FIXTURE_TEST_CASE( generic_io_file_oversized_vector, FSFixture )
+{
+	{
+		std::shared_ptr<FileWrite> write = std::make_shared<FileWrite>("oversized.tmp");
+		std::shared_ptr<GenericOut> out = createGenericWriter(write);
+		out->uint32(1000);
+		out->uint32(5);
+		out->uint32(6);
+	}
+
+	std::shared_ptr<FileRead> read = std::make_shared<FileRead>("oversized.tmp");
+	std::shared_ptr<GenericIn> in = createGenericReader(read);
+	std::vector<unsigned int> v(3, 7);
+	BOOST_CHECK_NO_THROW(in->generic<std::vector<unsigned int>>(v));
+	BOOST_CHECK(v.empty());
+	BOOST_CHECK_EQUAL(read->tell(), read->length());
+}
+
+BOOST_FIXTURE_TEST_CASE( generic_io_file_string_fits_exactly, FSFixture )
+{
+	{
+		std::shared_ptr<FileWrite> write = std::make_shared<FileWrite>("exact.tmp");
+		std::shared_ptr<GenericOut> out = createGenericWriter(write);
+		out->generic<std::string>("hello");
+	}
+
+	std::shared_ptr<FileRead> read = std::make_shared<FileRead>("exact.tmp");
+	std::shared_ptr<GenericIn> in = createGenericReader(read);
+	std::string str;
+	in->generic<std::string>(str);
+	BOOST_CHECK_EQUAL(str, "hello");
 }
 
 // fills the stack below the caller with a pattern, so that values which stay

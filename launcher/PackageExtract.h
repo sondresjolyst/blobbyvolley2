@@ -41,4 +41,9 @@ bool extractPackage(const std::string& data, PackageFormat format, const std::st
 
 /// Checks a path inside an archive: relative, with / between the parts, no empty, . or .. part,
 /// and no backslash, colon or control character. A slash at the end is allowed.
+/// On Windows it also rejects the parts that isUnsafeWindowsName finds.
 bool isSafeArchivePath(const std::string& path);
+
+/// Checks one part of a path for a name Windows does not allow: a device name such as CON, NUL,
+/// COM1 or LPT1 in any case and with or without an extension, or a name that ends with a dot or a space.
+bool isUnsafeWindowsName(const std::string& part);

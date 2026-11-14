@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "GenericIO.h"
 
+#include <cstdint>
 #include <cstring>
 #include <ostream>
 #include <utility>
@@ -30,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 #include "FileWrite.h"
 #include "FileRead.h"
+#include "FileExceptions.h"
 #include "PlayerInput.h"
 #include "Color.h"
 
@@ -130,6 +132,13 @@ class FileIn : public GenericIn
 			unsigned int ts;
 			uint32(ts);
 
+			if( ts > maxElementCount(8) )
+			{
+				string.clear();
+				skipToEnd();
+				BOOST_THROW_EXCEPTION( EOFException(mFile->getFileName()) );
+			}
+
 			string.resize(ts);
 			for(unsigned int i = 0; i < ts; ++i)
 			{
@@ -137,6 +146,21 @@ class FileIn : public GenericIn
 				byte(nc);
 				string[i] = nc;
 			}
+		}
+
+		unsigned int maxElementCount(unsigned int bitsPerElement) const override
+		{
+			std::uint32_t length = mFile->length();
+			std::uint32_t pos = mFile->tell();
+			if( pos >= length )
+				return 0;
+			std::uint64_t count = std::uint64_t(length - pos) * 8 / bitsPerElement;
+			return count > UINT_MAX ? UINT_MAX : static_cast<unsigned int>(count);
+		}
+
+		void skipToEnd() override
+		{
+			mFile->seek(mFile->length());
 		}
 
 

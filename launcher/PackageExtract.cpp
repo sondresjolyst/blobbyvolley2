@@ -58,6 +58,10 @@ bool isSafeArchivePath(const std::string& path)
 				break;
 			if (part.empty() || part == "." || part == "..")
 				return false;
+#ifdef _WIN32
+			if (isUnsafeWindowsName(part))
+				return false;
+#endif
 			part.clear();
 			continue;
 		}
@@ -67,6 +71,27 @@ bool isSafeArchivePath(const std::string& path)
 		part += (char)c;
 	}
 	return true;
+}
+
+bool isUnsafeWindowsName(const std::string& part)
+{
+	if (part.empty())
+		return false;
+	if (part.back() == '.' || part.back() == ' ')
+		return true;
+	// Windows ignores the extension and spaces before it when it looks for a device name
+	std::string base = part.substr(0, part.find('.'));
+	while (!base.empty() && base.back() == ' ')
+		base.pop_back();
+	for (char& c : base)
+	{
+		if (c >= 'a' && c <= 'z')
+			c = (char)(c - 'a' + 'A');
+	}
+	if (base == "CON" || base == "PRN" || base == "AUX" || base == "NUL")
+		return true;
+	return base.size() == 4 && (base.compare(0, 3, "COM") == 0 || base.compare(0, 3, "LPT") == 0) &&
+		   base[3] >= '1' && base[3] <= '9';
 }
 
 bool extractPackage(const std::string& data, PackageFormat format, const std::string& destination, std::string& error,
